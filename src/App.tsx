@@ -6,10 +6,15 @@ import { DetailPanel } from './components/detail/DetailPanel';
 import { Sidebar, type NavView } from './components/layout/Sidebar';
 import { WorkspaceTerminal } from './components/terminal/WorkspaceTerminal';
 import { removeRepository, scanRepositories } from './lib/tauri-api/repositories';
-import { getSettings, resolveGitRepositoryPath, saveRepoRoots } from './lib/tauri-api/settings';
+import { createWorkspacePr } from './lib/tauri-api/pr-draft';
+import { listAgentMemories, setAgentMemory, deleteAgentMemory } from './lib/tauri-api/agent-memory';
+import type { AgentMemory } from './types/agent-memory';
+import { getAiModelSettings, getSettings, resolveGitRepositoryPath, saveAiModelSettings, saveRepoRoots } from './lib/tauri-api/settings';
+import type { AiModelSettings } from './types/settings';
 import { listActivity } from './lib/tauri-api/activity';
 import { openDeepLink } from './lib/tauri-api/deep-links';
 import { listWorkspaceAttention, markWorkspaceAttentionRead } from './lib/tauri-api/workspace-attention';
+import { getWorkspaceConflicts } from './lib/tauri-api/workspace-health';
 import { formatCursorOpenError } from './lib/ui-errors';
 import { forgeLog, forgeWarn } from './lib/forge-log';
 import { measureAsync, perfMark, perfMeasure } from './lib/perf';
@@ -87,6 +92,92 @@ function ErrorView({ message, onRetry }: { message: string; onRetry: () => void 
   );
 }
 
+
+const KNOWN_MODELS = [
+  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6 (most capable)' },
+  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (fast + capable)' },
+  { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 (fast + cheap)' },
+];
+
+function AiModelsCard() {
+  const [modelSettings, setModelSettings] = useState<AiModelSettings | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    void getAiModelSettings().then(setModelSettings).catch((err) => {
+      setMessage(err instanceof Error ? err.message : String(err));
+    });
+  }, []);
+
+  const handleSave = async () => {
+    if (!modelSettings) return;
+    setSaving(true);
+    setMessage(null);
+    try {
+      const saved = await saveAiModelSettings(modelSettings);
+      setModelSettings(saved);
+      setMessage('Model settings saved.');
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!modelSettings) return <div className="text-[12px] text-forge-muted">Loading model settings…</div>;
+
+  return (
+    <div className="rounded-xl border border-forge-border bg-forge-card p-4">
+      <div className="mb-4">
+        <h2 className="text-[14px] font-bold text-forge-text">AI Models</h2>
+        <p className="text-[11px] text-forge-muted mt-0.5">Choose which Claude model powers each role. Changes take effect immediately.</p>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <label className="text-[12px] font-semibold text-forge-text block mb-1">Coding Agent model</label>
+          <p className="text-[11px] text-forge-muted mb-2">Used for all workspace terminal sessions (the agent that writes code).</p>
+          <select
+            value={modelSettings.agentModel}
+            onChange={(e) => setModelSettings({ ...modelSettings, agentModel: e.target.value })}
+            className="w-full bg-forge-surface border border-forge-border rounded-lg px-3 py-2 text-[12px] text-forge-text focus:outline-none focus:border-forge-blue/50"
+          >
+            {KNOWN_MODELS.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="text-[12px] font-semibold text-forge-text block mb-1">Orchestrator brain model</label>
+          <p className="text-[11px] text-forge-muted mb-2">Used by the Orchestrator to analyse workspaces and dispatch agent prompts. Opus recommended.</p>
+          <select
+            value={modelSettings.orchestratorModel}
+            onChange={(e) => setModelSettings({ ...modelSettings, orchestratorModel: e.target.value })}
+            className="w-full bg-forge-surface border border-forge-border rounded-lg px-3 py-2 text-[12px] text-forge-text focus:outline-none focus:border-forge-blue/50"
+          >
+            {KNOWN_MODELS.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {message && <p className="mt-3 text-[12px] text-forge-muted">{message}</p>}
+
+      <button
+        type="button"
+        onClick={() => void handleSave()}
+        disabled={saving}
+        className="mt-4 flex items-center gap-1.5 px-3 py-2 rounded-lg bg-forge-orange hover:bg-orange-500 disabled:opacity-60 text-[12px] font-semibold text-white"
+      >
+        <Save className="w-3.5 h-3.5" />
+        {saving ? 'Saving…' : 'Save model settings'}
+      </button>
+    </div>
+  );
+}
 
 function SettingsView({
   settings,
@@ -194,6 +285,8 @@ function SettingsView({
       </div>
 
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        <AiModelsCard />
+
         <div className="rounded-xl border border-forge-border bg-forge-card p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-3">
             <div>
@@ -323,6 +416,137 @@ function SettingsView({
   );
 }
 
+function MemoryView() {
+  const [memories, setMemories] = useState<AgentMemory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [editKey, setEditKey] = useState('');
+  const [editValue, setEditValue] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setMemories(await listAgentMemories());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { void load(); }, []);
+
+  const handleSave = async () => {
+    if (!editKey.trim() || !editValue.trim()) return;
+    setSaving(true);
+    try {
+      const entry = await setAgentMemory({ workspaceId: null, key: editKey.trim(), value: editValue.trim() });
+      setMemories((prev) => {
+        const idx = prev.findIndex((m) => m.key === entry.key && m.workspaceId == null);
+        if (idx >= 0) { const next = [...prev]; next[idx] = entry; return next; }
+        return [entry, ...prev];
+      });
+      setEditKey('');
+      setEditValue('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (key: string, workspaceId: string | null) => {
+    try {
+      await deleteAgentMemory(key, workspaceId);
+      setMemories((prev) => prev.filter((m) => !(m.key === key && m.workspaceId === workspaceId)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  return (
+    <div className="flex flex-1 flex-col min-h-0">
+      <div className="px-6 pt-6 pb-4 border-b border-forge-border shrink-0">
+        <h1 className="text-[22px] font-bold text-forge-text tracking-tight">Agent Memory</h1>
+        <p className="text-[12px] text-forge-muted mt-1.5">Persistent knowledge shared across workspaces and agent sessions</p>
+      </div>
+      <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        {/* Add / edit entry */}
+        <div className="rounded-xl border border-forge-border bg-forge-card p-4">
+          <h2 className="text-[14px] font-bold text-forge-text mb-3">Add Global Memory</h2>
+          <div className="flex gap-2 mb-2">
+            <input
+              value={editKey}
+              onChange={(e) => setEditKey(e.target.value)}
+              placeholder="Key (e.g. auth-pattern)"
+              className="flex-1 bg-forge-surface border border-forge-border rounded-lg px-3 py-2 text-[12px] font-mono text-forge-text placeholder:text-forge-muted/80 focus:outline-none focus:border-forge-blue/50"
+            />
+          </div>
+          <textarea
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            placeholder="Value (e.g. JWT tokens stored in env.AUTH_SECRET)"
+            rows={3}
+            className="w-full bg-forge-surface border border-forge-border rounded-lg px-3 py-2 text-[12px] text-forge-text placeholder:text-forge-muted/80 focus:outline-none focus:border-forge-blue/50 resize-none mb-2"
+          />
+          {error && <p className="text-[11px] text-forge-red mb-2">{error}</p>}
+          <button
+            disabled={saving || !editKey.trim() || !editValue.trim()}
+            onClick={() => void handleSave()}
+            className="px-4 py-2 rounded-lg bg-forge-blue/15 hover:bg-forge-blue/25 disabled:opacity-50 text-[12px] font-semibold text-forge-blue border border-forge-blue/20"
+          >
+            {saving ? 'Saving…' : 'Save Entry'}
+          </button>
+        </div>
+
+        {/* Memory list */}
+        <div className="rounded-xl border border-forge-border bg-forge-card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-[14px] font-bold text-forge-text">Stored Memories</h2>
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-forge-blue/15 text-forge-blue border border-forge-blue/20">
+              {memories.length} entries
+            </span>
+          </div>
+          {loading ? (
+            <p className="text-[12px] text-forge-muted">Loading…</p>
+          ) : memories.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-forge-border p-6 text-center">
+              <p className="text-[13px] text-forge-muted">No memories stored yet</p>
+              <p className="text-[12px] text-forge-muted mt-1">Add entries above to share knowledge across workspaces.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {memories.map((m) => (
+                <div key={`${m.workspaceId}-${m.key}`} className="rounded-lg border border-forge-border/80 bg-forge-surface/60 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[12px] font-mono font-bold text-forge-text">{m.key}</span>
+                        {m.workspaceId && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-forge-blue/15 text-forge-blue border border-forge-blue/20">{m.workspaceId}</span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-forge-muted leading-relaxed whitespace-pre-wrap">{m.value}</p>
+                    </div>
+                    <button
+                      onClick={() => void handleDelete(m.key, m.workspaceId)}
+                      className="shrink-0 p-1.5 rounded text-forge-muted hover:bg-forge-red/15 hover:text-forge-red"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState<NavView>('workspaces');
   const [selectedId, setSelectedId] = useState<string | null>(() => window.localStorage.getItem(SELECTED_WORKSPACE_KEY));
@@ -341,6 +565,7 @@ export default function App() {
   });
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceAttention, setWorkspaceAttention] = useState<Record<string, WorkspaceAttention>>({});
+  const [conflictingWorkspaceIds, setConflictingWorkspaceIds] = useState<Set<string>>(new Set());
   const [attentionToasts, setAttentionToasts] = useState<AttentionToast[]>([]);
   const [deepLinkNotice, setDeepLinkNotice] = useState<string | null>(null);
   const [activityItems, setActivityItems] = useState<ActivityItem[]>([]);
@@ -409,6 +634,12 @@ export default function App() {
       setWorkspaceAttention(Object.fromEntries(rows.map((row) => [row.workspaceId, row])));
     } catch (err) {
       forgeWarn('attention', 'load failed', { err });
+    }
+    try {
+      const result = await getWorkspaceConflicts();
+      setConflictingWorkspaceIds(new Set(result.conflictingWorkspaceIds));
+    } catch {
+      // non-fatal
     }
   }, []);
 
@@ -532,6 +763,48 @@ export default function App() {
     if (!selectedId || view !== 'workspaces') return;
     scheduleMarkAttentionRead(selectedId);
   }, [scheduleMarkAttentionRead, selectedId, view]);
+
+  useEffect(() => {
+    let unlisten: UnlistenFn | undefined;
+    let disposed = false;
+    void listen<{ workspaceId: string; message: string }>(
+      'forge://orchestrator-notify',
+      (event) => {
+        if (disposed) return;
+        const { workspaceId, message } = event.payload;
+        const ws = workspacesRef.current.find((w) => w.id === workspaceId);
+        const id = `orch-notify-${workspaceId}-${Date.now()}`;
+        setAttentionToasts((current) => [
+          { id, workspaceId, workspaceName: ws?.name ?? workspaceId, text: `Orchestrator: ${message}` },
+          ...current.slice(0, 2),
+        ]);
+        window.setTimeout(() => setAttentionToasts((current) => current.filter((t) => t.id !== id)), 8000);
+      },
+    ).then((fn) => { if (disposed) fn(); else unlisten = fn; })
+      .catch(() => undefined);
+    return () => { disposed = true; if (unlisten) unlisten(); };
+  }, []);
+
+  useEffect(() => {
+    let unlisten: UnlistenFn | undefined;
+    let disposed = false;
+    void listen<{ workspaceId: string; workspaceName: string; branch: string; baseBranch: string }>(
+      'forge://workspace-rebase-conflict',
+      (event) => {
+        if (disposed) return;
+        const { workspaceId, workspaceName, branch, baseBranch } = event.payload;
+        const id = `rebase-conflict-${workspaceId}-${Date.now()}`;
+        setAttentionToasts((current) => [
+          { id, workspaceId, workspaceName, text: `Rebase conflict: ${branch} → origin/${baseBranch}` },
+          ...current.slice(0, 2),
+        ]);
+        window.setTimeout(() => setAttentionToasts((current) => current.filter((t) => t.id !== id)), 8000);
+      },
+    ).then((fn) => {
+      if (disposed) fn(); else unlisten = fn;
+    }).catch(() => undefined);
+    return () => { disposed = true; if (unlisten) unlisten(); };
+  }, []);
 
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
@@ -746,10 +1019,13 @@ export default function App() {
       );
     }
 
+    if (view === 'memory') return <MemoryView />;
+
     return <SettingsView settings={settingsState} onSettingsChange={setSettingsState} onRemoveRepository={(repositoryId) => void handleRemoveRepository(repositoryId)} />;
   };
 
   const isReviewView = view === 'reviews';
+  const showDetailPanel = view === 'workspaces';
 
   return (
     <div className="h-[100dvh] flex flex-col overflow-hidden bg-forge-bg text-forge-text antialiased selection:bg-forge-orange/25">
@@ -764,6 +1040,7 @@ export default function App() {
                 workspaces={workspaces}
                 archivedWorkspaceIds={archivedWorkspaceIds}
                 workspaceAttention={workspaceAttention}
+                conflictingWorkspaceIds={conflictingWorkspaceIds}
                 selectedWorkspaceId={selectedId}
                 onSelectWorkspace={setSelectedId}
                 onDeleteWorkspace={(workspaceId) => void handleDeleteWorkspace(workspaceId)}
@@ -799,7 +1076,7 @@ export default function App() {
             </div>
           </div>
 
-          {!isReviewView && (
+          {showDetailPanel && (
             <>
               <div
                 role="separator"
@@ -838,6 +1115,15 @@ export default function App() {
                     setBranchFromWorkspaceId(selected.id);
                     setModalOpen(true);
                   }}
+                  onCreatePr={selected ? async () => {
+                    const result = await createWorkspacePr(selected.id);
+                    setWorkspaces((current) =>
+                      current.map((w) =>
+                        w.id === selected.id ? { ...w, prStatus: 'Open', prNumber: result.prNumber } : w,
+                      ),
+                    );
+                    return result;
+                  } : undefined}
                 />
               </div>
             </>

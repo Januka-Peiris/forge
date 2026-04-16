@@ -1,8 +1,8 @@
-import { useMemo, useState, type ElementType } from 'react';
+import { useEffect, useMemo, useState, type ElementType } from 'react';
 import {
   GitBranch, ArrowUp, ArrowDown, AlertTriangle,
   Clock, ExternalLink, Activity, CheckCircle2,
-  Circle, AlertCircle, Link2, Plus
+  Circle, AlertCircle, Link2, Plus, GitPullRequest, Loader2, GitMerge, ChevronDown
 } from 'lucide-react';
 import type {
   ActivityItem as ForgeActivityItem,
@@ -10,6 +10,7 @@ import type {
   LinkedWorktreeRef,
   Workspace,
 } from '../../types';
+import { listWorkspaceActivity } from '../../lib/tauri-api/activity';
 import { StatusBadge, AgentBadge } from '../workspaces/StatusBadge';
 
 interface DetailPanelProps {
@@ -19,6 +20,7 @@ interface DetailPanelProps {
   onOpenInCursor?: () => void;
   onArchiveWorkspace?: () => void;
   onDeleteWorkspace?: () => void;
+  onCreatePr?: () => Promise<{ prUrl: string; prNumber: number } | void>;
   activityItems?: ForgeActivityItem[];
   repositories?: DiscoveredRepository[];
   linkedWorktrees?: LinkedWorktreeRef[];
@@ -48,6 +50,7 @@ export function DetailPanel({
   onOpenInCursor,
   onArchiveWorkspace,
   onDeleteWorkspace,
+  onCreatePr,
   activityItems = [],
   repositories = [],
   linkedWorktrees = [],
@@ -57,7 +60,24 @@ export function DetailPanel({
   onCreateChildWorkspace,
 }: DetailPanelProps) {
   const [selectedLinkedWorktreeId, setSelectedLinkedWorktreeId] = useState('');
+  const [prCreating, setPrCreating] = useState(false);
+  const [prError, setPrError] = useState<string | null>(null);
+  const [timelineItems, setTimelineItems] = useState<ForgeActivityItem[]>([]);
+  const [timelineExpanded, setTimelineExpanded] = useState(false);
+  const [timelineLoading, setTimelineLoading] = useState(false);
   const [linkedSearch, setLinkedSearch] = useState('');
+
+  useEffect(() => {
+    if (!workspace) return;
+    let cancelled = false;
+    setTimelineLoading(true);
+    listWorkspaceActivity(workspace.id, 50)
+      .then((items) => { if (!cancelled) setTimelineItems(items); })
+      .catch(() => undefined)
+      .finally(() => { if (!cancelled) setTimelineLoading(false); });
+    return () => { cancelled = true; };
+  }, [workspace?.id]);
+
   const workspaceRepositoryId = workspace?.repositoryId;
   const linkedById = useMemo(
     () => new Set(linkedWorktrees.map((item) => item.worktreeId)),
@@ -182,19 +202,87 @@ export function DetailPanel({
               </div>
             </div>
 
-            {/* Activity */}
+            {/* Pull Request */}
             <div className="px-4 py-3 border-b border-forge-border/60">
-              <p className="text-[10px] font-semibold text-forge-muted uppercase tracking-widest mb-1">Activity</p>
-              <div className="relative">
-                <div className="absolute left-2.5 top-2 bottom-2 w-px bg-forge-border" />
-                <div className="pl-1">
-                  {activityRows.length === 0 ? (
-                    <p className="text-[10px] text-forge-muted">No workspace activity recorded yet.</p>
-                  ) : activityRows.map((a, i) => (
-                    <TimelineRow key={i} {...a} />
-                  ))}
+              <p className="text-[10px] font-semibold text-forge-muted uppercase tracking-widest mb-2">Pull Request</p>
+              {workspace.prStatus && workspace.prNumber ? (
+                <div className="flex items-center gap-2 mb-2">
+                  <GitPullRequest className="w-3.5 h-3.5 text-forge-green shrink-0" />
+                  <span className="text-[11px] text-forge-text font-medium">PR #{workspace.prNumber}</span>
+                  <span className="text-[10px] text-forge-muted capitalize">{workspace.prStatus}</span>
                 </div>
+              ) : (
+                <p className="text-[10px] text-forge-muted mb-2">No PR open yet.</p>
+              )}
+              {prError && <p className="text-[10px] text-forge-red mb-1">{prError}</p>}
+              {!workspace.prStatus && (
+                <button
+                  disabled={prCreating}
+                  onClick={async () => {
+                    if (!onCreatePr) return;
+                    setPrCreating(true);
+                    setPrError(null);
+                    try {
+                      await onCreatePr();
+                    } catch (err) {
+                      setPrError(String(err));
+                    } finally {
+                      setPrCreating(false);
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forge-green/15 hover:bg-forge-green/25 disabled:opacity-50 text-[11px] font-semibold text-forge-green border border-forge-green/20 transition-colors"
+                >
+                  {prCreating ? <Loader2 className="w-3 h-3 animate-spin" /> : <GitPullRequest className="w-3 h-3" />}
+                  {prCreating ? 'Creating PR…' : 'Create PR'}
+                </button>
+              )}
+            </div>
+
+            {/* Timeline */}
+            <div className="px-4 py-3 border-b border-forge-border/60">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-[10px] font-semibold text-forge-muted uppercase tracking-widest">Timeline</p>
+                {timelineLoading && <Loader2 className="w-3 h-3 animate-spin text-forge-muted" />}
               </div>
+              {(() => {
+                const allItems = timelineItems.length > 0 ? timelineItems : activityRows.map((r, i) => ({
+                  id: String(i), event: r.label, level: 'info' as const, timestamp: r.time,
+                  repo: '', workspaceId: workspace.id,
+                }));
+                const visibleItems = timelineExpanded ? allItems : allItems.slice(0, 8);
+                const eventIcon = (event: string, level: string) => {
+                  if (event.toLowerCase().includes('pr') || event.toLowerCase().includes('pull')) return { icon: GitPullRequest, color: level === 'success' ? 'bg-forge-green/70' : 'bg-forge-blue/70' };
+                  if (event.toLowerCase().includes('rebase') || event.toLowerCase().includes('merge')) return { icon: GitMerge, color: level === 'warning' ? 'bg-forge-yellow/70' : 'bg-forge-green/70' };
+                  if (level === 'error') return { icon: AlertCircle, color: 'bg-forge-red/70' };
+                  if (level === 'warning') return { icon: AlertTriangle, color: 'bg-forge-yellow/70' };
+                  if (level === 'success') return { icon: CheckCircle2, color: 'bg-forge-green/70' };
+                  return { icon: Circle, color: 'bg-forge-muted/60' };
+                };
+                return (
+                  <div className="relative">
+                    <div className="absolute left-2.5 top-2 bottom-2 w-px bg-forge-border" />
+                    <div className="pl-1">
+                      {visibleItems.length === 0 ? (
+                        <p className="text-[10px] text-forge-muted">No activity recorded yet.</p>
+                      ) : visibleItems.map((item, i) => {
+                        const { icon, color } = eventIcon(item.event, item.level ?? 'info');
+                        const label = 'details' in item && item.details ? `${item.event} · ${item.details}` : item.event;
+                        const time = 'timestamp' in item ? String(item.timestamp) : '';
+                        return <TimelineRow key={i} icon={icon} color={color} label={label} time={time} />;
+                      })}
+                    </div>
+                    {allItems.length > 8 && (
+                      <button
+                        onClick={() => setTimelineExpanded((e) => !e)}
+                        className="mt-1 flex items-center gap-1 text-[10px] text-forge-muted hover:text-forge-text"
+                      >
+                        <ChevronDown className={`w-3 h-3 transition-transform ${timelineExpanded ? 'rotate-180' : ''}`} />
+                        {timelineExpanded ? 'Show less' : `Show all ${allItems.length}`}
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Linked Worktrees */}

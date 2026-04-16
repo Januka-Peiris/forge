@@ -23,6 +23,22 @@ export function writeWorkspaceTerminalSessionInput(sessionId: string, data: stri
   return invokeCommand<void>('write_workspace_terminal_session_input', { sessionId, data });
 }
 
+export function approveWorkspaceTerminalCommand(sessionId: string, approved: boolean): Promise<void> {
+  return invokeCommand<void>('approve_workspace_terminal_command', { sessionId, approved });
+}
+
+export interface BatchDispatchPromptInput {
+  workspaceIds: string[];
+  prompt: string;
+  profileId?: string;
+  taskMode?: string;
+  reasoning?: string;
+}
+
+export function batchDispatchWorkspaceAgentPrompt(input: BatchDispatchPromptInput): Promise<AgentPromptEntry[]> {
+  return invokeCommand<AgentPromptEntry[]>('batch_dispatch_workspace_agent_prompt', { input });
+}
+
 export function resizeWorkspaceTerminalSession(sessionId: string, cols: number, rows: number): Promise<void> {
   return invokeCommand<void>('resize_workspace_terminal_session', { sessionId, cols, rows });
 }

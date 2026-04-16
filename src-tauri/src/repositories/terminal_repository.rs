@@ -30,7 +30,7 @@ pub fn insert_session(db: &Database, session: &TerminalSession) -> Result<(), St
                 session.stale as i64,
                 session.closed_at,
                 session.backend,
-                session.tmux_session_name,
+                Option::<String>::None,
                 session.title,
                 session.terminal_kind,
                 session.display_order,
@@ -140,24 +140,6 @@ pub fn next_display_order(db: &Database, workspace_id: &str) -> Result<i64, Stri
     })
 }
 
-pub fn list_running_tmux_sessions(db: &Database) -> Result<Vec<TerminalSession>, String> {
-    db.with_connection(|connection| {
-        let mut stmt = connection.prepare(
-            r#"
-            SELECT id, workspace_id, session_role, profile, cwd, status, started_at, ended_at,
-                   command, args, pid, stale, closed_at, backend, tmux_session_name, title, terminal_kind,
-                   display_order, is_visible, last_attached_at, last_captured_seq
-            FROM terminal_sessions
-            WHERE backend = 'tmux' AND status = 'running' AND closed_at IS NULL
-            ORDER BY created_at DESC, rowid DESC
-            "#,
-        )?;
-        let sessions = stmt
-            .query_map([], session_from_row)?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-        Ok(sessions)
-    })
-}
 pub fn mark_finished(
     db: &Database,
     session_id: &str,
@@ -204,7 +186,6 @@ pub fn mark_attached(db: &Database, session_id: &str, attached_at: &str) -> Resu
             UPDATE terminal_sessions
             SET last_attached_at = ?2,
                 stale = 0,
-                status = CASE WHEN backend = 'tmux' THEN 'running' ELSE status END,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?1
             "#,
@@ -238,7 +219,7 @@ pub fn mark_stale_running_sessions(db: &Database, timestamp: &str) -> Result<(),
                 ended_at = COALESCE(ended_at, ?1),
                 stale = 1,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE status = 'running' AND backend != 'tmux'
+            WHERE status = 'running'
             "#,
             params![timestamp],
         )?;
@@ -276,6 +257,25 @@ pub fn insert_output_chunks(db: &Database, chunks: &[TerminalOutputChunk]) -> Re
             }
         }
         transaction.commit()?;
+        Ok(())
+    })
+}
+
+/// Delete old output chunks for a session, keeping only the most recent `keep` rows.
+pub fn prune_output_chunks(db: &Database, session_id: &str, keep: u32) -> Result<(), String> {
+    db.with_connection_mut(|connection| {
+        connection.execute(
+            r#"
+            DELETE FROM terminal_output_chunks
+            WHERE session_id = ?1
+              AND seq < (
+                SELECT COALESCE(MAX(seq) - ?2 + 1, 0)
+                FROM terminal_output_chunks
+                WHERE session_id = ?1
+              )
+            "#,
+            params![session_id, keep],
+        )?;
         Ok(())
     })
 }
@@ -374,7 +374,6 @@ fn session_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<TerminalSession
         backend: row
             .get::<_, Option<String>>("backend")?
             .unwrap_or_else(|| "pty".to_string()),
-        tmux_session_name: row.get("tmux_session_name")?,
         title: row.get::<_, Option<String>>("title")?.unwrap_or_default(),
         terminal_kind: row
             .get::<_, Option<String>>("terminal_kind")?
@@ -564,8 +563,7 @@ mod tests {
             pid: Some(1234),
             stale: false,
             closed_at: None,
-            backend: "tmux".to_string(),
-            tmux_session_name: Some("forge-test".to_string()),
+            backend: "pty".to_string(),
             title: "Codex".to_string(),
             terminal_kind: "agent".to_string(),
             display_order: 0,

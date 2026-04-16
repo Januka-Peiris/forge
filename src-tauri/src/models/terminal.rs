@@ -17,7 +17,6 @@ pub struct TerminalSession {
     pub stale: bool,
     pub closed_at: Option<String>,
     pub backend: String,
-    pub tmux_session_name: Option<String>,
     pub title: String,
     pub terminal_kind: String,
     pub display_order: i64,
@@ -57,6 +56,15 @@ pub struct TerminalOutputResponse {
 pub struct TerminalOutputEvent {
     pub workspace_id: String,
     pub chunk: TerminalOutputChunk,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommandApprovalEvent {
+    pub session_id: String,
+    pub workspace_id: String,
+    /// The human-readable command text (stripped of trailing newlines).
+    pub command: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,6 +111,16 @@ pub struct QueueAgentPromptInput {
     pub task_mode: Option<String>,
     pub reasoning: Option<String>,
     pub mode: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchDispatchPromptInput {
+    pub workspace_ids: Vec<String>,
+    pub prompt: String,
+    pub profile_id: Option<String>,
+    pub task_mode: Option<String>,
+    pub reasoning: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

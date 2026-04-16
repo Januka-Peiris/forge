@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -8,14 +9,26 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 
 use crate::models::{
-    AgentPromptEntry, AttachWorkspaceTerminalInput, CreateWorkspaceTerminalInput,
-    QueueAgentPromptInput, StartTerminalSessionInput, TerminalOutputChunk, TerminalOutputEvent,
-    TerminalOutputResponse, TerminalSession, TerminalSessionState,
+    AgentPromptEntry, AttachWorkspaceTerminalInput, CommandApprovalEvent,
+    CreateWorkspaceTerminalInput, QueueAgentPromptInput, StartTerminalSessionInput,
+    TerminalOutputChunk, TerminalOutputEvent, TerminalOutputResponse, TerminalSession,
+    TerminalSessionState,
 };
 use crate::repositories::{terminal_repository, workspace_repository};
-use crate::services::{agent_context_service, agent_profile_service, tmux_service};
+use crate::repositories::settings_repository;
+use crate::services::cost_parser;
+use crate::services::{agent_context_service, agent_profile_service};
 use crate::state::{ActiveTerminal, AppState};
 use tauri::Emitter;
+
+fn agent_effective_model(state: &AppState, profile: &crate::models::AgentProfile) -> Option<String> {
+    // Profile-level model overrides the global default.
+    profile.model.clone().or_else(|| {
+        settings_repository::get_value(&state.db, "agent_default_model")
+            .ok()
+            .flatten()
+    })
+}
 
 pub fn start_workspace_terminal_session(
     state: &AppState,
@@ -27,7 +40,8 @@ pub fn start_workspace_terminal_session(
         Some(&input.profile),
         Some(&input.profile),
     )?;
-    let profile = TerminalProfile::from_agent_profile(&resolved_profile);
+    let effective_model = agent_effective_model(state, &resolved_profile);
+    let profile = TerminalProfile::from_agent_profile(&resolved_profile, effective_model.as_deref());
     let session_role = resolve_session_role(input.session_role.as_deref(), &profile.name);
     if input.replace_existing.unwrap_or(false) {
         if let Some(existing) = terminal_repository::latest_for_workspace_role(
@@ -65,7 +79,8 @@ pub fn create_workspace_terminal(
         input.profile_id.as_deref(),
         Some(&input.profile),
     )?;
-    let profile = TerminalProfile::from_agent_profile(&resolved_profile);
+    let effective_model = agent_effective_model(state, &resolved_profile);
+    let profile = TerminalProfile::from_agent_profile(&resolved_profile, effective_model.as_deref());
     let kind = normalize_terminal_kind(&input.kind, &profile.name);
     let session_role = if kind == "shell" || kind == "utility" || kind == "run" {
         "utility"
@@ -75,10 +90,6 @@ pub fn create_workspace_terminal(
     .to_string();
     let display_order = terminal_repository::next_display_order(&state.db, &input.workspace_id)?;
     let session_id = format!("term-{}", unique_suffix());
-    let tmux_name = tmux_service::sanitize_session_name(&format!(
-        "forge-{}-{}",
-        input.workspace_id, session_id
-    ));
     let title = input
         .title
         .clone()
@@ -86,7 +97,40 @@ pub fn create_workspace_terminal(
     let command_spec =
         TerminalCommandSpec::from_input(&profile, input.command.as_deref(), input.args.clone())?;
 
-    tmux_service::create_session(&tmux_name, &cwd, &command_spec.command, &command_spec.args)?;
+    let rows = input.rows.unwrap_or(30).max(5);
+    let cols = input.cols.unwrap_or(100).max(20);
+    let pty_system = native_pty_system();
+    let pair = pty_system
+        .openpty(PtySize {
+            rows,
+            cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|err| format!("Failed to open PTY: {err}"))?;
+
+    let mut command = CommandBuilder::new(&command_spec.command);
+    command.args(&command_spec.args);
+    command.cwd(&cwd);
+    command.env("TERM", "xterm-256color");
+    command.env("PATH", enriched_path());
+    if std::env::var("SHELL").is_err() {
+        command.env("SHELL", "/bin/zsh");
+    }
+
+    let child = pair
+        .slave
+        .spawn_command(command)
+        .map_err(|err| format!("Failed to start terminal: {err}"))?;
+    let reader = pair
+        .master
+        .try_clone_reader()
+        .map_err(|err| format!("Failed to get terminal reader: {err}"))?;
+    let writer = pair
+        .master
+        .take_writer()
+        .map_err(|err| format!("Failed to get terminal writer: {err}"))?;
+    let killer = child.clone_killer();
 
     let started_at = timestamp();
     let session = TerminalSession {
@@ -103,8 +147,7 @@ pub fn create_workspace_terminal(
         pid: None,
         stale: false,
         closed_at: None,
-        backend: "tmux".to_string(),
-        tmux_session_name: Some(tmux_name.clone()),
+        backend: "pty".to_string(),
         title,
         terminal_kind: kind,
         display_order,
@@ -113,22 +156,49 @@ pub fn create_workspace_terminal(
         last_captured_seq: 0,
     };
     terminal_repository::insert_session(&state.db, &session)?;
+
+    let next_seq = Arc::new(AtomicU64::new(0));
+    let last_output_at_secs = Arc::new(AtomicU64::new(0));
+    let active = Arc::new(ActiveTerminal {
+        session_id: session.id.clone(),
+        writer: Mutex::new(writer),
+        killer: Mutex::new(killer),
+        master: Mutex::new(pair.master),
+        last_output_at_secs: last_output_at_secs.clone(),
+    });
+    state
+        .terminals
+        .lock()
+        .map_err(|_| "Terminal registry lock poisoned".to_string())?
+        .insert(session.id.clone(), active);
+
     append_log_line(
         state,
         &input.workspace_id,
         &session_id,
         "system",
-        &format!("[forge] Started persistent tmux terminal {tmux_name}\r\n"),
+        "[forge] Terminal started\r\n",
     );
-    attach_workspace_terminal_session(
-        state,
-        AttachWorkspaceTerminalInput {
-            workspace_id: input.workspace_id,
-            session_id: session_id.clone(),
-            cols: input.cols,
-            rows: input.rows,
-        },
-    )
+
+    spawn_terminal_reader(
+        state.app_handle.clone(),
+        state.db.clone(),
+        input.workspace_id.clone(),
+        session_id.clone(),
+        next_seq,
+        last_output_at_secs,
+        reader,
+    );
+    spawn_terminal_monitor(
+        state.clone(),
+        input.workspace_id,
+        session.session_role.clone(),
+        session_id,
+        child,
+    );
+
+    terminal_repository::get_session(&state.db, &session.id)?
+        .ok_or_else(|| format!("Terminal session {} was not found", session.id))
 }
 
 pub fn attach_workspace_terminal_session(
@@ -143,112 +213,31 @@ pub fn attach_workspace_terminal_session(
             input.session_id, input.workspace_id
         ));
     }
+    // Already connected — nothing to do.
     if active_for_session(state, &session.id)?.is_some() {
         return Ok(session);
     }
-    if session.backend != "tmux" {
-        return Err("Only tmux-backed terminals can be reattached by session id".to_string());
-    }
-    let tmux_name = session
-        .tmux_session_name
-        .clone()
-        .ok_or_else(|| "Terminal is missing tmux session name".to_string())?;
-    if !tmux_service::has_session(&tmux_name) {
-        let ended_at = timestamp();
-        terminal_repository::mark_finished(&state.db, &session.id, "interrupted", &ended_at, true)?;
-        append_log_line(
-            state,
-            &session.workspace_id,
-            &session.id,
-            "system",
-            "[forge] Persistent terminal ended; marked stale for recovery\r\n",
-        );
+    // PTY sessions can't be reattached once the process exits.
+    if session.status != "running" {
         return Err(format!(
-            "Persistent terminal {tmux_name} is no longer running"
+            "Terminal session {} has already ended ({})",
+            session.id, session.status
         ));
     }
-
-    if let Ok(snapshot) = tmux_service::capture_scrollback(&tmux_name) {
-        if !snapshot.trim().is_empty() {
-            append_log_line(
-                state,
-                &session.workspace_id,
-                &session.id,
-                "pty_snapshot",
-                &snapshot,
-            );
-            let next = terminal_repository::next_seq(&state.db, &session.id).unwrap_or(0) as i64;
-            let _ = terminal_repository::mark_captured(&state.db, &session.id, next);
-        }
-    }
-
-    let rows = input.rows.unwrap_or(30).max(5);
-    let cols = input.cols.unwrap_or(100).max(20);
-    let pty_system = native_pty_system();
-    let pair = pty_system
-        .openpty(PtySize {
-            rows,
-            cols,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|err| format!("Failed to open PTY: {err}"))?;
-    let (attach_command, attach_args) = tmux_service::attach_args(&tmux_name)?;
-    let mut command = CommandBuilder::new(attach_command);
-    command.args(&attach_args);
-    command.cwd(PathBuf::from(&session.cwd));
-    let child = pair
-        .slave
-        .spawn_command(command)
-        .map_err(|err| format!("Failed to attach tmux session {tmux_name}: {err}"))?;
-    let reader = pair
-        .master
-        .try_clone_reader()
-        .map_err(|err| format!("Failed to attach terminal reader: {err}"))?;
-    let writer = pair
-        .master
-        .take_writer()
-        .map_err(|err| format!("Failed to attach terminal writer: {err}"))?;
-    let killer = child.clone_killer();
-    let next_seq = Arc::new(AtomicU64::new(
-        terminal_repository::next_seq(&state.db, &session.id).unwrap_or(0),
-    ));
-    let active = Arc::new(ActiveTerminal {
-        session_id: session.id.clone(),
-        writer: Mutex::new(writer),
-        killer: Mutex::new(killer),
-        master: Mutex::new(pair.master),
-    });
-    state
-        .terminals
-        .lock()
-        .map_err(|_| "Terminal registry lock poisoned".to_string())?
-        .insert(session.id.clone(), active);
-    terminal_repository::mark_attached(&state.db, &session.id, &timestamp())?;
+    // Session is marked running in DB but has no active PTY — it's orphaned.
+    let ended_at = timestamp();
+    terminal_repository::mark_finished(&state.db, &session.id, "interrupted", &ended_at, true)?;
     append_log_line(
         state,
         &session.workspace_id,
         &session.id,
         "system",
-        "[forge] Reattached to persistent terminal\r\n",
+        "[forge] Terminal process ended; start a new session\r\n",
     );
-    spawn_terminal_reader(
-        state.app_handle.clone(),
-        state.db.clone(),
-        session.workspace_id.clone(),
-        session.id.clone(),
-        next_seq,
-        reader,
-    );
-    spawn_terminal_monitor(
-        state.clone(),
-        session.workspace_id.clone(),
-        session.session_role.clone(),
-        session.id.clone(),
-        child,
-    );
-    terminal_repository::get_session(&state.db, &session.id)?
-        .ok_or_else(|| format!("Terminal session {} was not found", session.id))
+    Err(format!(
+        "Terminal session {} is no longer running — start a new one",
+        session.id
+    ))
 }
 
 pub fn write_workspace_terminal_input(
@@ -266,6 +255,56 @@ pub fn write_workspace_terminal_session_input(
     session_id: &str,
     data: &str,
 ) -> Result<(), String> {
+    // Gate dangerous commands on shell/utility sessions.
+    // Agent sessions (claude, codex) manage their own shell — we don't intercept those.
+    if let Ok(Some(session)) = terminal_repository::get_session(&state.db, session_id) {
+        if matches!(session.terminal_kind.as_str(), "shell" | "utility") {
+            let line = data.trim_end_matches(['\r', '\n']);
+            if !line.is_empty() && is_dangerous_command(line) {
+                // Stash the data and ask the user before writing.
+                state
+                    .pending_commands
+                    .lock()
+                    .map_err(|_| "Pending command registry lock poisoned".to_string())?
+                    .insert(session_id.to_string(), data.to_string());
+                let _ = state.app_handle.emit(
+                    "forge://command-approval-required",
+                    CommandApprovalEvent {
+                        session_id: session_id.to_string(),
+                        workspace_id: session.workspace_id,
+                        command: line.to_string(),
+                    },
+                );
+                return Ok(());
+            }
+        }
+    }
+    pty_write_raw(state, session_id, data)
+}
+
+/// Called after the user approves or denies a gated command.
+pub fn approve_workspace_terminal_command(
+    state: &AppState,
+    session_id: &str,
+    approved: bool,
+) -> Result<(), String> {
+    let data = state
+        .pending_commands
+        .lock()
+        .map_err(|_| "Pending command registry lock poisoned".to_string())?
+        .remove(session_id)
+        .ok_or_else(|| format!("No pending command for session {session_id}"))?;
+
+    if approved {
+        pty_write_raw(state, session_id, &data)
+    } else {
+        // Send Ctrl-C to cancel whatever the shell was about to execute.
+        pty_write_raw(state, session_id, "\x03")
+    }
+}
+
+/// Writes bytes directly to the PTY without any safety check.
+fn pty_write_raw(state: &AppState, session_id: &str, data: &str) -> Result<(), String> {
     let active = active_for_session(state, session_id)?
         .ok_or_else(|| format!("Terminal session {session_id} is not attached"))?;
     let mut writer = active
@@ -279,6 +318,38 @@ pub fn write_workspace_terminal_session_input(
         .flush()
         .map_err(|err| format!("Failed to flush terminal input: {err}"))?;
     Ok(())
+}
+
+/// Shell command patterns considered dangerous enough to require explicit approval.
+const DANGEROUS_PATTERNS: &[&str] = &[
+    "rm -rf",
+    "rm -fr",
+    "rm -r ",
+    "sudo rm",
+    "git push --force",
+    "git push -f ",
+    "git push -f\r",
+    "git reset --hard",
+    "git clean -f",
+    "git clean -fd",
+    "chmod -R 777",
+    "dd if=",
+    "mkfs",
+    ": >",
+    "DROP TABLE",
+    "DROP DATABASE",
+];
+
+fn is_dangerous_command(line: &str) -> bool {
+    let lower = line.to_lowercase();
+    DANGEROUS_PATTERNS.iter().any(|pat| {
+        // Case-insensitive for SQL keywords, case-sensitive for shell commands.
+        if pat.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+            lower.contains(&pat.to_lowercase())
+        } else {
+            line.contains(pat)
+        }
+    })
 }
 
 pub fn interrupt_workspace_terminal_session_by_id(
@@ -417,11 +488,6 @@ pub fn stop_workspace_terminal_session_by_id(
 ) -> Result<TerminalSession, String> {
     let session = terminal_repository::get_session(&state.db, session_id)?
         .ok_or_else(|| format!("Terminal session {session_id} was not found"))?;
-    if session.backend == "tmux" {
-        if let Some(name) = session.tmux_session_name.as_deref() {
-            let _ = tmux_service::kill_session(name);
-        }
-    }
     detach_active_terminal(state, session_id);
     let ended_at = timestamp();
     terminal_repository::mark_finished(&state.db, session_id, "stopped", &ended_at, false)?;
@@ -462,10 +528,6 @@ pub fn list_workspace_visible_terminal_sessions(
     state: &AppState,
     workspace_id: &str,
 ) -> Result<Vec<TerminalSession>, String> {
-    let sessions = terminal_repository::list_visible_for_workspace(&state.db, workspace_id)?;
-    for session in &sessions {
-        reconcile_tmux_session_state(state, session)?;
-    }
     terminal_repository::list_visible_for_workspace(&state.db, workspace_id)
 }
 
@@ -475,16 +537,6 @@ pub fn capture_workspace_terminal_scrollback(
 ) -> Result<TerminalOutputResponse, String> {
     let session = terminal_repository::get_session(&state.db, session_id)?
         .ok_or_else(|| format!("Terminal session {session_id} was not found"))?;
-    if let Some(name) = session.tmux_session_name.as_deref() {
-        let snapshot = tmux_service::capture_scrollback(name)?;
-        append_log_line(
-            state,
-            &session.workspace_id,
-            session_id,
-            "pty_snapshot",
-            &snapshot,
-        );
-    }
     get_workspace_terminal_output_for_session(state, &session.workspace_id, session_id, Some(0))
 }
 
@@ -648,6 +700,38 @@ pub fn queue_workspace_agent_prompt(
         dispatch_prompt_entry(state, &mut entry)?;
     }
     Ok(entry)
+}
+
+pub fn batch_dispatch_workspace_agent_prompt(
+    state: &AppState,
+    input: crate::models::BatchDispatchPromptInput,
+) -> Result<Vec<AgentPromptEntry>, String> {
+    if input.prompt.trim().is_empty() {
+        return Err("Prompt is required".to_string());
+    }
+    let mut entries = Vec::with_capacity(input.workspace_ids.len());
+    for workspace_id in &input.workspace_ids {
+        let result = queue_workspace_agent_prompt(
+            state,
+            QueueAgentPromptInput {
+                workspace_id: workspace_id.clone(),
+                prompt: input.prompt.clone(),
+                profile: None,
+                profile_id: input.profile_id.clone(),
+                task_mode: input.task_mode.clone(),
+                reasoning: input.reasoning.clone(),
+                mode: Some("send_now".to_string()),
+            },
+        );
+        match result {
+            Ok(entry) => entries.push(entry),
+            Err(err) => log::warn!(
+                target: "forge_lib",
+                "batch_dispatch: failed for workspace {workspace_id}: {err}"
+            ),
+        }
+    }
+    Ok(entries)
 }
 
 pub fn run_next_workspace_agent_prompt(
@@ -917,11 +1001,16 @@ fn spawn_terminal_reader(
     workspace_id: String,
     session_id: String,
     next_seq: Arc<AtomicU64>,
+    last_output_at_secs: Arc<AtomicU64>,
     mut reader: Box<dyn Read + Send>,
 ) {
-    let (tx, rx) = mpsc::channel::<Result<Vec<u8>, String>>();
+    // Bounded channel: if the consumer can't keep up, the reader blocks,
+    // which applies backpressure to the PTY child process. This prevents
+    // unbounded memory growth when output is produced faster than we can
+    // write it to the DB.
+    let (tx, rx) = mpsc::sync_channel::<Result<Vec<u8>, String>>(128);
     thread::spawn(move || {
-        let mut buffer = [0_u8; 8192];
+        let mut buffer = [0_u8; 4096];
         loop {
             match reader.read(&mut buffer) {
                 Ok(0) => break,
@@ -940,8 +1029,9 @@ fn spawn_terminal_reader(
 
     thread::spawn(move || {
         const MAX_BATCH_BYTES: usize = 16 * 1024;
-        const MAX_BATCH_DELAY: Duration = Duration::from_millis(25);
-        let mut pending = Vec::<u8>::new();
+        const MAX_BATCH_DELAY: Duration = Duration::from_millis(50);
+        const MAX_PENDING_BYTES: usize = 256 * 1024; // 256 KB cap on pending buffer
+        let mut pending = Vec::<u8>::with_capacity(MAX_BATCH_BYTES);
 
         let flush_pending = |pending: &mut Vec<u8>| {
             if pending.is_empty() {
@@ -963,7 +1053,30 @@ fn spawn_terminal_reader(
         loop {
             match rx.recv_timeout(MAX_BATCH_DELAY) {
                 Ok(Ok(bytes)) => {
+                    // Track the time of last PTY output so health checks can detect stuck agents.
+                    let now_secs = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+                    last_output_at_secs.store(now_secs, Ordering::Relaxed);
+
+                    // Scan for cost/token usage lines emitted by Claude Code or Codex.
+                    let text = String::from_utf8_lossy(&bytes);
+                    if let Some((tokens, cost)) = cost_parser::parse_cost(&text) {
+                        let _ = workspace_repository::update_agent_session_cost(
+                            &db,
+                            &workspace_id,
+                            tokens,
+                            &cost,
+                        );
+                    }
+
                     pending.extend_from_slice(&bytes);
+                    // If pending exceeds the cap, truncate to the tail to avoid memory bloat.
+                    if pending.len() > MAX_PENDING_BYTES {
+                        let keep_from = pending.len() - MAX_BATCH_BYTES;
+                        pending.drain(..keep_from);
+                    }
                     while pending.len() >= MAX_BATCH_BYTES {
                         let tail = pending.split_off(MAX_BATCH_BYTES);
                         flush_pending(&mut pending);
@@ -1003,15 +1116,6 @@ fn spawn_terminal_monitor(
     thread::spawn(move || {
         let wait_result = child.wait();
         let ended_at = timestamp();
-        let session = terminal_repository::get_session(&state.db, &session_id)
-            .ok()
-            .flatten();
-        let tmux_still_running = session
-            .as_ref()
-            .filter(|session| session.backend == "tmux")
-            .and_then(|session| session.tmux_session_name.as_deref())
-            .map(tmux_service::has_session)
-            .unwrap_or(false);
 
         let was_active = state
             .terminals
@@ -1022,17 +1126,6 @@ fn spawn_terminal_monitor(
         let _ = state.terminals.lock().map(|mut registry| {
             registry.remove(&session_id);
         });
-
-        if tmux_still_running {
-            append_log_line(
-                &state,
-                &workspace_id,
-                &session_id,
-                "system",
-                "\r\n[forge] detached from persistent terminal; tmux session is still running\r\n",
-            );
-            return;
-        }
 
         match wait_result {
             Ok(exit_status) => {
@@ -1192,26 +1285,8 @@ fn default_terminal_title(kind: &str, profile: &str) -> String {
     }
 }
 
-fn reconcile_tmux_session_state(state: &AppState, session: &TerminalSession) -> Result<(), String> {
-    if session.backend != "tmux" || session.status != "running" {
-        return Ok(());
-    }
-    let Some(name) = session.tmux_session_name.as_deref() else {
-        return Ok(());
-    };
-    if !tmux_service::has_session(name) {
-        let ended_at = timestamp();
-        terminal_repository::mark_finished(&state.db, &session.id, "interrupted", &ended_at, true)?;
-        append_log_line(
-            state,
-            &session.workspace_id,
-            &session.id,
-            "system",
-            "[forge] Persistent terminal ended; marked stale for recovery\r\n",
-        );
-    }
-    Ok(())
-}
+const OUTPUT_RETENTION_CHUNKS: u32 = 2000;
+const OUTPUT_PRUNE_INTERVAL: u64 = 500;
 
 fn append_output(
     app_handle: Option<&tauri::AppHandle>,
@@ -1232,6 +1307,10 @@ fn append_output(
         data: data.to_string(),
     };
     let _ = terminal_repository::insert_output_chunk(db, &chunk);
+    // Periodically prune old chunks so the DB doesn't grow without bound.
+    if seq > 0 && seq % OUTPUT_PRUNE_INTERVAL == 0 {
+        let _ = terminal_repository::prune_output_chunks(db, session_id, OUTPUT_RETENTION_CHUNKS);
+    }
     if let Some(app_handle) = app_handle {
         let _ = app_handle.emit(
             "forge://terminal-output",
@@ -1256,6 +1335,33 @@ fn unique_suffix() -> String {
         .map(|duration| duration.as_nanos())
         .unwrap_or(0);
     format!("{nanos}")
+}
+
+/// Build a PATH that includes common macOS binary locations.
+/// When Tauri launches from Finder the inherited PATH is minimal.
+pub fn enriched_path() -> String {
+    let base = std::env::var("PATH").unwrap_or_default();
+    let home = std::env::var("HOME").unwrap_or_else(|_| String::from("/tmp"));
+    let extras = [
+        format!("{home}/.local/bin"),
+        format!("{home}/.cargo/bin"),
+        format!("{home}/.nvm/current/bin"),
+        String::from("/opt/homebrew/bin"),
+        String::from("/opt/homebrew/sbin"),
+        String::from("/usr/local/bin"),
+        String::from("/usr/bin"),
+        String::from("/bin"),
+        String::from("/usr/sbin"),
+        String::from("/sbin"),
+    ];
+    let mut seen = HashSet::new();
+    let mut parts = Vec::new();
+    for entry in base.split(':').chain(extras.iter().map(|s| s.as_str())) {
+        if !entry.is_empty() && seen.insert(entry.to_string()) {
+            parts.push(entry.to_string());
+        }
+    }
+    parts.join(":")
 }
 
 #[derive(Clone)]
@@ -1291,11 +1397,23 @@ impl TerminalCommandSpec {
 }
 
 impl TerminalProfile {
-    fn from_agent_profile(profile: &crate::models::AgentProfile) -> Self {
+    fn from_agent_profile(profile: &crate::models::AgentProfile, effective_model: Option<&str>) -> Self {
+        // Inject --model flag for claude command if a model is configured.
+        let args = if profile.command.contains("claude") {
+            if let Some(model) = effective_model.filter(|m| !m.is_empty()) {
+                let mut args = vec!["--model".to_string(), model.to_string()];
+                args.extend_from_slice(&profile.args);
+                args
+            } else {
+                profile.args.clone()
+            }
+        } else {
+            profile.args.clone()
+        };
         Self {
             name: profile.agent.clone(),
             command: profile.command.clone(),
-            args: profile.args.clone(),
+            args,
         }
     }
 }

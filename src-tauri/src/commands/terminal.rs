@@ -2,9 +2,9 @@ use tauri::State;
 
 use crate::commands::perf::measure_command;
 use crate::models::{
-    AgentPromptEntry, AttachWorkspaceTerminalInput, CreateWorkspaceTerminalInput,
-    QueueAgentPromptInput, StartTerminalSessionInput, TerminalOutputResponse, TerminalSession,
-    TerminalSessionState,
+    AgentPromptEntry, AttachWorkspaceTerminalInput, BatchDispatchPromptInput,
+    CreateWorkspaceTerminalInput, QueueAgentPromptInput, StartTerminalSessionInput,
+    TerminalOutputResponse, TerminalSession, TerminalSessionState,
 };
 use crate::services::terminal_service;
 use crate::state::AppState;
@@ -54,6 +54,15 @@ pub fn interrupt_workspace_terminal_session_by_id(
     session_id: String,
 ) -> Result<TerminalSession, String> {
     terminal_service::interrupt_workspace_terminal_session_by_id(&state, &session_id)
+}
+
+#[tauri::command]
+pub fn approve_workspace_terminal_command(
+    state: State<'_, AppState>,
+    session_id: String,
+    approved: bool,
+) -> Result<(), String> {
+    terminal_service::approve_workspace_terminal_command(&state, &session_id, approved)
 }
 
 #[tauri::command]
@@ -211,6 +220,16 @@ pub fn queue_workspace_agent_prompt(
 ) -> Result<AgentPromptEntry, String> {
     measure_command("queue_workspace_agent_prompt", || {
         terminal_service::queue_workspace_agent_prompt(&state, input)
+    })
+}
+
+#[tauri::command]
+pub fn batch_dispatch_workspace_agent_prompt(
+    state: State<'_, AppState>,
+    input: BatchDispatchPromptInput,
+) -> Result<Vec<AgentPromptEntry>, String> {
+    measure_command("batch_dispatch_workspace_agent_prompt", || {
+        terminal_service::batch_dispatch_workspace_agent_prompt(&state, input)
     })
 }
 
