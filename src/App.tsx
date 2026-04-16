@@ -901,10 +901,10 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setSidebarCollapsed(false)}
-                className="mt-2.5 rounded-md border border-forge-border bg-white/5 p-1 text-forge-muted hover:bg-white/10"
+                className="mt-2.5 rounded-lg border border-forge-border bg-forge-surface p-1.5 text-forge-text shadow-md ring-1 ring-black/20 hover:bg-forge-card hover:border-forge-orange/35"
                 title="Expand sidebar"
               >
-                <ChevronRight className="h-3.5 w-3.5" />
+                <ChevronRight className="h-4 w-4" strokeWidth={2.25} />
               </button>
             </div>
           ) : (
@@ -913,10 +913,10 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setSidebarCollapsed(true)}
-                  className="absolute top-2.5 right-2 z-[5] rounded-md border border-forge-border bg-white/5 p-1 text-forge-muted hover:bg-white/10"
+                  className="absolute top-2.5 right-2 z-[25] rounded-lg border border-forge-border bg-forge-surface p-1.5 text-forge-text shadow-md ring-1 ring-black/25 hover:bg-forge-card hover:border-forge-orange/35"
                   title="Collapse sidebar"
                 >
-                  <ChevronLeft className="h-3.5 w-3.5" />
+                  <ChevronLeft className="h-4 w-4" strokeWidth={2.25} />
                 </button>
                 <Sidebar
                   activeView={view}

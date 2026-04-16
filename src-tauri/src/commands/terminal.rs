@@ -215,25 +215,6 @@ pub fn queue_workspace_agent_prompt(
 }
 
 #[tauri::command]
-pub fn run_next_workspace_agent_prompt(
-    state: State<'_, AppState>,
-    workspace_id: String,
-) -> Result<Option<AgentPromptEntry>, String> {
-    terminal_service::run_next_workspace_agent_prompt(&state, &workspace_id)
-}
-
-#[tauri::command]
-pub fn list_workspace_agent_prompts(
-    state: State<'_, AppState>,
-    workspace_id: String,
-    limit: Option<u32>,
-) -> Result<Vec<AgentPromptEntry>, String> {
-    measure_command("list_workspace_agent_prompts", || {
-        terminal_service::list_workspace_agent_prompts(&state, &workspace_id, limit)
-    })
-}
-
-#[tauri::command]
 pub fn write_workspace_utility_terminal_input(
     state: State<'_, AppState>,
     workspace_id: String,

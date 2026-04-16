@@ -59,6 +59,7 @@ pub struct WorkspaceContextPreview {
     pub commit_hash: String,
     pub generated_at: Option<String>,
     pub approx_chars: usize,
+    /// `0` when Forge does not apply a character budget to repo context.
     pub max_chars: usize,
     pub trimmed: bool,
     pub items: Vec<WorkspaceContextItem>,

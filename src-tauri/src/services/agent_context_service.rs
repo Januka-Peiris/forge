@@ -12,12 +12,7 @@ use crate::repositories::workspace_repository;
 use crate::services::git_review_service;
 use crate::state::AppState;
 
-const REPO_MAP_VERSION: u32 = 1;
-const MAX_CONTEXT_CHARS: usize = 24_000;
-const MAX_BASE_MAP_CHARS: usize = 10_000;
-const MAX_DIFF_CHARS_PER_FILE: usize = 3_500;
-const MAX_CHANGED_FILES: usize = 12;
-const MAX_RELATED_FILES: usize = 24;
+const REPO_MAP_VERSION: u32 = 2;
 
 pub fn get_workspace_agent_context(
     state: &AppState,
@@ -80,11 +75,10 @@ fn build_workspace_context_preview(
         });
     let changed_paths = changed_files
         .iter()
-        .take(MAX_CHANGED_FILES)
         .map(|file| file.path.clone())
         .collect::<HashSet<_>>();
 
-    for file in changed_files.iter().take(MAX_CHANGED_FILES) {
+    for file in &changed_files {
         let diff = git_review_service::get_workspace_file_diff(state, workspace_id, &file.path)
             .map(|item| item.diff)
             .unwrap_or_else(|err| format!("Diff unavailable: {err}"));
@@ -92,7 +86,7 @@ fn build_workspace_context_preview(
             "### Changed file: {} ({})\n```diff\n{}\n```",
             file.path,
             file.status,
-            truncate_chars(&diff, MAX_DIFF_CHARS_PER_FILE)
+            diff
         );
         fragments.push(ContextFragment::new(
             format!("Changed: {}", file.path),
@@ -120,13 +114,13 @@ fn build_workspace_context_preview(
 
     let compressed_map = compressed_repo_map(&map_state.map);
     fragments.push(ContextFragment::new(
-        format!("Base repo map ({})", map_state.map.entries.len()),
+        format!("Repository paths ({})", map_state.map.entries.len()),
         None,
         "repo_map",
         40,
         format!(
-            "### Base repo map\n{}",
-            truncate_chars(&compressed_map, MAX_BASE_MAP_CHARS)
+            "### Repository paths (from git tree; symbols omitted for speed)\n{}",
+            compressed_map
         ),
     ));
 
@@ -146,27 +140,11 @@ fn build_workspace_context_preview(
 
     let mut prompt_parts = vec!["Forge repo context:".to_string()];
     let mut items = Vec::new();
-    let mut used = prompt_parts[0].len() + 2;
-    let mut trimmed = false;
 
     for fragment in fragments {
         let chars = fragment.body.chars().count();
-        let remaining = MAX_CONTEXT_CHARS.saturating_sub(used + 2);
-        if chars <= remaining {
-            used += chars + 2;
-            prompt_parts.push(fragment.body.clone());
-            items.push(fragment.into_item(chars, true, false));
-        } else if remaining > 600 && fragment.priority <= 40 {
-            let body = truncate_chars(&fragment.body, remaining);
-            let body_chars = body.chars().count();
-            used += body_chars + 2;
-            prompt_parts.push(body);
-            items.push(fragment.into_item(chars, true, true));
-            trimmed = true;
-        } else {
-            items.push(fragment.into_item(chars, false, true));
-            trimmed = true;
-        }
+        prompt_parts.push(fragment.body.clone());
+        items.push(fragment.into_item(chars, true, false));
     }
 
     let prompt_context = prompt_parts.join("\n\n");
@@ -181,8 +159,9 @@ fn build_workspace_context_preview(
         commit_hash: map_state.meta.commit_hash,
         generated_at: Some(map_state.meta.generated_at),
         approx_chars: prompt_context.chars().count(),
-        max_chars: MAX_CONTEXT_CHARS,
-        trimmed,
+        // 0 = no Forge-enforced character budget (UI shows size + rough token est. only).
+        max_chars: 0,
+        trimmed: false,
         items,
         prompt_context,
         warning,
@@ -330,10 +309,11 @@ fn generate_repo_map(root: &Path, default_ref: &DefaultRef) -> Result<RepoMap, S
             continue;
         }
         collect_parent_dirs(path, &mut dirs);
+        // Path-only map: no per-file `git show` or regex "symbols" (fast on large repos; not aider-class).
         entries.push(RepoMapEntry {
             path: path.to_string(),
             kind: "file".to_string(),
-            symbols: symbols_for_path(root, &default_ref.ref_name, path),
+            symbols: Vec::new(),
         });
     }
 
@@ -444,7 +424,6 @@ fn related_file_paths(map: &RepoMap, changed_paths: &HashSet<String>) -> Vec<Str
                 .map(|parent| changed_dirs.contains(&parent.to_string_lossy().to_string()))
                 .unwrap_or(false)
         })
-        .take(MAX_RELATED_FILES)
         .map(|entry| format!("- {}", entry.path))
         .collect()
 }
@@ -459,81 +438,6 @@ fn collect_parent_dirs(path: &str, dirs: &mut BTreeSet<String>) {
         dirs.insert(value.to_string());
         current = dir.parent();
     }
-}
-
-fn symbols_for_path(root: &Path, ref_name: &str, path: &str) -> Vec<String> {
-    if !is_symbol_candidate(path) {
-        return Vec::new();
-    }
-    let spec = format!("{ref_name}:{path}");
-    let Ok(content) = git(root, &["show", &spec]) else {
-        return Vec::new();
-    };
-    if content.len() > 80_000 {
-        return Vec::new();
-    }
-    extract_symbol_names(&content)
-        .into_iter()
-        .take(12)
-        .collect()
-}
-
-fn extract_symbol_names(content: &str) -> Vec<String> {
-    let mut symbols = Vec::new();
-    for line in content.lines() {
-        let trimmed = line.trim_start();
-        let name = if let Some(rest) = trimmed
-            .strip_prefix("pub fn ")
-            .or_else(|| trimmed.strip_prefix("fn "))
-        {
-            rest.split(['(', '<', ' ']).next()
-        } else if let Some(rest) = trimmed
-            .strip_prefix("export function ")
-            .or_else(|| trimmed.strip_prefix("function "))
-        {
-            rest.split(['(', '<', ' ']).next()
-        } else if let Some(rest) = trimmed
-            .strip_prefix("export class ")
-            .or_else(|| trimmed.strip_prefix("class "))
-        {
-            rest.split(['{', ' ', '<']).next()
-        } else if let Some(rest) = trimmed
-            .strip_prefix("export const ")
-            .or_else(|| trimmed.strip_prefix("const "))
-        {
-            rest.split(['=', ':', '<', ' ']).next()
-        } else if let Some(rest) = trimmed
-            .strip_prefix("pub struct ")
-            .or_else(|| trimmed.strip_prefix("struct "))
-        {
-            rest.split(['{', '(', '<', ' ']).next()
-        } else if let Some(rest) = trimmed
-            .strip_prefix("pub enum ")
-            .or_else(|| trimmed.strip_prefix("enum "))
-        {
-            rest.split(['{', '<', ' ']).next()
-        } else {
-            None
-        };
-        if let Some(name) = name {
-            let clean = name.trim().trim_end_matches(';');
-            if !clean.is_empty()
-                && clean
-                    .chars()
-                    .all(|ch| ch.is_alphanumeric() || ch == '_' || ch == '$')
-            {
-                symbols.push(clean.to_string());
-            }
-        }
-    }
-    symbols
-}
-
-fn is_symbol_candidate(path: &str) -> bool {
-    matches!(
-        Path::new(path).extension().and_then(|ext| ext.to_str()),
-        Some("rs" | "ts" | "tsx" | "js" | "jsx")
-    )
 }
 
 fn should_exclude_path(path: &str) -> bool {
@@ -590,18 +494,6 @@ fn should_exclude_path(path: &str) -> bool {
                 | "lock"
         )
     )
-}
-
-fn truncate_chars(value: &str, max_chars: usize) -> String {
-    if value.chars().count() <= max_chars {
-        return value.to_string();
-    }
-    let mut output = value
-        .chars()
-        .take(max_chars.saturating_sub(80))
-        .collect::<String>();
-    output.push_str("\n… trimmed by Forge repo context budget …");
-    output
 }
 
 fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, String> {

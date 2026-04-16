@@ -153,6 +153,9 @@ export function DetailPanel({
             {/* Branch Health */}
             <div className="px-4 py-3 border-b border-forge-border/60">
               <p className="text-[10px] font-semibold text-forge-muted uppercase tracking-widest mb-2">Branch Health</p>
+              <p className="text-[9px] leading-snug text-forge-muted/90 mb-2">
+                Saved workspace row (not live git). For current ahead/behind vs base, use Readiness in the workspace view.
+              </p>
               <div className="grid grid-cols-2 gap-2 mb-2">
                 <div className="bg-forge-card rounded-lg p-2.5 border border-forge-border">
                   <div className="flex items-center gap-1 text-forge-green mb-0.5">

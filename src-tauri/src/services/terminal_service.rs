@@ -668,33 +668,8 @@ pub fn queue_workspace_agent_prompt(
         sent_at: None,
     };
     terminal_repository::insert_prompt_entry(&state.db, &entry)?;
-
-    let mode = input.mode.unwrap_or_else(|| "send_now".to_string());
-    if mode == "send_now" {
-        dispatch_prompt_entry(state, &mut entry)?;
-    }
-    Ok(entry)
-}
-
-pub fn run_next_workspace_agent_prompt(
-    state: &AppState,
-    workspace_id: &str,
-) -> Result<Option<AgentPromptEntry>, String> {
-    let mut entry =
-        match terminal_repository::latest_queued_prompt_for_workspace(&state.db, workspace_id)? {
-            Some(entry) => entry,
-            None => return Ok(None),
-        };
     dispatch_prompt_entry(state, &mut entry)?;
-    Ok(Some(entry))
-}
-
-pub fn list_workspace_agent_prompts(
-    state: &AppState,
-    workspace_id: &str,
-    limit: Option<u32>,
-) -> Result<Vec<AgentPromptEntry>, String> {
-    terminal_repository::list_prompt_entries_for_workspace(&state.db, workspace_id, limit)
+    Ok(entry)
 }
 
 pub fn write_workspace_utility_terminal_input(
