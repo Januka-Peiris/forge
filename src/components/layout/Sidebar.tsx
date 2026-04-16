@@ -186,8 +186,8 @@ export function Sidebar({
 
   return (
     <aside className="w-full shrink-0 flex flex-col h-full bg-forge-surface border-r border-forge-border">
-      <div className="border-b border-forge-border px-4 py-5 sm:px-5">
-        <div className="flex min-w-0 items-center justify-between">
+      <div className="border-b border-forge-border px-4 py-5 pr-12 sm:px-5 sm:pr-14">
+        <div className="flex min-w-0 items-center">
           <img
             src="/brand/logo-word.png"
             alt="Forge"

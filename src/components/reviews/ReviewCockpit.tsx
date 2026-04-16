@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
   Bot,
   CheckCircle2,
   ExternalLink,
@@ -39,6 +42,7 @@ interface ReviewCockpitProps {
   onSelectedPathChange?: (path: string | null) => void;
   targetCommentId?: string | null;
   onTargetCommentHandled?: () => void;
+  onBackToWorkspaces?: () => void;
 }
 
 export function ReviewCockpit({
@@ -47,6 +51,7 @@ export function ReviewCockpit({
   onSelectedPathChange,
   targetCommentId,
   onTargetCommentHandled,
+  onBackToWorkspaces,
 }: ReviewCockpitProps) {
   const [cockpit, setCockpit] = useState<WorkspaceReviewCockpit | null>(null);
   const [localSelectedPath, setLocalSelectedPath] = useState<string | null>(selectedPath ?? null);
@@ -56,6 +61,7 @@ export function ReviewCockpit({
   const [selectedProfileId, setSelectedProfileId] = useAgentProfile();
   const [selectedTaskMode, setSelectedTaskMode] = useState('Review');
   const [selectedReasoning, setSelectedReasoning] = useState('Default');
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
   const workspaceId = workspace?.id ?? null;
   const effectiveSelectedPath = selectedPath ?? localSelectedPath ?? cockpit?.files[0]?.file.path ?? null;
 
@@ -225,6 +231,16 @@ export function ReviewCockpit({
         {/* Row 1: title + action buttons */}
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
+            {onBackToWorkspaces && (
+              <button
+                type="button"
+                onClick={onBackToWorkspaces}
+                className="mb-2 inline-flex items-center gap-1.5 rounded-md border border-forge-border bg-white/5 px-2.5 py-1 text-[10px] font-semibold text-forge-text/90 hover:bg-white/10"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Back to Workspaces
+              </button>
+            )}
             <h1 className="truncate text-[17px] font-bold text-forge-text">Review Cockpit</h1>
             <p className="mt-0.5 truncate text-[11px] text-forge-muted">
               {workspace.name} · {workspace.repo} / {workspace.branch}
@@ -246,6 +262,20 @@ export function ReviewCockpit({
             >
               <GitPullRequest className="h-3.5 w-3.5" />
               PR comments
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setRightPanelCollapsed((current) => !current)}
+              className="flex items-center gap-1.5 rounded-lg border border-forge-border bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-forge-text hover:bg-white/10 disabled:opacity-50"
+              title="Collapse/expand right review panel"
+            >
+              {rightPanelCollapsed ? (
+                <ChevronRight className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronLeft className="h-3.5 w-3.5" />
+              )}
+              {rightPanelCollapsed ? 'Show panel' : 'Collapse panel'}
             </button>
           </div>
         </div>
@@ -270,7 +300,12 @@ export function ReviewCockpit({
       </div>
 
       {/* ── Three-column grid ───────────────────────────────────────────────── */}
-      <div className="grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)_300px] gap-2 p-2">
+      <div
+        className="grid min-h-0 flex-1 gap-2 p-2"
+        style={{
+          gridTemplateColumns: rightPanelCollapsed ? '280px minmax(0, 1fr) 0px' : '280px minmax(0, 1fr) 300px',
+        }}
+      >
 
         {/* ── Left: file list ─────────────────────────────────────────────── */}
         <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-forge-border bg-forge-card/70">
@@ -414,7 +449,7 @@ export function ReviewCockpit({
         </div>
 
         {/* ── Right: Readiness + PR comments ──────────────────────────────── */}
-        <div className="flex min-h-0 flex-col gap-2">
+        <div className="flex min-h-0 flex-col gap-2" style={{ display: rightPanelCollapsed ? 'none' : undefined }}>
 
           {/* Readiness card */}
           <div className="shrink-0 rounded-xl border border-forge-border bg-forge-card/70 p-3">

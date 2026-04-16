@@ -375,6 +375,11 @@ pub fn delete_workspace(state: &AppState, workspace_id: &str) -> Result<(), Stri
     log::info!(target: "forge_lib", "sqlite delete workspace row: id={workspace_id}");
     workspace_repository::delete(&state.db, workspace_id)?;
 
+    // Always prune to ensure "zombie" registrations are cleared from Git's metadata
+    if let Some(repo_path) = detail.summary.repository_path.as_deref() {
+        let _ = git_worktree_service::prune_worktrees(Path::new(repo_path));
+    }
+
     let activity_level = if worktree_cleanup_warning.is_some() {
         "warning"
     } else {

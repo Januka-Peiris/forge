@@ -101,12 +101,12 @@ pub fn update_pr_status(
     })
 }
 
-pub fn next_workspace_id(db: &Database) -> Result<String, String> {
-    db.with_connection(|connection| {
-        let count: i64 =
-            connection.query_row("SELECT COUNT(*) FROM workspaces", [], |row| row.get(0))?;
-        Ok(format!("ws-{:03}", count + 1))
-    })
+pub fn next_workspace_id(_db: &Database) -> Result<String, String> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    Ok(format!("ws-{now}"))
 }
 
 pub fn insert(db: &Database, detail: &WorkspaceDetail) -> Result<(), String> {

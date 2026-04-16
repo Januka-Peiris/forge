@@ -56,7 +56,7 @@ export interface QueueReviewAgentPromptInput {
   profileId?: string | null;
   taskMode?: string | null;
   reasoning?: string | null;
-  mode?: 'send_now' | 'queue' | 'interrupt_send' | string | null;
+  mode?: 'send_now' | 'interrupt_send' | string | null;
 }
 
 export type QueueReviewAgentPromptResult = AgentPromptEntry;

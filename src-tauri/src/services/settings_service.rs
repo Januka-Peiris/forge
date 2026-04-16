@@ -6,10 +6,19 @@ pub fn get_settings(state: &AppState) -> Result<AppSettings, String> {
     Ok(AppSettings {
         repo_roots: settings_repository::get_repo_roots(&state.db)?,
         discovered_repositories: repository_repository::list(&state.db)?,
+        has_completed_env_check: settings_repository::get_has_completed_env_check(&state.db)?,
     })
 }
 
 pub fn save_repo_roots(state: &AppState, input: SaveRepoRootsInput) -> Result<AppSettings, String> {
     settings_repository::save_repo_roots(&state.db, &input.repo_roots)?;
+    get_settings(state)
+}
+
+pub fn save_has_completed_env_check(
+    state: &AppState,
+    completed: bool,
+) -> Result<AppSettings, String> {
+    settings_repository::save_has_completed_env_check(&state.db, completed)?;
     get_settings(state)
 }

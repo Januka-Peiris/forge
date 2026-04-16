@@ -408,74 +408,6 @@ pub fn insert_prompt_entry(db: &Database, entry: &AgentPromptEntry) -> Result<()
     })
 }
 
-pub fn list_prompt_entries_for_workspace(
-    db: &Database,
-    workspace_id: &str,
-    limit: Option<u32>,
-) -> Result<Vec<AgentPromptEntry>, String> {
-    db.with_connection(|connection| {
-        let mut stmt = connection.prepare(
-            r#"
-            SELECT id, workspace_id, session_id, profile, prompt, status, created_at, sent_at
-            FROM terminal_prompt_entries
-            WHERE workspace_id = ?1
-            ORDER BY created_at DESC, rowid DESC
-            LIMIT ?2
-            "#,
-        )?;
-        let rows = stmt
-            .query_map(
-                params![workspace_id, i64::from(limit.unwrap_or(80))],
-                |row| {
-                    Ok(AgentPromptEntry {
-                        id: row.get("id")?,
-                        workspace_id: row.get("workspace_id")?,
-                        session_id: row.get("session_id")?,
-                        profile: row.get("profile")?,
-                        prompt: row.get("prompt")?,
-                        status: row.get("status")?,
-                        created_at: row.get("created_at")?,
-                        sent_at: row.get("sent_at")?,
-                    })
-                },
-            )?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-        Ok(rows)
-    })
-}
-
-pub fn latest_queued_prompt_for_workspace(
-    db: &Database,
-    workspace_id: &str,
-) -> Result<Option<AgentPromptEntry>, String> {
-    db.with_connection(|connection| {
-        connection
-            .query_row(
-                r#"
-                SELECT id, workspace_id, session_id, profile, prompt, status, created_at, sent_at
-                FROM terminal_prompt_entries
-                WHERE workspace_id = ?1 AND status = 'queued'
-                ORDER BY created_at ASC, rowid ASC
-                LIMIT 1
-                "#,
-                params![workspace_id],
-                |row| {
-                    Ok(AgentPromptEntry {
-                        id: row.get("id")?,
-                        workspace_id: row.get("workspace_id")?,
-                        session_id: row.get("session_id")?,
-                        profile: row.get("profile")?,
-                        prompt: row.get("prompt")?,
-                        status: row.get("status")?,
-                        created_at: row.get("created_at")?,
-                        sent_at: row.get("sent_at")?,
-                    })
-                },
-            )
-            .optional()
-    })
-}
-
 pub fn mark_prompt_sent(
     db: &Database,
     prompt_id: &str,
@@ -514,6 +446,72 @@ pub fn mark_prompt_status_by_session(
             params![session_id, status],
         )?;
         Ok(())
+    })
+}
+
+pub fn list_prompts_for_workspace(
+    db: &Database,
+    workspace_id: &str,
+    limit: Option<u32>,
+) -> Result<Vec<AgentPromptEntry>, String> {
+    db.with_connection(|connection| {
+        let limit = limit.unwrap_or(50) as i64;
+        let mut statement = connection.prepare(
+            r#"
+            SELECT id, workspace_id, session_id, profile, prompt, status, created_at, sent_at
+            FROM terminal_prompt_entries
+            WHERE workspace_id = ?1
+            ORDER BY created_at DESC
+            LIMIT ?2
+            "#,
+        )?;
+        let entries = statement
+            .query_map(params![workspace_id, limit], |row| {
+                Ok(AgentPromptEntry {
+                    id: row.get("id")?,
+                    workspace_id: row.get("workspace_id")?,
+                    session_id: row.get("session_id")?,
+                    profile: row.get("profile")?,
+                    prompt: row.get("prompt")?,
+                    status: row.get("status")?,
+                    created_at: row.get("created_at")?,
+                    sent_at: row.get("sent_at")?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(entries)
+    })
+}
+
+pub fn latest_queued_prompt_for_workspace(
+    db: &Database,
+    workspace_id: &str,
+) -> Result<Option<AgentPromptEntry>, String> {
+    db.with_connection(|connection| {
+        connection
+            .query_row(
+                r#"
+                SELECT id, workspace_id, session_id, profile, prompt, status, created_at, sent_at
+                FROM terminal_prompt_entries
+                WHERE workspace_id = ?1 AND status = 'queued'
+                ORDER BY created_at ASC
+                LIMIT 1
+                "#,
+                params![workspace_id],
+                |row| {
+                    Ok(AgentPromptEntry {
+                        id: row.get("id")?,
+                        workspace_id: row.get("workspace_id")?,
+                        session_id: row.get("session_id")?,
+                        profile: row.get("profile")?,
+                        prompt: row.get("prompt")?,
+                        status: row.get("status")?,
+                        created_at: row.get("created_at")?,
+                        sent_at: row.get("sent_at")?,
+                    })
+                },
+            )
+            .optional()
     })
 }
 

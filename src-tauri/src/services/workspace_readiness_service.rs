@@ -94,13 +94,7 @@ mod tests {
     fn readiness_summary_shape_is_stable() {
         let summary = format!(
             "Agent {} · {} files · {}/{} accepted · tests {} · {} PR comment{}",
-            "idle",
-            2,
-            1,
-            2,
-            "unknown",
-            0,
-            "s",
+            "idle", 2, 1, 2, "unknown", 0, "s",
         );
         assert!(summary.contains("1/2 accepted"));
     }

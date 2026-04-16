@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import { useState, useCallback, type Dispatch, type SetStateAction } from 'react';
 
 const PROFILE_KEY = 'forge:agent-profile';
 const DEFAULT_PROFILE_ID = 'claude-default';
@@ -12,9 +12,9 @@ export function useAgentProfile(): [string, Dispatch<SetStateAction<string>>] {
     }
   });
 
-  const setProfileId: Dispatch<SetStateAction<string>> = (next) => {
+  const setProfileId = useCallback((next: SetStateAction<string>) => {
     setProfileIdState((current) => {
-      const resolved = typeof next === 'function' ? next(current) : next;
+      const resolved = typeof next === 'function' ? (next as (prev: string) => string)(current) : next;
       try {
         window.localStorage.setItem(PROFILE_KEY, resolved);
       } catch {
@@ -22,7 +22,7 @@ export function useAgentProfile(): [string, Dispatch<SetStateAction<string>>] {
       }
       return resolved;
     });
-  };
+  }, []);
 
   return [profileId, setProfileId];
 }

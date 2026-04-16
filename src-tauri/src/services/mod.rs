@@ -3,6 +3,7 @@ pub mod agent_context_service;
 pub mod agent_process_service;
 pub mod agent_profile_service;
 pub mod deep_link_service;
+pub mod environment_service;
 pub mod review_service;
 pub mod workspace_service;
 

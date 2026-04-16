@@ -8,8 +8,8 @@ mod state;
 use std::sync::atomic::Ordering;
 
 use commands::{
-    activity, agent_context, agent_memory, agent_profiles, agent_runs, deep_links, git_review,
-    merge_readiness, orchestrator as orchestrator_commands, pr_draft, prompt_templates,
+    activity, agent_context, agent_memory, agent_profiles, agent_runs, deep_links, environment,
+    git_review, merge_readiness, orchestrator as orchestrator_commands, pr_draft, prompt_templates,
     repositories as repository_commands, review_cockpit, review_summary, reviews, settings,
     terminal, workspace_attention, workspace_cleanup, workspace_health, workspace_ports,
     workspace_readiness, workspace_scripts, workspaces,
@@ -29,8 +29,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            let state = AppState::initialize(app.handle())
-                .map_err(|err| Box::<dyn std::error::Error>::from(err))?;
+            let state =
+                AppState::initialize(app.handle()).map_err(Box::<dyn std::error::Error>::from)?;
             log::info!(target: "forge_lib", "SQLite database path: {}", state.db.path().display());
             println!("Forge SQLite database: {}", state.db.path().display());
 
@@ -77,12 +77,16 @@ pub fn run() {
             activity::list_workspace_activity,
             settings::get_settings,
             settings::save_repo_roots,
+            settings::save_has_completed_env_check,
             settings::resolve_git_repository_path,
             settings::get_ai_model_settings,
             settings::save_ai_model_settings,
             agent_context::get_workspace_agent_context,
+            agent_context::get_workspace_context_preview,
+            agent_context::refresh_workspace_repo_context,
             agent_profiles::list_workspace_agent_profiles,
             deep_links::open_deep_link,
+            environment::check_environment,
             repository_commands::scan_repositories,
             repository_commands::remove_repository,
             agent_runs::start_workspace_run,

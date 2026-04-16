@@ -42,9 +42,10 @@ interface CommandPaletteProps {
   onOpenWorkspace: () => void;
   onOpenReviewFile: (path: string) => void;
   onOpenReviewComment: (commentId: string, path?: string | null) => void;
+  onCheckEnvironment: () => void | Promise<void>;
 }
 
-export function CommandPalette({ open, workspaces, selectedWorkspace, changedFiles, onClose, onSelectWorkspace, onOpenWorkspace, onOpenReviewFile, onOpenReviewComment }: CommandPaletteProps) {
+export function CommandPalette({ open, workspaces, selectedWorkspace, changedFiles, onClose, onSelectWorkspace, onOpenWorkspace, onOpenReviewFile, onOpenReviewComment, onCheckEnvironment }: CommandPaletteProps) {
   const [query, setQuery] = useState('');
   const [sessions, setSessions] = useState<TerminalSession[]>([]);
   const [comments, setComments] = useState<WorkspacePrComment[]>([]);
@@ -170,6 +171,16 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
       run: () => onOpenReviewComment(comment.commentId, comment.path),
     }));
     const agentItems = selectedWorkspace ? agentProfiles.map((profile) => agentItem(selectedWorkspace.id, profile, onOpenWorkspace)) : [];
+    const globalActionItems = [
+      {
+        id: 'action-check-environment',
+        title: 'Check Environment',
+        subtitle: 'Validate git, tmux, Codex, Claude, and GitHub CLI',
+        keywords: 'environment setup dependencies git tmux codex claude gh check',
+        icon: 'action' as const,
+        run: onCheckEnvironment,
+      },
+    ];
     const actionItems = selectedWorkspace ? [
       {
         id: 'action-run-setup',
@@ -212,8 +223,8 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
         run: async () => { paletteCache.delete(selectedWorkspace.id); await cleanupWorkspace({ workspaceId: selectedWorkspace.id, killPorts: false, removeManagedWorktree: false }); onOpenWorkspace(); },
       },
     ] : [];
-    return [...agentItems, ...actionItems, ...workspaceItems, ...fileItems, ...terminalItems, ...commentItems];
-  }, [agentProfiles, changedFiles, comments, onOpenReviewComment, onOpenReviewFile, onOpenWorkspace, onSelectWorkspace, paletteChangedFiles, readiness, runCommands, selectedWorkspace, sessions, workspaces]);
+    return [...globalActionItems, ...agentItems, ...actionItems, ...workspaceItems, ...fileItems, ...terminalItems, ...commentItems];
+  }, [agentProfiles, changedFiles, comments, onCheckEnvironment, onOpenReviewComment, onOpenReviewFile, onOpenWorkspace, onSelectWorkspace, paletteChangedFiles, readiness, runCommands, selectedWorkspace, sessions, workspaces]);
 
   useEffect(() => {
     if (!open || !openPerfMarkRef.current) return;

@@ -17,7 +17,7 @@ use crate::models::{
 use crate::repositories::{terminal_repository, workspace_repository};
 use crate::repositories::settings_repository;
 use crate::services::cost_parser;
-use crate::services::{agent_context_service, agent_profile_service};
+use crate::services::{agent_context_service, agent_profile_service, environment_service};
 use crate::state::{ActiveTerminal, AppState};
 use tauri::Emitter;
 
@@ -358,18 +358,7 @@ pub fn interrupt_workspace_terminal_session_by_id(
 ) -> Result<TerminalSession, String> {
     let session = terminal_repository::get_session(&state.db, session_id)?
         .ok_or_else(|| format!("Terminal session {session_id} was not found"))?;
-    let active = active_for_session(state, session_id)?
-        .ok_or_else(|| format!("Terminal session {session_id} is not attached"))?;
-    let mut writer = active
-        .writer
-        .lock()
-        .map_err(|_| "Terminal writer lock poisoned".to_string())?;
-    writer
-        .write_all(b"\x03")
-        .map_err(|err| format!("Failed to interrupt terminal: {err}"))?;
-    writer
-        .flush()
-        .map_err(|err| format!("Failed to flush interrupt: {err}"))?;
+    send_interrupt_to_session(state, &session)?;
     append_log_line(
         state,
         &session.workspace_id,
@@ -440,16 +429,9 @@ pub fn interrupt_workspace_terminal_session(
 ) -> Result<TerminalSessionState, String> {
     match active_for_workspace(state, workspace_id, "agent")? {
         Some(active) => {
-            let mut writer = active
-                .writer
-                .lock()
-                .map_err(|_| "Terminal writer lock poisoned".to_string())?;
-            writer
-                .write_all(b"\x03")
-                .map_err(|err| format!("Failed to interrupt terminal: {err}"))?;
-            writer
-                .flush()
-                .map_err(|err| format!("Failed to flush interrupt: {err}"))?;
+            let session = terminal_repository::get_session(&state.db, &active.session_id)?
+                .ok_or_else(|| "Active terminal session record was not found".to_string())?;
+            send_interrupt_to_session(state, &session)?;
             let seq = Arc::new(AtomicU64::new(
                 terminal_repository::next_seq(&state.db, &active.session_id).unwrap_or(0),
             ));
@@ -464,7 +446,22 @@ pub fn interrupt_workspace_terminal_session(
             );
         }
         None => {
-            reconcile_orphan_running_session(state, workspace_id, "agent", "interrupted")?;
+            if let Some(session) =
+                terminal_repository::latest_for_workspace_role(&state.db, workspace_id, "agent")?
+            {
+                if session.status == "running" {
+                    send_interrupt_to_session(state, &session)?;
+                    append_log_line(
+                        state,
+                        workspace_id,
+                        &session.id,
+                        "system",
+                        "\r\n[forge] interrupt sent to persistent tmux session (Ctrl-C)\r\n",
+                    );
+                }
+            } else {
+                reconcile_orphan_running_session(state, workspace_id, "agent", "interrupted")?;
+            }
         }
     }
     get_workspace_terminal_session_state(state, workspace_id)
@@ -752,7 +749,7 @@ pub fn list_workspace_agent_prompts(
     workspace_id: &str,
     limit: Option<u32>,
 ) -> Result<Vec<AgentPromptEntry>, String> {
-    terminal_repository::list_prompt_entries_for_workspace(&state.db, workspace_id, limit)
+    terminal_repository::list_prompts_for_workspace(&state.db, workspace_id, limit)
 }
 
 pub fn write_workspace_utility_terminal_input(
@@ -953,8 +950,26 @@ fn detach_active_terminal(state: &AppState, session_id: &str) {
     }
 }
 
+fn send_interrupt_to_session(state: &AppState, session: &TerminalSession) -> Result<(), String> {
+    if let Some(active) = active_for_session(state, &session.id)? {
+        let mut writer = active
+            .writer
+            .lock()
+            .map_err(|_| "Terminal writer lock poisoned".to_string())?;
+        writer
+            .write_all(b"\x03")
+            .map_err(|err| format!("Failed to interrupt terminal: {err}"))?;
+        writer
+            .flush()
+            .map_err(|err| format!("Failed to flush interrupt: {err}"))?;
+        return Ok(());
+    }
+
+    Err(format!("Terminal session {} is not attached", session.id))
+}
+
 /// If there is no in-memory PTY but the latest DB row for this role is still `running` (e.g. app
-/// restarted or registry desynced), mark it finished so Stop/Interrupt actually update the UI.
+/// restarted or registry desynced), mark it finished — the PTY process is gone.
 fn reconcile_orphan_running_session(
     state: &AppState,
     workspace_id: &str,
@@ -972,11 +987,11 @@ fn reconcile_orphan_running_session(
     let ended_at = timestamp();
     log::info!(
         target: "forge_lib",
-        "reconcile_orphan_running_session: session_id={} workspace_id={} role={} -> {}",
+        "reconcile_orphan_running_session: session_id={} workspace_id={} role={} -> {} (no active PTY)",
         latest.id,
         workspace_id,
         session_role,
-        status
+        status,
     );
     terminal_repository::mark_finished(&state.db, &latest.id, status, &ended_at, true)?;
     let seq = Arc::new(AtomicU64::new(
@@ -989,7 +1004,9 @@ fn reconcile_orphan_running_session(
         &latest.id,
         &seq,
         "system",
-        &format!("Terminal session {status} (reconciled; no active PTY)\r\n"),
+        &format!(
+            "Terminal session {status} (reconciled; no active PTY)\r\n"
+        ),
     );
     let _ = terminal_repository::mark_prompt_status_by_session(&state.db, &latest.id, status);
     Ok(())
@@ -1390,10 +1407,22 @@ impl TerminalCommandSpec {
             });
         }
         Ok(Self {
-            command: profile.command.clone(),
+            command: resolve_terminal_command(&profile.command),
             args: args.unwrap_or_else(|| profile.args.clone()),
         })
     }
+}
+
+fn resolve_terminal_command(command: &str) -> String {
+    let trimmed = command.trim();
+    if trimmed.is_empty() || trimmed.contains('/') {
+        return command.to_string();
+    }
+    environment_service::find_binary(trimmed)
+        .ok()
+        .flatten()
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|| command.to_string())
 }
 
 impl TerminalProfile {

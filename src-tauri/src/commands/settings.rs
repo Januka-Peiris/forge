@@ -51,3 +51,11 @@ pub fn save_ai_model_settings(
         orchestrator_model: input.orchestrator_model,
     })
 }
+
+#[tauri::command]
+pub fn save_has_completed_env_check(
+    state: State<'_, AppState>,
+    completed: bool,
+) -> Result<AppSettings, String> {
+    settings_service::save_has_completed_env_check(&state, completed)
+}
