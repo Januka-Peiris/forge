@@ -5,13 +5,16 @@ mod repositories;
 mod services;
 mod state;
 
+use std::sync::atomic::Ordering;
+
 use commands::{
-    activity, agent_context, agent_profiles, agent_runs, deep_links, environment, git_review,
-    merge_readiness, pr_draft, prompt_templates, repositories as repository_commands,
-    review_cockpit, review_summary, reviews, settings, terminal, workspace_attention,
-    workspace_cleanup, workspace_health, workspace_ports, workspace_readiness, workspace_scripts,
-    workspaces,
+    activity, agent_context, agent_memory, agent_profiles, agent_runs, deep_links, environment,
+    git_review, merge_readiness, orchestrator as orchestrator_commands, pr_draft, prompt_templates,
+    repositories as repository_commands, review_cockpit, review_summary, reviews, settings,
+    terminal, workspace_attention, workspace_cleanup, workspace_health, workspace_ports,
+    workspace_readiness, workspace_scripts, workspaces,
 };
+use services::{orchestrator_service, rebase_service};
 use state::AppState;
 use tauri::Manager;
 
@@ -30,6 +33,23 @@ pub fn run() {
                 AppState::initialize(app.handle()).map_err(Box::<dyn std::error::Error>::from)?;
             log::info!(target: "forge_lib", "SQLite database path: {}", state.db.path().display());
             println!("Forge SQLite database: {}", state.db.path().display());
+
+            // Restore persisted orchestrator settings.
+            if let Ok(Some(val)) = crate::repositories::orchestrator_repository::load_setting(
+                &state.db, "orchestrator_enabled",
+            ) {
+                state.orchestrator_enabled.store(val == "true", Ordering::Relaxed);
+            }
+            if let Ok(Some(model)) = crate::repositories::orchestrator_repository::load_setting(
+                &state.db, "orchestrator_model",
+            ) {
+                if let Ok(mut guard) = state.orchestrator_model.lock() {
+                    *guard = model;
+                }
+            }
+
+            rebase_service::start_auto_rebase_loop(state.clone());
+            orchestrator_service::start_orchestrator_loop(state.clone());
             app.manage(state);
             Ok(())
         })
@@ -54,10 +74,13 @@ pub fn run() {
             review_cockpit::mark_workspace_pr_comment_resolved_local,
             review_cockpit::queue_review_agent_prompt,
             activity::list_activity,
+            activity::list_workspace_activity,
             settings::get_settings,
             settings::save_repo_roots,
             settings::save_has_completed_env_check,
             settings::resolve_git_repository_path,
+            settings::get_ai_model_settings,
+            settings::save_ai_model_settings,
             agent_context::get_workspace_agent_context,
             agent_context::get_workspace_context_preview,
             agent_context::refresh_workspace_repo_context,
@@ -78,10 +101,12 @@ pub fn run() {
             merge_readiness::refresh_workspace_merge_readiness,
             pr_draft::get_workspace_pr_draft,
             pr_draft::refresh_workspace_pr_draft,
+            pr_draft::create_workspace_pr,
             prompt_templates::list_workspace_prompt_templates,
             terminal::create_workspace_terminal,
             terminal::attach_workspace_terminal_session,
             terminal::write_workspace_terminal_session_input,
+            terminal::approve_workspace_terminal_command,
             terminal::resize_workspace_terminal_session,
             terminal::interrupt_workspace_terminal_session_by_id,
             terminal::stop_workspace_terminal_session_by_id,
@@ -100,6 +125,9 @@ pub fn run() {
             terminal::list_workspace_terminal_sessions,
             terminal::reconnect_workspace_terminal_session,
             terminal::queue_workspace_agent_prompt,
+            terminal::batch_dispatch_workspace_agent_prompt,
+            terminal::run_next_workspace_agent_prompt,
+            terminal::list_workspace_agent_prompts,
             terminal::write_workspace_utility_terminal_input,
             terminal::resize_workspace_utility_terminal,
             terminal::stop_workspace_utility_terminal_session,
@@ -109,6 +137,7 @@ pub fn run() {
             workspace_attention::list_workspace_attention,
             workspace_attention::mark_workspace_attention_read,
             workspace_health::get_workspace_health,
+            workspace_health::get_workspace_conflicts,
             workspace_readiness::get_workspace_readiness,
             workspace_cleanup::cleanup_workspace,
             workspace_ports::list_workspace_ports,
@@ -119,6 +148,12 @@ pub fn run() {
             workspace_scripts::start_workspace_run_command,
             workspace_scripts::restart_workspace_run_command,
             workspace_scripts::stop_workspace_run_commands,
+            agent_memory::list_agent_memories,
+            agent_memory::set_agent_memory,
+            agent_memory::delete_agent_memory,
+            orchestrator_commands::get_orchestrator_status,
+            orchestrator_commands::set_orchestrator_enabled,
+            orchestrator_commands::set_orchestrator_model,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Forge Tauri application");

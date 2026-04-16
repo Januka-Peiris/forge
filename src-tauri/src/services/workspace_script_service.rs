@@ -35,7 +35,6 @@ pub fn run_workspace_setup(
     }
 
     let mut sessions = Vec::new();
-    let mut previous_tmux_session: Option<String> = None;
     for (index, command) in config.setup.iter().enumerate() {
         insert_script_activity(
             state,
@@ -44,21 +43,14 @@ pub fn run_workspace_setup(
             "info",
             &format!("Setup {} · {command}", index + 1),
         );
-        let launch_command = match previous_tmux_session.as_deref() {
-            Some(previous) => format!(
-                "while tmux has-session -t {previous} 2>/dev/null; do sleep 1; done; {command}"
-            ),
-            None => command.to_string(),
-        };
         match start_command_terminal(
             state,
             workspace_id,
             "run",
             &setup_title(index, command),
-            &launch_command,
+            command,
         ) {
             Ok(session) => {
-                previous_tmux_session = session.tmux_session_name.clone();
                 sessions.push(session);
             }
             Err(err) => {

@@ -1,6 +1,6 @@
 use tauri::State;
 
-use crate::models::WorkspacePrDraft;
+use crate::models::{WorkspacePrDraft, WorkspacePrResult};
 use crate::services::pr_draft_service;
 use crate::state::AppState;
 
@@ -18,4 +18,12 @@ pub fn refresh_workspace_pr_draft(
     workspace_id: String,
 ) -> Result<WorkspacePrDraft, String> {
     pr_draft_service::refresh_workspace_pr_draft(&state, &workspace_id)
+}
+
+#[tauri::command]
+pub fn create_workspace_pr(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> Result<WorkspacePrResult, String> {
+    pr_draft_service::create_workspace_pr(&state, &workspace_id)
 }

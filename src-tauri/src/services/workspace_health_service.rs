@@ -1,9 +1,14 @@
+use std::sync::atomic::Ordering;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use rusqlite::{params, OptionalExtension};
 
 use crate::models::{TerminalSession, WorkspaceHealth, WorkspaceTerminalHealth};
 use crate::repositories::{terminal_repository, workspace_repository};
-use crate::services::tmux_service;
 use crate::state::AppState;
+
+/// Agent sessions are flagged as stuck if they produce no PTY output for this long.
+const STUCK_THRESHOLD_SECS: u64 = 120;
 
 pub fn get_workspace_health(
     state: &AppState,
@@ -17,40 +22,41 @@ pub fn get_workspace_health(
         .filter(|session| session.closed_at.is_none())
         .collect::<Vec<_>>();
 
+    let now_secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
     let mut warnings = Vec::new();
     let mut terminals = Vec::with_capacity(sessions.len());
     for session in sessions {
-        let tmux_alive = terminal_tmux_alive(&session);
-        if session.backend == "tmux" && session.status == "running" && !tmux_alive {
-            let now = crate::services::terminal_service::timestamp();
-            terminal_repository::mark_finished(&state.db, &session.id, "interrupted", &now, true)?;
-        }
-        let refreshed =
-            terminal_repository::get_session(&state.db, &session.id)?.unwrap_or(session);
-        let attached = is_attached(state, &refreshed.id);
-        let last_output_at = latest_output_at(state, &refreshed.id)?;
-        let stale = refreshed.stale
-            || (refreshed.backend == "tmux" && refreshed.status == "running" && !tmux_alive);
-        let recommended_action = recommend_terminal_action(&refreshed, tmux_alive, attached, stale);
+        let attached = is_attached(state, &session.id);
+        let last_output_at = latest_output_at(state, &session.id)?;
+        let stale = session.stale;
+        let recommended_action = recommend_terminal_action(&session, attached, stale);
+        let stuck_since = detect_stuck(state, &session, now_secs);
         if stale {
             warnings.push(format!(
                 "{} is stale — {}",
-                terminal_label(&refreshed),
+                terminal_label(&session),
                 recommended_action
             ));
         }
+        if stuck_since.is_some() {
+            warnings.push(format!("{} appears stuck — no output for >2 minutes", terminal_label(&session)));
+        }
         terminals.push(WorkspaceTerminalHealth {
-            session_id: refreshed.id,
-            title: refreshed.title,
-            kind: refreshed.terminal_kind,
-            profile: refreshed.profile,
-            status: refreshed.status,
-            backend: refreshed.backend,
-            tmux_alive,
+            session_id: session.id,
+            title: session.title,
+            kind: session.terminal_kind,
+            profile: session.profile,
+            status: session.status,
+            backend: session.backend,
             attached,
             stale,
             last_output_at,
             recommended_action,
+            stuck_since,
         });
     }
 
@@ -77,15 +83,28 @@ fn is_attached(state: &AppState, session_id: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn terminal_tmux_alive(session: &TerminalSession) -> bool {
-    if session.backend != "tmux" {
-        return false;
+/// Returns the unix timestamp (as a string) when the session became stuck, or None.
+/// Only agent sessions that are running and have had at least some output are checked.
+fn detect_stuck(state: &AppState, session: &TerminalSession, now_secs: u64) -> Option<String> {
+    if session.status != "running" || session.session_role != "agent" {
+        return None;
     }
-    session
-        .tmux_session_name
-        .as_deref()
-        .map(tmux_service::has_session)
-        .unwrap_or(false)
+    let last_secs = state
+        .terminals
+        .lock()
+        .ok()
+        .and_then(|registry| registry.get(&session.id).map(|a| a.last_output_at_secs.load(Ordering::Relaxed)))?;
+    // 0 means no output yet — session just started, not stuck.
+    if last_secs == 0 {
+        return None;
+    }
+    if now_secs.saturating_sub(last_secs) >= STUCK_THRESHOLD_SECS {
+        // Report when silence started.
+        let stuck_since = last_secs + STUCK_THRESHOLD_SECS;
+        Some(stuck_since.to_string())
+    } else {
+        None
+    }
 }
 
 fn latest_output_at(state: &AppState, session_id: &str) -> Result<Option<String>, String> {
@@ -116,7 +135,6 @@ fn terminal_label(session: &TerminalSession) -> String {
 
 pub fn recommend_terminal_action(
     session: &TerminalSession,
-    tmux_alive: bool,
     attached: bool,
     stale: bool,
 ) -> String {
@@ -127,11 +145,8 @@ pub fn recommend_terminal_action(
         return "close it or start a fresh terminal".to_string();
     }
     match session.status.as_str() {
-        "running" if session.backend == "tmux" && tmux_alive && !attached => "reattach".to_string(),
-        "running" if session.backend == "tmux" && tmux_alive && attached => "healthy".to_string(),
-        "running" if session.backend == "tmux" => "recover or start new".to_string(),
         "running" if attached => "healthy".to_string(),
-        "running" => "reattach".to_string(),
+        "running" => "start new".to_string(),
         "failed" => "inspect output or restart".to_string(),
         "interrupted" => "close or restart".to_string(),
         "stopped" | "succeeded" => "close when done".to_string(),
@@ -180,8 +195,7 @@ mod tests {
             pid: None,
             stale,
             closed_at: None,
-            backend: "tmux".to_string(),
-            tmux_session_name: Some("forge-test".to_string()),
+            backend: "pty".to_string(),
             title: "Codex".to_string(),
             terminal_kind: "agent".to_string(),
             display_order: 0,
@@ -192,17 +206,17 @@ mod tests {
     }
 
     #[test]
-    fn recommends_reattach_for_live_unattached_tmux() {
+    fn recommends_start_new_for_unattached_running() {
         assert_eq!(
-            recommend_terminal_action(&session("running", false), true, false, false),
-            "reattach"
+            recommend_terminal_action(&session("running", false), false, false),
+            "start new"
         );
     }
 
     #[test]
     fn recommends_fresh_terminal_for_stale_session() {
         assert_eq!(
-            recommend_terminal_action(&session("running", true), false, false, true),
+            recommend_terminal_action(&session("running", true), false, true),
             "close it or start a fresh terminal"
         );
     }
@@ -215,12 +229,12 @@ mod tests {
             kind: "agent".to_string(),
             profile: "codex".to_string(),
             status: "running".to_string(),
-            backend: "tmux".to_string(),
-            tmux_alive: true,
+            backend: "pty".to_string(),
             attached: true,
             stale: false,
             last_output_at: None,
             recommended_action: "healthy".to_string(),
+            stuck_since: None,
         };
         assert_eq!(
             derive_workspace_health_status(&[healthy_terminal], &[], &[]),

@@ -11,3 +11,12 @@ pub struct WorkspacePrDraft {
     pub testing_notes: Vec<String>,
     pub generated_at: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspacePrResult {
+    pub workspace_id: String,
+    pub pr_url: String,
+    pub pr_number: i64,
+    pub title: String,
+}

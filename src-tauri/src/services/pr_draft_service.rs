@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::models::WorkspacePrDraft;
-use crate::repositories::{agent_run_repository, pr_draft_repository, workspace_repository};
+use crate::models::{WorkspacePrDraft, WorkspacePrResult};
+use crate::repositories::{activity_repository, agent_run_repository, pr_draft_repository, workspace_repository};
 use crate::services::{git_review_service, review_summary_service};
 use crate::state::AppState;
 
@@ -125,6 +125,85 @@ Workspace task: {}",
     };
     pr_draft_repository::upsert(&state.db, &draft)?;
     Ok(draft)
+}
+
+pub fn create_workspace_pr(
+    state: &AppState,
+    workspace_id: &str,
+) -> Result<WorkspacePrResult, String> {
+    let draft = refresh_workspace_pr_draft(state, workspace_id)?;
+    let workspace = workspace_repository::get_detail(&state.db, workspace_id)?
+        .ok_or_else(|| format!("Workspace {workspace_id} not found"))?;
+
+    let key_changes_md = draft
+        .key_changes
+        .iter()
+        .map(|c| format!("- {c}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let risks_md = draft
+        .risks
+        .iter()
+        .map(|r| format!("- {r}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let testing_md = draft
+        .testing_notes
+        .iter()
+        .map(|n| format!("- {n}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let body = format!(
+        "## Summary\n{}\n\n## Key Changes\n{}\n\n## Risks\n{}\n\n## Testing\n{}\n\n🤖 Generated with Forge",
+        draft.summary, key_changes_md, risks_md, testing_md
+    );
+
+    let work_dir = if !workspace.worktree_path.is_empty() {
+        workspace.worktree_path.clone()
+    } else {
+        workspace
+            .summary
+            .workspace_root_path
+            .clone()
+            .ok_or_else(|| "Workspace has no worktree path".to_string())?
+    };
+
+    let output = std::process::Command::new("gh")
+        .args(["pr", "create", "--title", &draft.title, "--body", &body])
+        .current_dir(&work_dir)
+        .output()
+        .map_err(|e| format!("Failed to run gh: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("gh pr create failed: {stderr}"));
+    }
+
+    let pr_url = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let pr_number = pr_url
+        .rsplit('/')
+        .next()
+        .and_then(|n| n.parse::<i64>().ok())
+        .unwrap_or(0);
+
+    workspace_repository::update_pr_status(&state.db, workspace_id, "open", Some(pr_number))?;
+    let _ = activity_repository::record(
+        &state.db,
+        workspace_id,
+        &workspace.summary.repo,
+        Some(&workspace.summary.branch),
+        "PR created",
+        "success",
+        Some(&format!("#{pr_number} — {}", draft.title)),
+    );
+
+    Ok(WorkspacePrResult {
+        workspace_id: workspace_id.to_string(),
+        pr_url,
+        pr_number,
+        title: draft.title,
+    })
 }
 
 fn timestamp() -> String {

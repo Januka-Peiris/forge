@@ -18,8 +18,11 @@ pub mod review_summary_service;
 pub mod settings_service;
 pub mod worktree_discovery_service;
 
+pub mod conflict_detection_service;
+pub mod cost_parser;
+pub mod orchestrator_service;
+pub mod rebase_service;
 pub mod terminal_service;
-pub mod tmux_service;
 pub mod workspace_attention_service;
 pub mod workspace_cleanup_service;
 pub mod workspace_health_service;

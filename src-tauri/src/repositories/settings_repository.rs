@@ -5,6 +5,28 @@ use crate::db::Database;
 const REPO_ROOTS_KEY: &str = "repo_roots";
 const ENV_CHECK_KEY: &str = "has_completed_env_check";
 
+pub fn get_value(db: &Database, key: &str) -> Result<Option<String>, String> {
+    use rusqlite::OptionalExtension;
+    db.with_connection(|connection| {
+        connection
+            .query_row("SELECT value FROM settings WHERE key = ?1", params![key], |row| {
+                row.get(0)
+            })
+            .optional()
+    })
+}
+
+pub fn set_value(db: &Database, key: &str, value: &str) -> Result<(), String> {
+    db.with_connection(|connection| {
+        connection.execute(
+            "INSERT INTO settings (key, value, updated_at) VALUES (?1, ?2, CURRENT_TIMESTAMP)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP",
+            params![key, value],
+        )?;
+        Ok(())
+    })
+}
+
 pub fn get_repo_roots(db: &Database) -> Result<Vec<String>, String> {
     db.with_connection(|connection| {
         let value: Option<String> = connection

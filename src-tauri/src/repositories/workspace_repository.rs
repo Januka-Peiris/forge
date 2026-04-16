@@ -52,6 +52,55 @@ pub fn delete(db: &Database, id: &str) -> Result<(), String> {
     })
 }
 
+/// Update token count and estimated cost on the workspace's agent session fields.
+/// Called from the terminal reader thread whenever cost output is detected.
+pub fn update_agent_session_cost(
+    db: &Database,
+    workspace_id: &str,
+    token_count: u32,
+    estimated_cost: &str,
+) -> Result<(), String> {
+    db.with_connection_mut(|connection| {
+        connection.execute(
+            r#"UPDATE workspaces
+               SET agent_session_token_count = ?1,
+                   agent_session_estimated_cost = ?2
+               WHERE id = ?3"#,
+            params![token_count, estimated_cost, workspace_id],
+        )?;
+        Ok(())
+    })
+}
+
+pub fn update_last_rebase(
+    db: &Database,
+    workspace_id: &str,
+    timestamp: &str,
+) -> Result<(), String> {
+    db.with_connection_mut(|connection| {
+        connection.execute(
+            "UPDATE workspaces SET last_rebase = ?1 WHERE id = ?2",
+            params![timestamp, workspace_id],
+        )?;
+        Ok(())
+    })
+}
+
+pub fn update_pr_status(
+    db: &Database,
+    workspace_id: &str,
+    pr_status: &str,
+    pr_number: Option<i64>,
+) -> Result<(), String> {
+    db.with_connection_mut(|connection| {
+        connection.execute(
+            r#"UPDATE workspaces SET pr_status = ?1, pr_number = ?2 WHERE id = ?3"#,
+            params![pr_status, pr_number, workspace_id],
+        )?;
+        Ok(())
+    })
+}
+
 pub fn next_workspace_id(_db: &Database) -> Result<String, String> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

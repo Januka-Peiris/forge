@@ -15,8 +15,7 @@ export interface TerminalSession {
   pid?: number;
   stale: boolean;
   closedAt?: string;
-  backend: 'pty' | 'tmux' | string;
-  tmuxSessionName?: string;
+  backend: string;
   title: string;
   terminalKind: 'agent' | 'shell' | 'run' | 'utility' | string;
   displayOrder: number;

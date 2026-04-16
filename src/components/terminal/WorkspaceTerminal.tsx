@@ -15,6 +15,7 @@ import {
   stopWorkspaceTerminalSessionById,
   writeWorkspaceTerminalSessionInput,
 } from '../../lib/tauri-api/terminal';
+import { CommandApprovalModal, type PendingCommand } from '../modals/CommandApprovalModal';
 import {
   getWorkspaceForgeConfig,
   restartWorkspaceRunCommand,
@@ -87,6 +88,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   const [selectedReasoning, setSelectedReasoning] = useState('Default');
   const [sendBehavior, setSendBehavior] = useState<'send_now' | 'interrupt_send'>('send_now');
   const [error, setError] = useState<string | null>(null);
+  const [pendingCommand, setPendingCommand] = useState<PendingCommand | null>(null);
   const [showOverflow, setShowOverflow] = useState(false);
   const [activeHeaderTab, setActiveHeaderTab] = useState<null | 'commands' | 'ports' | 'readiness' | 'health'>(null);
   const [showComposerSettings, setShowComposerSettings] = useState(false);
@@ -382,7 +384,14 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   useEffect(() => {
     if (!workspaceId) return;
     let unlisten: UnlistenFn | undefined;
+    let unlistenApproval: UnlistenFn | undefined;
     let disposed = false;
+
+    void listen<PendingCommand>('forge://command-approval-required', (event) => {
+      if (disposed || event.payload.workspaceId !== workspaceId) return;
+      setPendingCommand(event.payload);
+    }).then((fn) => { unlistenApproval = fn; }).catch(() => undefined);
+
     void listen<TerminalOutputEvent>('forge://terminal-output', (event) => {
       if (disposed || event.payload.workspaceId !== workspaceId) return;
       const chunk = event.payload.chunk;
@@ -394,6 +403,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     return () => {
       disposed = true;
       if (unlisten) unlisten();
+      if (unlistenApproval) unlistenApproval();
     };
   }, [enqueueOutput, workspaceId]);
 
@@ -702,7 +712,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       <div className="flex flex-1 min-h-0 items-center justify-center p-8">
         <div className="text-center">
           <TerminalIcon className="mx-auto mb-3 h-8 w-8 text-forge-muted" />
-          <p className="text-[13px] text-forge-muted">Select a workspace to start a persistent terminal</p>
+          <p className="text-[13px] text-forge-muted">Select a workspace to start a terminal</p>
         </div>
       </div>
     );
@@ -710,6 +720,12 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-forge-bg">
+      {pendingCommand && (
+        <CommandApprovalModal
+          pending={pendingCommand}
+          onDismiss={() => setPendingCommand(null)}
+        />
+      )}
       <div className="sticky top-0 z-10 shrink-0 border-b border-forge-border bg-forge-surface/95 px-4 py-2.5 backdrop-blur">
         {/* Title + primary actions row */}
         <div className="flex items-center justify-between gap-3">
@@ -919,9 +935,9 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
           <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-forge-border bg-forge-bg p-8 text-center">
             <div className="max-w-md">
               <TerminalIcon className="mx-auto mb-3 h-9 w-9 text-forge-muted" />
-              <h2 className="text-[15px] font-bold text-forge-text">Start a persistent workspace terminal</h2>
+              <h2 className="text-[15px] font-bold text-forge-text">Start a workspace terminal</h2>
               <p className="mt-1 text-[12px] leading-relaxed text-forge-muted">
-                Forge uses tmux-backed terminals so agents, shells, and dev servers survive app restarts.
+                Launch agents, shells, and dev servers for this workspace.
               </p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 <button disabled={busy} onClick={() => void createTerminal('agent', 'claude_code', 'Claude')} className="rounded-lg bg-forge-orange px-3 py-2 text-[12px] font-semibold text-white disabled:opacity-50">Start Claude</button>
@@ -966,6 +982,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
               session={focusedSession}
               chunks={outputs[focusedSession.id] ?? []}
               focused
+              stuckSince={workspaceHealth?.terminals.find((t) => t.sessionId === focusedSession.id)?.stuckSince ?? null}
               onFocus={() => {
                 focusedIdRef.current = focusedSession.id;
                 setFocusedId(focusedSession.id);

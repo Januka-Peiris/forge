@@ -11,11 +11,13 @@ pub struct WorkspaceTerminalHealth {
     pub profile: String,
     pub status: String,
     pub backend: String,
-    pub tmux_alive: bool,
     pub attached: bool,
     pub stale: bool,
     pub last_output_at: Option<String>,
     pub recommended_action: String,
+    /// Unix timestamp (seconds) when the agent was first detected as having no output.
+    /// Only set for running agent sessions silent for > STUCK_THRESHOLD_SECS.
+    pub stuck_since: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

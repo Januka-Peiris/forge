@@ -331,6 +331,31 @@ pub fn run(connection: &Connection) -> Result<(), String> {
 
             CREATE INDEX IF NOT EXISTS idx_workspace_pr_comments_workspace_path
                 ON workspace_pr_comments(workspace_id, path, line);
+
+            CREATE TABLE IF NOT EXISTS agent_memory (
+                id TEXT PRIMARY KEY,
+                workspace_id TEXT,
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(workspace_id, key)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_agent_memory_workspace
+                ON agent_memory(workspace_id);
+
+            CREATE TABLE IF NOT EXISTS orchestrator_log (
+                id TEXT PRIMARY KEY,
+                run_at TEXT NOT NULL,
+                model TEXT NOT NULL,
+                workspace_ids TEXT NOT NULL DEFAULT '[]',
+                actions TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_orchestrator_log_run_at
+                ON orchestrator_log(run_at DESC);
             "#,
         )
         .map_err(|err| format!("Failed to run SQLite migrations: {err}"))?;

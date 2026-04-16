@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ElementType } from 'react';
+import { useEffect, useMemo, useRef, useState, type ElementType } from 'react';
 import {
   ClipboardCheck,
   Filter,
@@ -9,10 +9,18 @@ import {
   Settings,
   ArrowUpDown,
   Trash2,
+  CheckSquare,
+  Square as SquareIcon,
+  Send,
+  X as XIcon,
+  Brain,
 } from 'lucide-react';
 import type { DiscoveredRepository, Workspace, WorkspaceAttention } from '../../types';
+import type { OrchestratorStatus } from '../../types/orchestrator';
+import { batchDispatchWorkspaceAgentPrompt } from '../../lib/tauri-api/terminal';
+import { getOrchestratorStatus, setOrchestratorEnabled } from '../../lib/tauri-api/orchestrator';
 
-export type NavView = 'workspaces' | 'reviews' | 'settings';
+export type NavView = 'workspaces' | 'reviews' | 'settings' | 'memory';
 
 interface SidebarProps {
   activeView: NavView;
@@ -20,6 +28,7 @@ interface SidebarProps {
   repositories: DiscoveredRepository[];
   workspaces: Workspace[];
   workspaceAttention: Record<string, WorkspaceAttention>;
+  conflictingWorkspaceIds: Set<string>;
   archivedWorkspaceIds: string[];
   selectedWorkspaceId: string | null;
   onSelectWorkspace: (workspaceId: string) => void;
@@ -31,6 +40,7 @@ interface SidebarProps {
 const navItems: { id: NavView; label: string; icon: ElementType }[] = [
   { id: 'workspaces', label: 'Workspaces', icon: LayoutGrid },
   { id: 'reviews', label: 'Reviews', icon: ClipboardCheck },
+  { id: 'memory', label: 'Memory', icon: Brain },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
@@ -40,6 +50,7 @@ export function Sidebar({
   repositories,
   workspaces,
   workspaceAttention,
+  conflictingWorkspaceIds,
   archivedWorkspaceIds,
   selectedWorkspaceId,
   onSelectWorkspace,
@@ -55,6 +66,54 @@ export function Sidebar({
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [hoveredRepoId, setHoveredRepoId] = useState<string | null>(null);
   const repoHoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Batch multi-select state */
+  const [batchSelected, setBatchSelected] = useState<Set<string>>(new Set());
+  const [batchPrompt, setBatchPrompt] = useState('');
+  const [batchSending, setBatchSending] = useState(false);
+  const batchMode = batchSelected.size > 0;
+  const [orchestrator, setOrchestrator] = useState<OrchestratorStatus | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getOrchestratorStatus()
+      .then((s) => { if (!cancelled) setOrchestrator(s); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleOrchestratorToggle = async (enabled: boolean) => {
+    setOrchestrator((prev) => prev ? { ...prev, enabled } : prev);
+    await setOrchestratorEnabled(enabled);
+  };
+
+  const toggleBatchSelect = (id: string) => {
+    setBatchSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const clearBatch = () => {
+    setBatchSelected(new Set());
+    setBatchPrompt('');
+  };
+
+  const sendBatch = async () => {
+    if (!batchPrompt.trim() || batchSelected.size === 0) return;
+    setBatchSending(true);
+    try {
+      await batchDispatchWorkspaceAgentPrompt({
+        workspaceIds: Array.from(batchSelected),
+        prompt: batchPrompt.trim(),
+      });
+      clearBatch();
+    } catch {
+      // errors are non-fatal; individual workspace failures are logged server-side
+    } finally {
+      setBatchSending(false);
+    }
+  };
 
   const archivedSet = useMemo(() => new Set(archivedWorkspaceIds), [archivedWorkspaceIds]);
 
@@ -114,6 +173,17 @@ export function Sidebar({
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [repositories, sort, workspacesByRepoId]);
 
+  const totalSpend = useMemo(() => {
+    let cents = 0;
+    for (const ws of workspaces) {
+      const cost = ws.agentSession?.estimatedCost;
+      if (!cost) continue;
+      const match = cost.match(/\$([0-9]+\.[0-9]+)/);
+      if (match) cents += Math.round(parseFloat(match[1]) * 100);
+    }
+    return cents > 0 ? `$${(cents / 100).toFixed(2)}` : null;
+  }, [workspaces]);
+
   return (
     <aside className="w-full shrink-0 flex flex-col h-full bg-forge-surface border-r border-forge-border">
       <div className="border-b border-forge-border px-4 py-5 pr-12 sm:px-5 sm:pr-14">
@@ -127,6 +197,11 @@ export function Sidebar({
             draggable={false}
             className="block h-[52px] w-auto max-w-full object-contain object-left"
           />
+          {totalSpend && (
+            <span className="text-[10px] font-mono text-forge-muted/70 shrink-0" title="Total estimated agent spend across all workspaces">
+              {totalSpend} total
+            </span>
+          )}
         </div>
       </div>
 
@@ -294,6 +369,15 @@ export function Sidebar({
                           }`}
                         >
                           <div className="flex items-start gap-2">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toggleBatchSelect(workspace.id); }}
+                              className={`mt-0.5 shrink-0 transition-opacity ${batchMode || isHovered ? 'opacity-100' : 'opacity-0'}`}
+                              title="Select for batch send"
+                            >
+                              {batchSelected.has(workspace.id)
+                                ? <CheckSquare className="w-3.5 h-3.5 text-forge-orange" />
+                                : <SquareIcon className="w-3.5 h-3.5 text-forge-muted" />}
+                            </button>
                             <div className="relative mt-0.5">
                               <GitBranch className={`w-3.5 h-3.5 ${isSelected ? 'text-forge-orange' : 'text-forge-muted'}`} />
                               <span className={`absolute -right-1 -top-1 h-2 w-2 rounded-full ring-2 ring-forge-surface ${attentionDot}`} />
@@ -320,6 +404,16 @@ export function Sidebar({
                                   {attention?.status ?? workspace.status}
                                 </span>
                                 {isArchived && <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded-full bg-white/10 text-forge-text/85">Archived</span>}
+                                {conflictingWorkspaceIds.has(workspace.id) && (
+                                  <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/25" title="This workspace shares modified files with another active workspace">
+                                    conflict
+                                  </span>
+                                )}
+                                {workspace.agentSession?.estimatedCost && workspace.agentSession.estimatedCost !== '$0.00' && (
+                                  <span className="shrink-0 text-[9px] font-mono text-forge-muted/70" title="Estimated agent cost">
+                                    {workspace.agentSession.estimatedCost}
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -347,6 +441,85 @@ export function Sidebar({
           ))}
         </div>
       </div>
+
+      {/* Orchestrator panel */}
+      {orchestrator !== null && (
+        <div className="shrink-0 border-t border-forge-border/60 bg-forge-surface/80 px-3 py-2.5">
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center gap-1.5">
+              <Brain className={`h-3.5 w-3.5 ${orchestrator.enabled ? 'text-forge-orange animate-pulse' : 'text-forge-muted'}`} />
+              <span className="text-[11px] font-semibold text-forge-text">Orchestrator</span>
+              {orchestrator.enabled && (
+                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-forge-orange/15 text-forge-orange border border-forge-orange/20">
+                  Opus
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => void handleOrchestratorToggle(!orchestrator.enabled)}
+              className={`relative h-5 w-9 rounded-full transition-colors ${orchestrator.enabled ? 'bg-forge-orange' : 'bg-forge-border'}`}
+              title={orchestrator.enabled ? 'Disable orchestrator' : 'Enable orchestrator'}
+            >
+              <span
+                className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${orchestrator.enabled ? 'translate-x-4' : 'translate-x-0.5'}`}
+              />
+            </button>
+          </div>
+          {orchestrator.enabled && (
+            <div className="space-y-1">
+              <p className="text-[9px] text-forge-muted">
+                Brain: <span className="text-forge-text font-mono">{orchestrator.model}</span> · change in Settings → AI Models
+              </p>
+              {orchestrator.lastRunAt && (
+                <p className="text-[9px] text-forge-muted">
+                  Last run: {orchestrator.lastRunAt} · {orchestrator.lastActions.length} action(s)
+                </p>
+              )}
+              {orchestrator.lastActions.length > 0 && (
+                <div className="mt-1 space-y-0.5">
+                  {orchestrator.lastActions.slice(0, 3).map((a, i) => (
+                    <p key={i} className="text-[9px] text-forge-muted truncate">
+                      → {a.action} {a.workspaceId ?? ''}{a.prompt ? `: ${a.prompt.slice(0, 40)}…` : ''}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {!orchestrator.enabled && (
+            <p className="text-[9px] text-forge-muted">Monitors agents every 5 min · configure model in Settings</p>
+          )}
+        </div>
+      )}
+
+      {batchMode && (
+        <div className="shrink-0 border-t border-forge-border bg-forge-surface px-3 py-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-forge-orange">
+              {batchSelected.size} workspace{batchSelected.size === 1 ? '' : 's'} selected
+            </span>
+            <button onClick={clearBatch} className="rounded p-0.5 text-forge-muted hover:text-forge-text">
+              <XIcon className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <textarea
+            value={batchPrompt}
+            onChange={(e) => setBatchPrompt(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void sendBatch(); }}
+            placeholder="Send prompt to all selected agents…"
+            rows={3}
+            className="w-full resize-none rounded-md border border-forge-border bg-black/30 px-2.5 py-2 text-[11px] text-forge-text placeholder:text-forge-muted/60 focus:border-forge-orange/40 focus:outline-none"
+          />
+          <button
+            onClick={() => void sendBatch()}
+            disabled={batchSending || !batchPrompt.trim()}
+            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md bg-forge-orange/90 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-forge-orange disabled:opacity-50"
+          >
+            <Send className="h-3 w-3" />
+            {batchSending ? 'Sending…' : `Send to ${batchSelected.size}`}
+          </button>
+        </div>
+      )}
     </aside>
   );
 }
