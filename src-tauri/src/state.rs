@@ -31,6 +31,12 @@ pub struct AppState {
 impl AppState {
     pub fn initialize(app_handle: &AppHandle) -> Result<Self, String> {
         let db = Database::initialize(app_handle)?;
+        
+        // Prune old data and vacuum on startup
+        if let Err(err) = db.prune_old_data() {
+            log::error!(target: "forge_lib", "Failed to prune old data: {err}");
+        }
+
         let now = crate::services::agent_process_service::timestamp();
         agent_run_repository::mark_stale_running_abandoned(&db, &now)?;
         terminal_repository::mark_stale_running_sessions(&db, &now)?;
