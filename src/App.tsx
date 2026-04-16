@@ -1185,15 +1185,7 @@ export default function App() {
             </div>
           ) : (
             <>
-              <div className="shrink-0 h-full relative" style={{ width: `${sidebarWidth}px` }}>
-                <button
-                  type="button"
-                  onClick={() => setSidebarCollapsed(true)}
-                  className="absolute top-2.5 right-2 z-[25] rounded-lg border border-forge-border bg-forge-surface p-1.5 text-forge-text shadow-md ring-1 ring-black/25 hover:bg-forge-card hover:border-forge-orange/35"
-                  title="Collapse sidebar"
-                >
-                  <ChevronLeft className="h-4 w-4" strokeWidth={2.25} />
-                </button>
+              <div className="shrink-0 h-full" style={{ width: `${sidebarWidth}px` }}>
                 <Sidebar
                   activeView={view}
                   onNavigate={setView}
@@ -1211,6 +1203,7 @@ export default function App() {
                     setBranchFromWorkspaceId(null);
                     setModalOpen(true);
                   }}
+                  onCollapse={() => setSidebarCollapsed(true)}
                 />
               </div>
               <div

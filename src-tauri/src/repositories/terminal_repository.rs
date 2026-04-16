@@ -179,6 +179,7 @@ pub fn mark_closed(db: &Database, session_id: &str, closed_at: &str) -> Result<(
     })
 }
 
+#[allow(dead_code)]
 pub fn mark_attached(db: &Database, session_id: &str, attached_at: &str) -> Result<(), String> {
     db.with_connection(|connection| {
         connection.execute(
@@ -195,6 +196,7 @@ pub fn mark_attached(db: &Database, session_id: &str, attached_at: &str) -> Resu
     })
 }
 
+#[allow(dead_code)]
 pub fn mark_captured(db: &Database, session_id: &str, seq: i64) -> Result<(), String> {
     db.with_connection(|connection| {
         connection.execute(
