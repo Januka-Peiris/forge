@@ -311,7 +311,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       forgeWarn('agent-profiles', 'load error', { err });
       setAgentProfiles([]);
     }
-  }, [workspaceId]);
+  }, [setSelectedProfileId, workspaceId]);
 
   const resetWorkspaceState = useCallback(() => {
     nextSeqRef.current = {};
@@ -694,7 +694,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-[#08090c]">
+    <div className="flex min-h-0 flex-1 flex-col bg-forge-bg">
       <div className="sticky top-0 z-10 shrink-0 border-b border-forge-border bg-forge-surface/95 px-4 py-2.5 backdrop-blur">
         {/* Title + primary actions row */}
         <div className="flex items-center justify-between gap-3">
@@ -871,7 +871,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
 
       <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
         {visibleSessions.length === 0 ? (
-          <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-forge-border bg-[#08090c] p-8 text-center">
+          <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-forge-border bg-forge-bg p-8 text-center">
             <div className="max-w-md">
               <TerminalIcon className="mx-auto mb-3 h-9 w-9 text-forge-muted" />
               <h2 className="text-[15px] font-bold text-forge-text">Start a persistent workspace terminal</h2>
@@ -904,7 +904,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       </div>
 
       {focusedIsAgent && (
-        <div className="shrink-0 border-t border-forge-border bg-[#0b0d12]" style={{ height: `${composerHeight}px` }}>
+        <div className="shrink-0 border-t border-forge-border bg-forge-surface" style={{ height: `${composerHeight}px` }}>
           <div
             role="separator"
             aria-label="Resize message panel"
@@ -914,7 +914,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
           <div className="h-[calc(100%-4px)] overflow-y-auto p-2">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             {/* Profile select — always visible */}
-            <select value={selectedProfileId} onChange={(event) => setSelectedProfileId(event.target.value)} className="rounded-md border border-forge-border bg-[#08090c] px-2 py-1 text-[10px] font-semibold text-forge-text">
+            <select value={selectedProfileId} onChange={(event) => setSelectedProfileId(event.target.value)} className="rounded-md border border-forge-border bg-forge-bg px-2 py-1 text-[10px] font-semibold text-forge-text">
               {agentProfilesForPromptPicker(agentProfiles).map((profile) => (
                 <option key={profile.id} value={profile.id}>
                   {profile.label}
@@ -938,19 +938,19 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                   <div className="space-y-2">
                     <div>
                       <label className="mb-1 block text-[10px] text-forge-muted">Task mode</label>
-                      <select value={selectedTaskMode} onChange={(event) => setSelectedTaskMode(event.target.value)} className="w-full rounded border border-forge-border bg-[#08090c] px-2 py-1 text-[10px] text-forge-text">
+                      <select value={selectedTaskMode} onChange={(event) => setSelectedTaskMode(event.target.value)} className="w-full rounded border border-forge-border bg-forge-bg px-2 py-1 text-[10px] text-forge-text">
                         {['Act', 'Plan', 'Review', 'Fix'].map((mode) => <option key={mode}>{mode}</option>)}
                       </select>
                     </div>
                     <div>
                       <label className="mb-1 block text-[10px] text-forge-muted">Reasoning</label>
-                      <select value={selectedReasoning} onChange={(event) => setSelectedReasoning(event.target.value)} className="w-full rounded border border-forge-border bg-[#08090c] px-2 py-1 text-[10px] text-forge-text">
+                      <select value={selectedReasoning} onChange={(event) => setSelectedReasoning(event.target.value)} className="w-full rounded border border-forge-border bg-forge-bg px-2 py-1 text-[10px] text-forge-text">
                         {['Default', 'Low', 'Medium', 'High'].map((level) => <option key={level}>{level}</option>)}
                       </select>
                     </div>
                     <div>
                       <label className="mb-1 block text-[10px] text-forge-muted">Send behavior</label>
-                      <select value={sendBehavior} onChange={(event) => setSendBehavior(event.target.value as typeof sendBehavior)} className="w-full rounded border border-forge-border bg-[#08090c] px-2 py-1 text-[10px] text-forge-text">
+                      <select value={sendBehavior} onChange={(event) => setSendBehavior(event.target.value as typeof sendBehavior)} className="w-full rounded border border-forge-border bg-forge-bg px-2 py-1 text-[10px] text-forge-text">
                         <option value="send_now">Send now</option>
                         <option value="queue">Queue</option>
                         <option value="interrupt_send">Interrupt + send</option>
@@ -998,7 +998,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
               onChange={(event) => setPromptInput(event.target.value)}
               rows={2}
               placeholder="Send instruction to agent (Enter to send, Shift+Enter for newline)..."
-              className="min-h-[52px] flex-1 resize-none rounded-lg border border-forge-border bg-[#08090c] px-3 py-2 text-[12px] text-forge-text placeholder:text-forge-muted/80 focus:border-forge-orange/40 focus:outline-none"
+              className="min-h-[52px] flex-1 resize-none rounded-lg border border-forge-border bg-forge-bg px-3 py-2 text-[12px] text-forge-text placeholder:text-forge-muted focus:border-forge-orange/40 focus:outline-none"
               onKeyDown={(event) => {
                 if (event.key !== 'Enter' || event.shiftKey) return;
                 if ('isComposing' in event.nativeEvent && event.nativeEvent.isComposing) return;
@@ -1165,7 +1165,7 @@ function WorkspaceCommandsStrip({
             </button>
           )}
           {config.run.map((command, index) => (
-            <div key={`${index}-${command}`} className="flex items-center gap-1 rounded-md border border-forge-border/70 bg-[#08090c] px-1.5 py-1">
+            <div key={`${index}-${command}`} className="flex items-center gap-1 rounded-md border border-forge-border/70 bg-forge-bg px-1.5 py-1">
               <button disabled={busy} onClick={() => onStartRun(index)} title={command} className="max-w-[220px] truncate rounded px-1.5 py-0.5 text-[10px] font-semibold text-forge-orange hover:bg-forge-orange/10 disabled:opacity-50">
                 <Play className="inline h-3 w-3" /> {commandBusy === `run-${index}` ? 'Starting…' : command}
               </button>
@@ -1223,11 +1223,11 @@ function WorkspacePortsStrip({
       {ports.length > 0 ? (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {ports.map((port) => (
-            <div key={`${port.pid}-${port.port}`} className="flex items-center gap-1 rounded-md border border-forge-border/70 bg-[#08090c] px-1.5 py-1">
+            <div key={`${port.pid}-${port.port}`} className="flex items-center gap-1 rounded-md border border-forge-border/70 bg-forge-bg px-1.5 py-1">
               <button onClick={() => onOpen(port.port)} className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-forge-blue hover:bg-forge-blue/10" title={port.cwd ?? port.address}>
                 <ExternalLink className="inline h-3 w-3" /> localhost:{port.port}
               </button>
-              <span className="max-w-[140px] truncate font-mono text-[10px] text-forge-text/82">
+              <span className="max-w-[140px] truncate font-mono text-[10px] text-forge-text/85">
                 {port.command} · pid {port.pid}
               </span>
               <button disabled={busy} onClick={() => onKill(port)} className="rounded px-1.5 py-0.5 text-[10px] text-forge-red hover:bg-forge-red/10 disabled:opacity-50" title={`Kill process ${port.pid}`}>
@@ -1336,7 +1336,7 @@ function TerminalPane({
   const running = session.status === 'running';
   return (
     <section onMouseDown={onFocus} className={`flex min-h-0 flex-1 flex-col rounded-xl border bg-[#08090c] ${focused ? 'border-forge-orange/50 shadow-lg shadow-orange-950/20' : 'border-forge-border'}`}>
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-forge-border/70 bg-[#0b0d12] px-2 py-1.5">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-forge-border/70 bg-forge-surface px-2 py-1.5">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="truncate text-[12px] font-bold text-forge-text">{title}</span>

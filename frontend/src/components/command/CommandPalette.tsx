@@ -26,6 +26,7 @@ interface PaletteCacheEntry {
   agentProfiles: AgentProfile[];
   readiness: WorkspaceReadiness | null;
   runCommands: string[];
+  changedFiles: WorkspaceChangedFile[];
 }
 
 const PALETTE_CACHE_TTL_MS = 8_000;
@@ -50,6 +51,7 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
   const [agentProfiles, setAgentProfiles] = useState<AgentProfile[]>([]);
   const [readiness, setReadiness] = useState<WorkspaceReadiness | null>(null);
   const [runCommands, setRunCommands] = useState<string[]>([]);
+  const [paletteChangedFiles, setPaletteChangedFiles] = useState<WorkspaceChangedFile[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const openPerfMarkRef = useRef<string | null>(null);
 
@@ -69,6 +71,7 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
       setAgentProfiles([]);
       setReadiness(null);
       setRunCommands([]);
+      setPaletteChangedFiles([]);
       return;
     }
     let cancelled = false;
@@ -80,23 +83,25 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
       setAgentProfiles(cached.agentProfiles);
       setReadiness(cached.readiness);
       setRunCommands(cached.runCommands);
+      setPaletteChangedFiles(cached.changedFiles);
       return;
     }
     void Promise.all([
       listWorkspaceVisibleTerminalSessions(workspaceId).catch(() => []),
-      getWorkspaceReviewCockpit(workspaceId, null).then((cockpit) => cockpit.prComments).catch(() => []),
+      getWorkspaceReviewCockpit(workspaceId, null).then((cockpit) => ({ comments: cockpit.prComments, files: cockpit.files.map((item) => item.file) })).catch(() => ({ comments: [] as WorkspacePrComment[], files: [] as WorkspaceChangedFile[] })),
       listWorkspaceAgentProfiles(workspaceId).catch(() => []),
       getWorkspaceReadiness(workspaceId).catch(() => null),
       getWorkspaceForgeConfig(workspaceId).then((config) => config.run).catch(() => []),
-    ]).then(([nextSessions, nextComments, nextProfiles, nextReadiness, nextRunCommands]) => {
+    ]).then(([nextSessions, cockpitData, nextProfiles, nextReadiness, nextRunCommands]) => {
       if (cancelled) return;
       const entry = {
         expiresAt: Date.now() + PALETTE_CACHE_TTL_MS,
         sessions: nextSessions,
-        comments: nextComments,
+        comments: cockpitData.comments,
         agentProfiles: nextProfiles,
         readiness: nextReadiness,
         runCommands: nextRunCommands,
+        changedFiles: cockpitData.files,
       };
       paletteCache.set(workspaceId, entry);
       setSessions(entry.sessions);
@@ -104,6 +109,7 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
       setAgentProfiles(entry.agentProfiles);
       setReadiness(entry.readiness);
       setRunCommands(entry.runCommands);
+      setPaletteChangedFiles(entry.changedFiles);
     });
     return () => {
       cancelled = true;
@@ -124,6 +130,7 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
 
   const items = useMemo<CommandItem[]>(() => {
     const selectedId = selectedWorkspace?.id;
+    const availableChangedFiles = paletteChangedFiles.length > 0 ? paletteChangedFiles : changedFiles;
     const workspaceItems = workspaces.map((workspace) => ({
       id: `workspace-${workspace.id}`,
       title: workspace.name,
@@ -135,7 +142,7 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
         onOpenWorkspace();
       },
     }));
-    const fileItems = selectedId ? changedFiles.map((file) => ({
+    const fileItems = selectedId ? availableChangedFiles.map((file) => ({
       id: `file-${file.path}`,
       title: file.path,
       subtitle: `Changed file · ${file.status} · +${file.additions ?? 0} -${file.deletions ?? 0}`,
@@ -194,7 +201,7 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
         subtitle: 'Review · explain/fix current file',
         keywords: 'send diff agent fix explain review',
         icon: 'agent' as const,
-        run: async () => { const file = changedFiles[0]; if (file) await queueReviewAgentPrompt({ workspaceId: selectedWorkspace.id, path: file.path, action: 'fix_file', mode: 'send_now' }); },
+        run: async () => { const file = availableChangedFiles[0]; if (file) await queueReviewAgentPrompt({ workspaceId: selectedWorkspace.id, path: file.path, action: 'fix_file', mode: 'send_now' }); },
       },
       {
         id: 'action-cleanup',
@@ -206,7 +213,7 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
       },
     ] : [];
     return [...agentItems, ...actionItems, ...workspaceItems, ...fileItems, ...terminalItems, ...commentItems];
-  }, [agentProfiles, changedFiles, comments, onOpenReviewComment, onOpenReviewFile, onOpenWorkspace, onSelectWorkspace, readiness, runCommands, selectedWorkspace, sessions, workspaces]);
+  }, [agentProfiles, changedFiles, comments, onOpenReviewComment, onOpenReviewFile, onOpenWorkspace, onSelectWorkspace, paletteChangedFiles, readiness, runCommands, selectedWorkspace, sessions, workspaces]);
 
   useEffect(() => {
     if (!open || !openPerfMarkRef.current) return;

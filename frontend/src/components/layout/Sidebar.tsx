@@ -153,7 +153,7 @@ export function Sidebar({
           <p className="text-[10px] font-semibold text-forge-muted uppercase tracking-widest">Workspaces</p>
           <button
             onClick={() => onNewWorkspace()}
-            className="inline-flex items-center gap-1 text-[10px] text-forge-orange hover:text-orange-400"
+            className="inline-flex items-center gap-1 text-[10px] text-forge-orange hover:text-forge-text"
           >
             <Plus className="w-3 h-3" />
             New Branch Workspace

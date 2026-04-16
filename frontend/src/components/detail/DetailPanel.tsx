@@ -239,7 +239,7 @@ export function DetailPanel({
                       <div className="flex items-center gap-1.5 text-[10px] text-forge-text">
                         <Link2 className="w-3 h-3 text-forge-blue" />
                         <span className="font-semibold">{linked.repoName}</span>
-                        <span className="font-mono text-forge-text/70">{linked.branch ?? 'detached'}</span>
+                        <span className="font-mono text-forge-text/85">{linked.branch ?? 'detached'}</span>
                       </div>
                       <p className="mt-1 text-[10px] font-mono text-forge-muted truncate">{linked.path}</p>
                       <div className="mt-1 flex gap-2">
@@ -297,10 +297,6 @@ export function DetailPanel({
         <button onClick={onOpenInCursor} className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-forge-blue/15 hover:bg-forge-blue/25 text-[12px] font-semibold text-forge-blue transition-colors border border-forge-blue/20">
           <ExternalLink className="w-3.5 h-3.5" />
           Open in Cursor
-        </button>
-        <button onClick={onRefreshReview} className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-white/5 hover:bg-white/8 text-[12px] font-medium text-forge-text transition-colors border border-forge-border">
-          <RefreshCw className={`w-3.5 h-3.5 ${reviewLoading ? 'animate-spin' : ''}`} />
-          Refresh Changed Files
         </button>
       </div>
     </aside>

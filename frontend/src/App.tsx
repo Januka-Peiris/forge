@@ -5,15 +5,11 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { DetailPanel } from './components/detail/DetailPanel';
 import { Sidebar, type NavView } from './components/layout/Sidebar';
 import { WorkspaceTerminal } from './components/terminal/WorkspaceTerminal';
-import { getWorkspaceChangedFiles, getWorkspaceFileDiff } from './lib/tauri-api/git-review';
-import { getWorkspaceReviewSummary, refreshWorkspaceReviewSummary } from './lib/tauri-api/review-summary';
-import { getWorkspaceMergeReadiness, refreshWorkspaceMergeReadiness } from './lib/tauri-api/merge-readiness';
 import { removeRepository, scanRepositories } from './lib/tauri-api/repositories';
 import { getSettings, resolveGitRepositoryPath, saveRepoRoots } from './lib/tauri-api/settings';
 import { listActivity } from './lib/tauri-api/activity';
 import { openDeepLink } from './lib/tauri-api/deep-links';
 import { listWorkspaceAttention, markWorkspaceAttentionRead } from './lib/tauri-api/workspace-attention';
-import { listWorkspaceAgentPrompts } from './lib/tauri-api/terminal';
 import { formatCursorOpenError } from './lib/ui-errors';
 import { forgeLog, forgeWarn } from './lib/forge-log';
 import { measureAsync, perfMark, perfMeasure } from './lib/perf';
@@ -28,7 +24,7 @@ import {
   openInCursor,
   openWorktreeInCursor,
 } from './lib/tauri-api/workspaces';
-import type { ActivityItem, AppSettings, CreateWorkspaceInput, DiscoveredRepository, TerminalOutputEvent, Workspace, WorkspaceAttention, WorkspaceChangedFile, WorkspaceFileDiff, WorkspaceMergeReadiness, WorkspaceReviewSummary } from './types';
+import type { ActivityItem, AppSettings, CreateWorkspaceInput, DiscoveredRepository, TerminalOutputEvent, Workspace, WorkspaceAttention } from './types';
 
 
 const APP_BOOT_MARK = 'forge:app-boot';
@@ -48,6 +44,19 @@ interface AttentionToast {
   workspaceId: string;
   workspaceName: string;
   text: string;
+}
+
+
+async function withLoadTimeout<T>(label: string, task: Promise<T>, timeoutMs = 8000): Promise<T> {
+  let timer: number | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = window.setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+  try {
+    return await Promise.race([task, timeout]);
+  } finally {
+    if (timer !== undefined) window.clearTimeout(timer);
+  }
 }
 
 function LoadingView() {
@@ -335,21 +344,9 @@ export default function App() {
   const [attentionToasts, setAttentionToasts] = useState<AttentionToast[]>([]);
   const [deepLinkNotice, setDeepLinkNotice] = useState<string | null>(null);
   const [activityItems, setActivityItems] = useState<ActivityItem[]>([]);
-  const [reviewFiles, setReviewFiles] = useState<WorkspaceChangedFile[]>([]);
   const [selectedReviewPath, setSelectedReviewPath] = useState<string | null>(null);
-  const [fileDiff, setFileDiff] = useState<WorkspaceFileDiff | null>(null);
-  const [reviewLoading, setReviewLoading] = useState(false);
-  const [diffLoading, setDiffLoading] = useState(false);
-  const [reviewLastRefreshedAt, setReviewLastRefreshedAt] = useState<string | null>(null);
-  const [reviewError, setReviewError] = useState<string | null>(null);
-  const [reviewSummary, setReviewSummary] = useState<WorkspaceReviewSummary | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [reviewTargetCommentId, setReviewTargetCommentId] = useState<string | null>(null);
-  const [summaryLoading, setSummaryLoading] = useState(false);
-  const [summaryError, setSummaryError] = useState<string | null>(null);
-  const [mergeReadiness, setMergeReadiness] = useState<WorkspaceMergeReadiness | null>(null);
-  const [readinessLoading, setReadinessLoading] = useState(false);
-  const [readinessError, setReadinessError] = useState<string | null>(null);
   const [settingsState, setSettingsState] = useState<AppSettings | null>(null);
   const [linkedWorktreesByWorkspaceId, setLinkedWorktreesByWorkspaceId] = useState<Record<string, { worktreeId: string; repoId: string; repoName: string; path: string; branch?: string; head?: string }[]>>({});
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -364,7 +361,6 @@ export default function App() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const diffRequestRef = useRef(0);
   const attentionRefreshTimerRef = useRef<number | null>(null);
   const markReadTimerRef = useRef<Record<string, number>>({});
   const workspaceSwitchMarkRef = useRef<string | null>(null);
@@ -410,23 +406,7 @@ export default function App() {
   const loadAttention = useCallback(async () => {
     try {
       const rows = await listWorkspaceAttention();
-      const attentionMap = Object.fromEntries(rows.map((row) => [row.workspaceId, row]));
-      const workspaceIds = workspacesRef.current.map((ws) => ws.id);
-      const queueCounts = await Promise.allSettled(
-        workspaceIds.map(async (id) => {
-          const entries = await listWorkspaceAgentPrompts(id, 20);
-          return { id, count: entries.filter((e) => e.status === 'queued').length };
-        }),
-      );
-      for (const result of queueCounts) {
-        if (result.status === 'fulfilled' && result.value.count > 0) {
-          const existing = attentionMap[result.value.id];
-          if (existing) {
-            attentionMap[result.value.id] = { ...existing, queuedCount: result.value.count };
-          }
-        }
-      }
-      setWorkspaceAttention(attentionMap);
+      setWorkspaceAttention(Object.fromEntries(rows.map((row) => [row.workspaceId, row])));
     } catch (err) {
       forgeWarn('attention', 'load failed', { err });
     }
@@ -460,15 +440,8 @@ export default function App() {
     setError(null);
     try {
       await measureAsync('app:backend-load', async () => {
-        const [workspaceData, settingsData, activityData] = await Promise.all([
-          listWorkspaces(),
-          getSettings(),
-          listActivity(),
-        ]);
+        const workspaceData = await withLoadTimeout('list_workspaces', listWorkspaces());
         setWorkspaces(workspaceData);
-        setSettingsState(settingsData);
-        setActivityItems(activityData);
-        scheduleAttentionLoad();
         setSelectedId((current) => {
           const persisted = typeof window !== 'undefined'
             ? window.localStorage.getItem(SELECTED_WORKSPACE_KEY)
@@ -479,6 +452,22 @@ export default function App() {
           }
           return workspaceData[0]?.id ?? null;
         });
+
+        const [settingsResult, activityResult] = await Promise.allSettled([
+          withLoadTimeout('get_settings', getSettings()),
+          withLoadTimeout('list_activity', listActivity()),
+        ]);
+        if (settingsResult.status === 'fulfilled') {
+          setSettingsState(settingsResult.value);
+        } else {
+          forgeWarn('startup', 'settings load failed', { err: settingsResult.reason });
+        }
+        if (activityResult.status === 'fulfilled') {
+          setActivityItems(activityResult.value);
+        } else {
+          forgeWarn('startup', 'activity load failed', { err: activityResult.reason });
+        }
+        scheduleAttentionLoad();
       });
       perfMeasure('app:boot-to-backend-ready', APP_BOOT_MARK);
     } catch (err) {
@@ -605,126 +594,6 @@ export default function App() {
     workspaceSwitchMarkRef.current = mark;
     perfMark(mark);
   }, [selectedId]);
-
-  const loadDiffForWorkspace = useCallback(async (workspaceId: string, path: string) => {
-    const requestId = ++diffRequestRef.current;
-    setDiffLoading(true);
-    setReviewError(null);
-    try {
-      const nextDiff = await getWorkspaceFileDiff(workspaceId, path);
-      if (diffRequestRef.current === requestId) {
-        setFileDiff(nextDiff);
-      }
-    } catch (err) {
-      if (diffRequestRef.current === requestId) {
-        setReviewError(err instanceof Error ? err.message : String(err));
-      }
-    } finally {
-      if (diffRequestRef.current === requestId) {
-        setDiffLoading(false);
-      }
-    }
-  }, []);
-
-  const loadReviewForWorkspace = useCallback(async (workspaceId: string, preferredPath?: string | null) => {
-    setReviewLoading(true);
-    setReviewError(null);
-    try {
-      const files = await getWorkspaceChangedFiles(workspaceId);
-      setReviewFiles(files);
-      setReviewLastRefreshedAt(new Date().toISOString());
-      const nextPath = preferredPath && files.some((file) => file.path === preferredPath)
-        ? preferredPath
-        : files[0]?.path ?? null;
-      setSelectedReviewPath(nextPath);
-      if (nextPath) {
-        void loadDiffForWorkspace(workspaceId, nextPath);
-      } else {
-        setFileDiff(null);
-      }
-    } catch (err) {
-      setReviewError(err instanceof Error ? err.message : String(err));
-      setReviewFiles([]);
-      setSelectedReviewPath(null);
-      setFileDiff(null);
-    } finally {
-      setReviewLoading(false);
-    }
-  }, [loadDiffForWorkspace]);
-
-  const loadReviewForSelected = useCallback(async () => {
-    if (!selectedId) {
-      setReviewFiles([]);
-      setSelectedReviewPath(null);
-      setFileDiff(null);
-      return;
-    }
-    await loadReviewForWorkspace(selectedId, selectedReviewPath);
-  }, [loadReviewForWorkspace, selectedId, selectedReviewPath]);
-
-  useEffect(() => {
-    if (view === 'reviews') void loadReviewForSelected();
-  }, [loadReviewForSelected, view]);
-
-  const loadSummaryForSelected = useCallback(async (refresh = false) => {
-    if (!selectedId) {
-      setReviewSummary(null);
-      return;
-    }
-    setSummaryLoading(true);
-    setSummaryError(null);
-    try {
-      setReviewSummary(refresh
-        ? await refreshWorkspaceReviewSummary(selectedId)
-        : await getWorkspaceReviewSummary(selectedId));
-    } catch (err) {
-      setSummaryError(err instanceof Error ? err.message : String(err));
-      setReviewSummary(null);
-    } finally {
-      setSummaryLoading(false);
-    }
-  }, [selectedId]);
-
-  useEffect(() => {
-    void loadSummaryForSelected(false);
-  }, [loadSummaryForSelected]);
-
-  const loadReadinessForSelected = useCallback(async (refresh = false) => {
-    if (!selectedId) {
-      setMergeReadiness(null);
-      return;
-    }
-    setReadinessLoading(true);
-    setReadinessError(null);
-    try {
-      setMergeReadiness(refresh
-        ? await refreshWorkspaceMergeReadiness(selectedId)
-        : await getWorkspaceMergeReadiness(selectedId));
-    } catch (err) {
-      setReadinessError(err instanceof Error ? err.message : String(err));
-      setMergeReadiness(null);
-    } finally {
-      setReadinessLoading(false);
-    }
-  }, [selectedId]);
-
-  useEffect(() => {
-    void loadReadinessForSelected(false);
-  }, [loadReadinessForSelected]);
-
-  const handleRefreshWorkspaceState = async () => {
-    await Promise.all([
-      loadReviewForSelected(),
-      loadSummaryForSelected(true),
-      loadReadinessForSelected(true),
-    ]);
-  };
-
-  const handleSelectReviewFile = async (path: string) => {
-    if (!selectedId) return;
-    setSelectedReviewPath(path);
-    await loadDiffForWorkspace(selectedId, path);
-  };
 
   const handleOpenInCursor = async (workspaceId?: string) => {
     const targetId = workspaceId ?? selectedId;
@@ -982,7 +851,7 @@ export default function App() {
             open={commandPaletteOpen}
             workspaces={workspaces}
             selectedWorkspace={selected}
-            changedFiles={reviewFiles}
+            changedFiles={[]}
             onClose={() => setCommandPaletteOpen(false)}
             onSelectWorkspace={setSelectedId}
             onOpenWorkspace={() => setView('workspaces')}

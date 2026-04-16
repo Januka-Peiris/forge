@@ -21,12 +21,14 @@ pub fn list_workspace_attention(state: &AppState) -> Result<Vec<WorkspaceAttenti
             && running_count == 0;
         let status = derive_status(&workspace.status, running_count, has_error, has_complete);
         let unread_count = unread_count_for_workspace(state, &workspace.id)?;
+        let queued_count = queued_count_for_workspace(state, &workspace.id)?;
         let (last_event, last_event_at) = last_output_for_workspace(state, &workspace.id)?;
         attention.push(WorkspaceAttention {
             workspace_id: workspace.id,
             status,
             running_count,
             unread_count,
+            queued_count,
             last_event,
             last_event_at,
         });
@@ -63,6 +65,21 @@ fn unread_count_for_workspace(state: &AppState, workspace_id: &str) -> Result<i6
             WHERE sessions.workspace_id = ?1
               AND chunks.stream_type != 'pty_snapshot'
               AND (reads.last_read_at IS NULL OR chunks.created_at > reads.last_read_at)
+            "#,
+            params![workspace_id],
+            |row| row.get::<_, i64>(0),
+        )?;
+        Ok(count)
+    })
+}
+
+fn queued_count_for_workspace(state: &AppState, workspace_id: &str) -> Result<i64, String> {
+    state.db.with_connection(|connection| {
+        let count = connection.query_row(
+            r#"
+            SELECT COUNT(*)
+            FROM terminal_prompt_entries
+            WHERE workspace_id = ?1 AND status = 'queued'
             "#,
             params![workspace_id],
             |row| row.get::<_, i64>(0),

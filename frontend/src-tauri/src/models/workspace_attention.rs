@@ -7,6 +7,7 @@ pub struct WorkspaceAttention {
     pub status: String,
     pub running_count: i64,
     pub unread_count: i64,
+    pub queued_count: i64,
     pub last_event: Option<String>,
     pub last_event_at: Option<String>,
 }

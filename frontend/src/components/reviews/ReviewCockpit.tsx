@@ -217,7 +217,7 @@ export function ReviewCockpit({
   const totalDels = cockpit?.files.reduce((sum, item) => sum + (item.file.deletions ?? 0), 0) ?? 0;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-[#08090c]">
+    <div className="flex min-h-0 flex-1 flex-col bg-forge-bg">
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="shrink-0 border-b border-forge-border bg-forge-surface/95 px-5 py-3 backdrop-blur">
@@ -363,7 +363,7 @@ export function ReviewCockpit({
             <select
               value={selectedProfileId}
               onChange={(e) => setSelectedProfileId(e.target.value)}
-              className="rounded border border-forge-border bg-[#08090c] px-2 py-1 text-[10px] font-semibold text-forge-text focus:outline-none"
+              className="rounded border border-forge-border bg-forge-bg px-2 py-1 text-[10px] font-semibold text-forge-text focus:outline-none"
             >
               {agentProfilesForPromptPicker(agentProfiles).map((profile) => (
                 <option key={profile.id} value={profile.id}>
@@ -374,7 +374,7 @@ export function ReviewCockpit({
             <select
               value={selectedTaskMode}
               onChange={(e) => setSelectedTaskMode(e.target.value)}
-              className="rounded border border-forge-border bg-[#08090c] px-2 py-1 text-[10px] font-semibold text-forge-muted focus:outline-none"
+              className="rounded border border-forge-border bg-forge-bg px-2 py-1 text-[10px] font-semibold text-forge-text focus:outline-none"
             >
               {['Review', 'Fix', 'Plan', 'Act'].map((mode) => (
                 <option key={mode}>{mode}</option>
@@ -383,7 +383,7 @@ export function ReviewCockpit({
             <select
               value={selectedReasoning}
               onChange={(e) => setSelectedReasoning(e.target.value)}
-              className="rounded border border-forge-border bg-[#08090c] px-2 py-1 text-[10px] font-semibold text-forge-muted focus:outline-none"
+              className="rounded border border-forge-border bg-forge-bg px-2 py-1 text-[10px] font-semibold text-forge-text focus:outline-none"
             >
               {['Default', 'Low', 'Medium', 'High'].map((level) => (
                 <option key={level}>{level}</option>
@@ -393,7 +393,7 @@ export function ReviewCockpit({
             <button
               disabled={busy || !selectedFile}
               onClick={() => void sendPrompt('explain_diff')}
-              className="flex items-center gap-1 rounded-md border border-forge-border bg-white/5 px-2.5 py-1 text-[10px] font-semibold text-forge-muted hover:bg-white/10 disabled:opacity-50"
+              className="flex items-center gap-1 rounded-md border border-forge-border bg-white/5 px-2.5 py-1 text-[10px] font-semibold text-forge-text/85 hover:bg-white/10 disabled:opacity-50"
             >
               <Bot className="h-3 w-3" /> Explain
             </button>
@@ -531,7 +531,7 @@ export function ReviewCockpit({
                     </div>
 
                     {/* Body */}
-                    <p className="max-h-28 overflow-auto whitespace-pre-wrap text-[11px] leading-relaxed text-forge-muted">
+                    <p className="max-h-28 overflow-auto whitespace-pre-wrap text-[11px] leading-relaxed text-forge-text/80">
                       {comment.body}
                     </p>
 
