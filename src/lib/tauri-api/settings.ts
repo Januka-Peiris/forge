@@ -13,3 +13,8 @@ export function saveRepoRoots(input: SaveRepoRootsInput): Promise<AppSettings> {
 export function resolveGitRepositoryPath(path: string): Promise<string> {
   return invokeCommand<string>('resolve_git_repository_path', { path });
 }
+
+
+export function saveHasCompletedEnvCheck(completed: boolean): Promise<AppSettings> {
+  return invokeCommand<AppSettings>('save_has_completed_env_check', { completed });
+}

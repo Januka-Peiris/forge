@@ -13,7 +13,9 @@ use crate::models::{
     TerminalOutputResponse, TerminalSession, TerminalSessionState,
 };
 use crate::repositories::{terminal_repository, workspace_repository};
-use crate::services::{agent_context_service, agent_profile_service, tmux_service};
+use crate::services::{
+    agent_context_service, agent_profile_service, environment_service, tmux_service,
+};
 use crate::state::{ActiveTerminal, AppState};
 use tauri::Emitter;
 
@@ -85,8 +87,10 @@ pub fn create_workspace_terminal(
         .unwrap_or_else(|| default_terminal_title(&kind, &profile.name));
     let command_spec =
         TerminalCommandSpec::from_input(&profile, input.command.as_deref(), input.args.clone())?;
+    let persistent_spec =
+        tmux_service::persistent_session_spec(&command_spec.command, &command_spec.args);
 
-    tmux_service::create_session(&tmux_name, &cwd, &command_spec.command, &command_spec.args)?;
+    tmux_service::create_persistent_session(&tmux_name, &cwd, &persistent_spec.shell)?;
 
     let started_at = timestamp();
     let session = TerminalSession {
@@ -118,8 +122,30 @@ pub fn create_workspace_terminal(
         &input.workspace_id,
         &session_id,
         "system",
-        &format!("[forge] Started persistent tmux terminal {tmux_name}\r\n"),
+        &format!(
+            "[forge] Started persistent tmux terminal {tmux_name}\r\n[forge] Shell: {}\r\n[forge] Startup command: {}\r\n",
+            persistent_spec.shell,
+            persistent_spec.startup_command.as_deref().unwrap_or("none"),
+        ),
     );
+    if let Some(startup_command) = persistent_spec.startup_command.as_deref() {
+        match tmux_service::send_keys(&tmux_name, startup_command) {
+            Ok(()) => append_log_line(
+                state,
+                &input.workspace_id,
+                &session_id,
+                "system",
+                "[forge] Startup command sent to persistent shell\r\n",
+            ),
+            Err(err) => append_log_line(
+                state,
+                &input.workspace_id,
+                &session_id,
+                "system",
+                &format!("[forge] Failed to send startup command: {err}\r\n"),
+            ),
+        }
+    }
     attach_workspace_terminal_session(
         state,
         AttachWorkspaceTerminalInput {
@@ -154,6 +180,7 @@ pub fn attach_workspace_terminal_session(
         .clone()
         .ok_or_else(|| "Terminal is missing tmux session name".to_string())?;
     if !tmux_service::has_session(&tmux_name) {
+        let diagnostic = tmux_service::missing_session_diagnostic(&tmux_name);
         let ended_at = timestamp();
         terminal_repository::mark_finished(&state.db, &session.id, "interrupted", &ended_at, true)?;
         append_log_line(
@@ -161,10 +188,12 @@ pub fn attach_workspace_terminal_session(
             &session.workspace_id,
             &session.id,
             "system",
-            "[forge] Persistent terminal ended; marked stale for recovery\r\n",
+            &format!(
+                "[forge] Persistent terminal ended; marked stale for recovery\r\n{diagnostic}\r\n"
+            ),
         );
         return Err(format!(
-            "Persistent terminal {tmux_name} is no longer running"
+            "Persistent terminal {tmux_name} is no longer running. {diagnostic}"
         ));
     }
 
@@ -287,18 +316,7 @@ pub fn interrupt_workspace_terminal_session_by_id(
 ) -> Result<TerminalSession, String> {
     let session = terminal_repository::get_session(&state.db, session_id)?
         .ok_or_else(|| format!("Terminal session {session_id} was not found"))?;
-    let active = active_for_session(state, session_id)?
-        .ok_or_else(|| format!("Terminal session {session_id} is not attached"))?;
-    let mut writer = active
-        .writer
-        .lock()
-        .map_err(|_| "Terminal writer lock poisoned".to_string())?;
-    writer
-        .write_all(b"\x03")
-        .map_err(|err| format!("Failed to interrupt terminal: {err}"))?;
-    writer
-        .flush()
-        .map_err(|err| format!("Failed to flush interrupt: {err}"))?;
+    send_interrupt_to_session(state, &session)?;
     append_log_line(
         state,
         &session.workspace_id,
@@ -369,16 +387,9 @@ pub fn interrupt_workspace_terminal_session(
 ) -> Result<TerminalSessionState, String> {
     match active_for_workspace(state, workspace_id, "agent")? {
         Some(active) => {
-            let mut writer = active
-                .writer
-                .lock()
-                .map_err(|_| "Terminal writer lock poisoned".to_string())?;
-            writer
-                .write_all(b"\x03")
-                .map_err(|err| format!("Failed to interrupt terminal: {err}"))?;
-            writer
-                .flush()
-                .map_err(|err| format!("Failed to flush interrupt: {err}"))?;
+            let session = terminal_repository::get_session(&state.db, &active.session_id)?
+                .ok_or_else(|| "Active terminal session record was not found".to_string())?;
+            send_interrupt_to_session(state, &session)?;
             let seq = Arc::new(AtomicU64::new(
                 terminal_repository::next_seq(&state.db, &active.session_id).unwrap_or(0),
             ));
@@ -393,7 +404,22 @@ pub fn interrupt_workspace_terminal_session(
             );
         }
         None => {
-            reconcile_orphan_running_session(state, workspace_id, "agent", "interrupted")?;
+            if let Some(session) =
+                terminal_repository::latest_for_workspace_role(&state.db, workspace_id, "agent")?
+            {
+                if session.status == "running" {
+                    send_interrupt_to_session(state, &session)?;
+                    append_log_line(
+                        state,
+                        workspace_id,
+                        &session.id,
+                        "system",
+                        "\r\n[forge] interrupt sent to persistent tmux session (Ctrl-C)\r\n",
+                    );
+                }
+            } else {
+                reconcile_orphan_running_session(state, workspace_id, "agent", "interrupted")?;
+            }
         }
     }
     get_workspace_terminal_session_state(state, workspace_id)
@@ -869,8 +895,51 @@ fn detach_active_terminal(state: &AppState, session_id: &str) {
     }
 }
 
+fn send_interrupt_to_session(state: &AppState, session: &TerminalSession) -> Result<(), String> {
+    if let Some(active) = active_for_session(state, &session.id)? {
+        let mut writer = active
+            .writer
+            .lock()
+            .map_err(|_| "Terminal writer lock poisoned".to_string())?;
+        writer
+            .write_all(b"\x03")
+            .map_err(|err| format!("Failed to interrupt terminal: {err}"))?;
+        writer
+            .flush()
+            .map_err(|err| format!("Failed to flush interrupt: {err}"))?;
+        return Ok(());
+    }
+
+    if session.backend == "tmux" {
+        let Some(name) = session.tmux_session_name.as_deref() else {
+            return Err("Terminal is missing tmux session name".to_string());
+        };
+        if tmux_service::has_session(name) {
+            return tmux_service::send_ctrl_c(name);
+        }
+
+        let diagnostic = tmux_service::missing_session_diagnostic(name);
+        let ended_at = timestamp();
+        terminal_repository::mark_finished(&state.db, &session.id, "interrupted", &ended_at, true)?;
+        append_log_line(
+            state,
+            &session.workspace_id,
+            &session.id,
+            "system",
+            &format!(
+                "[forge] Persistent terminal ended; marked stale for recovery\r\n{diagnostic}\r\n"
+            ),
+        );
+        return Err(format!(
+            "Persistent terminal {name} is no longer running. {diagnostic}"
+        ));
+    }
+
+    Err(format!("Terminal session {} is not attached", session.id))
+}
+
 /// If there is no in-memory PTY but the latest DB row for this role is still `running` (e.g. app
-/// restarted or registry desynced), mark it finished so Stop/Interrupt actually update the UI.
+/// restarted or registry desynced), only mark it finished when its persistent tmux session is gone.
 fn reconcile_orphan_running_session(
     state: &AppState,
     workspace_id: &str,
@@ -885,14 +954,34 @@ fn reconcile_orphan_running_session(
     if latest.status != "running" {
         return Ok(());
     }
+    if latest.backend == "tmux" {
+        if let Some(name) = latest.tmux_session_name.as_deref() {
+            if tmux_service::has_session(name) {
+                log::info!(
+                    target: "forge_lib",
+                    "reconcile_orphan_running_session: session_id={} workspace_id={} role={} is detached but tmux is still running",
+                    latest.id,
+                    workspace_id,
+                    session_role
+                );
+                return Ok(());
+            }
+        }
+    }
+    let diagnostic = latest
+        .tmux_session_name
+        .as_deref()
+        .map(tmux_service::missing_session_diagnostic)
+        .unwrap_or_else(|| "tmux session name was not recorded".to_string());
     let ended_at = timestamp();
     log::info!(
         target: "forge_lib",
-        "reconcile_orphan_running_session: session_id={} workspace_id={} role={} -> {}",
+        "reconcile_orphan_running_session: session_id={} workspace_id={} role={} -> {} ({})",
         latest.id,
         workspace_id,
         session_role,
-        status
+        status,
+        diagnostic
     );
     terminal_repository::mark_finished(&state.db, &latest.id, status, &ended_at, true)?;
     let seq = Arc::new(AtomicU64::new(
@@ -905,7 +994,9 @@ fn reconcile_orphan_running_session(
         &latest.id,
         &seq,
         "system",
-        &format!("Terminal session {status} (reconciled; no active PTY)\r\n"),
+        &format!(
+            "Terminal session {status} (reconciled; no active PTY and no tmux session)\r\n{diagnostic}\r\n"
+        ),
     );
     let _ = terminal_repository::mark_prompt_status_by_session(&state.db, &latest.id, status);
     Ok(())
@@ -1200,6 +1291,7 @@ fn reconcile_tmux_session_state(state: &AppState, session: &TerminalSession) -> 
         return Ok(());
     };
     if !tmux_service::has_session(name) {
+        let diagnostic = tmux_service::missing_session_diagnostic(name);
         let ended_at = timestamp();
         terminal_repository::mark_finished(&state.db, &session.id, "interrupted", &ended_at, true)?;
         append_log_line(
@@ -1207,7 +1299,9 @@ fn reconcile_tmux_session_state(state: &AppState, session: &TerminalSession) -> 
             &session.workspace_id,
             &session.id,
             "system",
-            "[forge] Persistent terminal ended; marked stale for recovery\r\n",
+            &format!(
+                "[forge] Persistent terminal ended; marked stale for recovery\r\n{diagnostic}\r\n"
+            ),
         );
     }
     Ok(())
@@ -1284,10 +1378,22 @@ impl TerminalCommandSpec {
             });
         }
         Ok(Self {
-            command: profile.command.clone(),
+            command: resolve_terminal_command(&profile.command),
             args: args.unwrap_or_else(|| profile.args.clone()),
         })
     }
+}
+
+fn resolve_terminal_command(command: &str) -> String {
+    let trimmed = command.trim();
+    if trimmed.is_empty() || trimmed.contains('/') {
+        return command.to_string();
+    }
+    environment_service::find_binary(trimmed)
+        .ok()
+        .flatten()
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|| command.to_string())
 }
 
 impl TerminalProfile {

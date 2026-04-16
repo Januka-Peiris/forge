@@ -31,7 +31,7 @@ pub struct AppState {
 impl AppState {
     pub fn initialize(app_handle: &AppHandle) -> Result<Self, String> {
         let db = Database::initialize(app_handle)?;
-        
+
         // Prune old data and vacuum on startup
         if let Err(err) = db.prune_old_data() {
             log::error!(target: "forge_lib", "Failed to prune old data: {err}");

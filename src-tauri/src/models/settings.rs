@@ -7,6 +7,7 @@ use super::repository::DiscoveredRepository;
 pub struct AppSettings {
     pub repo_roots: Vec<String>,
     pub discovered_repositories: Vec<DiscoveredRepository>,
+    pub has_completed_env_check: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

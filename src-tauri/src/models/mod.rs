@@ -3,6 +3,7 @@ pub mod agent_context;
 pub mod agent_profile;
 pub mod agent_run;
 pub mod deep_link;
+pub mod environment;
 pub mod git_review;
 pub mod merge_readiness;
 pub mod pr_draft;
@@ -22,10 +23,14 @@ pub mod workspace_readiness;
 pub mod workspace_script;
 
 pub use activity::ActivityItem;
-pub use agent_context::{AgentContextWorktree, WorkspaceAgentContext};
+pub use agent_context::{
+    AgentContextWorktree, RepoMap, RepoMapEntry, RepoMapMeta, WorkspaceAgentContext,
+    WorkspaceContextItem, WorkspaceContextPreview,
+};
 pub use agent_profile::AgentProfile;
 pub use agent_run::{StartWorkspaceRunInput, WorkspaceRun, WorkspaceRunLog};
 pub use deep_link::{OpenDeepLinkInput, OpenDeepLinkResult};
+pub use environment::EnvironmentCheckItem;
 pub use git_review::{WorkspaceChangedFile, WorkspaceFileDiff};
 pub use merge_readiness::WorkspaceMergeReadiness;
 pub use pr_draft::WorkspacePrDraft;

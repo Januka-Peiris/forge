@@ -6,7 +6,7 @@ interface LogsTabProps {
   entries: LogEntry[];
 }
 
-const levelConfig = {
+const levelConfig: Record<LogEntry['level'], { icon: typeof Info; color: string; bg: string }> = {
   info: { icon: Info, color: 'text-forge-blue', bg: 'bg-forge-blue/10' },
   success: { icon: CheckCircle2, color: 'text-forge-green', bg: 'bg-forge-green/10' },
   warning: { icon: AlertTriangle, color: 'text-forge-yellow', bg: 'bg-forge-yellow/10' },
@@ -23,10 +23,8 @@ export function LogsTab({ entries }: LogsTabProps) {
       </div>
 
       <div className="flex-1 min-h-0">
-        <VList className="h-full" count={entries.length}>
-          {(index) => {
-            const entry = entries[index];
-            if (!entry) return null;
+        <VList className="h-full" data={entries}>
+          {(entry: LogEntry) => {
             const { icon: Icon, color, bg } = levelConfig[entry.level];
             return (
               <div

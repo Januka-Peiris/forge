@@ -3,6 +3,7 @@ pub mod agent_context;
 pub mod agent_profiles;
 pub mod agent_runs;
 pub mod deep_links;
+pub mod environment;
 pub mod reviews;
 pub mod workspaces;
 

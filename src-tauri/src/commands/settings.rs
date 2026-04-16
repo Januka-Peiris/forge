@@ -21,3 +21,11 @@ pub fn save_repo_roots(
 pub fn resolve_git_repository_path(path: String) -> Result<String, String> {
     repo_scanner_service::resolve_git_repository_path(&path)
 }
+
+#[tauri::command]
+pub fn save_has_completed_env_check(
+    state: State<'_, AppState>,
+    completed: bool,
+) -> Result<AppSettings, String> {
+    settings_service::save_has_completed_env_check(&state, completed)
+}

@@ -4,7 +4,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
-import type { AgentProfile, AgentPromptEntry, ForgeWorkspaceConfig, PromptTemplate, TerminalOutputChunk, TerminalOutputEvent, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
+import type { AgentProfile, AgentPromptEntry, ForgeWorkspaceConfig, PromptTemplate, TerminalOutputChunk, TerminalOutputEvent, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceContextPreview, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
 import {
   attachWorkspaceTerminalSession,
   closeWorkspaceTerminalSessionById,
@@ -34,7 +34,7 @@ import {
   openWorkspacePort,
 } from '../../lib/tauri-api/workspace-ports';
 import { listWorkspacePromptTemplates } from '../../lib/tauri-api/prompt-templates';
-import { getWorkspaceAgentContext } from '../../lib/tauri-api/agent-context';
+import { getWorkspaceAgentContext, getWorkspaceContextPreview, refreshWorkspaceRepoContext } from '../../lib/tauri-api/agent-context';
 import { getWorkspaceHealth } from '../../lib/tauri-api/workspace-health';
 import { getWorkspaceReadiness } from '../../lib/tauri-api/workspace-readiness';
 import {
@@ -60,7 +60,6 @@ const profileLabels: Record<TerminalProfile, string> = {
   claude_code: 'Claude',
 };
 
-const MAX_VISIBLE_PANES = 3;
 const OUTPUT_RETENTION_CHUNKS = 1200;
 const AGENT_COMPOSER_HEIGHT_KEY = 'forge:agent-composer-height';
 
@@ -79,6 +78,8 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   const [promptTemplateWarning, setPromptTemplateWarning] = useState<string | null>(null);
   const [promptEntries, setPromptEntries] = useState<AgentPromptEntry[]>([]);
   const [agentContext, setAgentContext] = useState<WorkspaceAgentContext | null>(null);
+  const [contextPreview, setContextPreview] = useState<WorkspaceContextPreview | null>(null);
+  const [contextBusy, setContextBusy] = useState(false);
   const [workspaceHealth, setWorkspaceHealth] = useState<WorkspaceHealth | null>(null);
   const [workspaceReadiness, setWorkspaceReadiness] = useState<WorkspaceReadiness | null>(null);
   const [agentProfiles, setAgentProfiles] = useState<AgentProfile[]>([]);
@@ -100,6 +101,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   const nextSeqRef = useRef<Record<string, number>>({});
   const pendingOutputRef = useRef<Record<string, TerminalOutputChunk[]>>({});
   const outputFlushRafRef = useRef<number | null>(null);
+  const focusedIdRef = useRef<string | null>(null);
   const metadataPollTickRef = useRef(0);
   /** Serializes agent prompt writes so rapid Enter / Send queues instead of racing attach + PTY. */
   const promptSendChainRef = useRef(Promise.resolve());
@@ -151,6 +153,10 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     window.localStorage.setItem(AGENT_COMPOSER_HEIGHT_KEY, String(composerHeight));
   }, [composerHeight]);
 
+  useEffect(() => {
+    focusedIdRef.current = focusedId;
+  }, [focusedId]);
+
   const appendOutput = useCallback((sessionId: string, chunks: TerminalOutputChunk[], reset = false) => {
     if (chunks.length === 0 && !reset) return;
     setOutputs((current) => ({
@@ -182,7 +188,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     });
   }, []);
 
-  const refreshSessions = useCallback(async (attachDisplayed = false, fetchOutput = attachDisplayed) => {
+  const refreshSessions = useCallback(async (attachDisplayed = false, fetchOutput = attachDisplayed, preferredFocusId?: string | null) => {
     if (!workspaceId) return;
     setError(null);
     try {
@@ -190,29 +196,29 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         listWorkspaceVisibleTerminalSessions(workspaceId),
         listWorkspaceTerminalSessions(workspaceId),
       ]);
-      const panes = visible.slice(0, MAX_VISIBLE_PANES);
-      setVisibleSessions(panes);
-      setAllSessions(history);
-      setFocusedId((current) => current && panes.some((session) => session.id === current) ? current : panes[0]?.id ?? null);
+      const desiredFocusId = preferredFocusId ?? focusedIdRef.current;
+      const nextFocusedId = desiredFocusId && visible.some((session) => session.id === desiredFocusId)
+        ? desiredFocusId
+        : visible[0]?.id ?? null;
+      const focused = nextFocusedId ? visible.find((session) => session.id === nextFocusedId) ?? null : null;
 
-      if (attachDisplayed) {
-        for (const session of panes) {
-          if (session.status === 'running') {
-            await attachWorkspaceTerminalSession({ workspaceId, sessionId: session.id }).catch(() => undefined);
-          }
-        }
+      setVisibleSessions(visible);
+      setAllSessions(history);
+      focusedIdRef.current = nextFocusedId;
+      setFocusedId(nextFocusedId);
+
+      if (attachDisplayed && focused?.status === 'running') {
+        await attachWorkspaceTerminalSession({ workspaceId, sessionId: focused.id }).catch(() => undefined);
       }
 
-      if (fetchOutput) {
-        for (const session of panes) {
-          const output = await getWorkspaceTerminalOutputForSession(
-            workspaceId,
-            session.id,
-            nextSeqRef.current[session.id] ?? 0,
-          );
-          nextSeqRef.current[session.id] = output.nextSeq;
-          appendOutput(session.id, output.chunks);
-        }
+      if (fetchOutput && focused) {
+        const output = await getWorkspaceTerminalOutputForSession(
+          workspaceId,
+          focused.id,
+          nextSeqRef.current[focused.id] ?? 0,
+        );
+        nextSeqRef.current[focused.id] = output.nextSeq;
+        appendOutput(focused.id, output.chunks);
       }
     } catch (err) {
       setActionError(err);
@@ -323,6 +329,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     }
     promptSendChainRef.current = Promise.resolve();
     hadSentPromptRef.current = false;
+    focusedIdRef.current = null;
     setOutputs({});
     setVisibleSessions([]);
     setAllSessions([]);
@@ -332,6 +339,8 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     setPromptTemplateWarning(null);
     setPromptEntries([]);
     setAgentContext(null);
+    setContextPreview(null);
+    setContextBusy(false);
     setWorkspaceHealth(null);
     setWorkspaceReadiness(null);
     setFocusedId(null);
@@ -399,8 +408,9 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     try {
       const session = await createWorkspaceTerminal({ workspaceId, kind, profile, profileId, title });
       nextSeqRef.current[session.id] = 0;
+      focusedIdRef.current = session.id;
       setFocusedId(session.id);
-      await refreshSessions(true);
+      await refreshSessions(true, true, session.id);
       await refreshHealth();
       await refreshReadiness();
     } catch (err) {
@@ -418,9 +428,10 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       const sessions = await runWorkspaceSetup(workspaceId);
       if (sessions[0]) {
         nextSeqRef.current[sessions[0].id] = 0;
+        focusedIdRef.current = sessions[0].id;
         setFocusedId(sessions[0].id);
       }
-      await refreshSessions(true);
+      await refreshSessions(true, true, sessions[0]?.id ?? null);
       await refreshHealth();
       await refreshReadiness();
     } catch (err) {
@@ -439,8 +450,9 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         ? await restartWorkspaceRunCommand(workspaceId, index)
         : await startWorkspaceRunCommand(workspaceId, index);
       nextSeqRef.current[session.id] = 0;
+      focusedIdRef.current = session.id;
       setFocusedId(session.id);
-      await refreshSessions(true);
+      await refreshSessions(true, true, session.id);
       await refreshHealth();
       await refreshReadiness();
     } catch (err) {
@@ -543,23 +555,78 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     });
   };
 
+  const previewRepoContext = async () => {
+    if (!workspaceId) return;
+    setContextBusy(true);
+    setError(null);
+    try {
+      setContextPreview(await getWorkspaceContextPreview(workspaceId));
+    } catch (err) {
+      setActionError(err);
+      setContextPreview(null);
+    } finally {
+      setContextBusy(false);
+    }
+  };
+
+  const refreshRepoContext = async () => {
+    if (!workspaceId) return;
+    setContextBusy(true);
+    setError(null);
+    try {
+      setContextPreview(await refreshWorkspaceRepoContext(workspaceId));
+    } catch (err) {
+      setActionError(err);
+    } finally {
+      setContextBusy(false);
+    }
+  };
+
+  const injectRepoContext = async () => {
+    if (!workspaceId) return;
+    let preview = contextPreview;
+    if (!preview) {
+      setContextBusy(true);
+      setError(null);
+      try {
+        preview = await getWorkspaceContextPreview(workspaceId);
+        setContextPreview(preview);
+      } catch (err) {
+        setActionError(err);
+        setContextBusy(false);
+        return;
+      } finally {
+        setContextBusy(false);
+      }
+    }
+    if (!preview?.promptContext.trim()) return;
+    setPromptInput((current) => {
+      if (current.includes('Forge repo context:')) return current;
+      const suffix = current.trim().length > 0 ? `\n\n${current.trim()}` : '';
+      return `${preview.promptContext}${suffix}`;
+    });
+  };
+
   const attachTerminal = async (session: TerminalSession) => {
     if (!workspaceId) return;
     setBusy(true);
     setError(null);
     try {
-      await measureAsync('terminal:attach', () => attachWorkspaceTerminalSession({ workspaceId, sessionId: session.id }));
+      focusedIdRef.current = session.id;
+      setFocusedId(session.id);
+      if (session.status === 'running') {
+        await measureAsync('terminal:attach', () => attachWorkspaceTerminalSession({ workspaceId, sessionId: session.id }));
+      }
       nextSeqRef.current[session.id] = 0;
       const output = await getWorkspaceTerminalOutputForSession(workspaceId, session.id, 0);
       nextSeqRef.current[session.id] = output.nextSeq;
       appendOutput(session.id, output.chunks, true);
-      setFocusedId(session.id);
-      await refreshSessions(false);
+      await refreshSessions(false, false, session.id);
       await refreshHealth();
       await refreshReadiness();
     } catch (err) {
       setActionError(err);
-      await refreshSessions(false);
+      await refreshSessions(false, false, session.id);
     } finally {
       setBusy(false);
     }
@@ -713,14 +780,14 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
             </span>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            <button disabled={busy} onClick={() => {
-              const profile = agentProfiles.find((item) => item.id === selectedProfileId) ?? agentProfiles.find((item) => item.agent !== 'shell');
-              void createTerminal('agent', (profile?.agent ?? 'claude_code') as TerminalProfile, profile?.label ?? 'Agent', profile?.id);
-            }} className="rounded-lg border border-forge-orange/30 bg-forge-orange/10 px-2.5 py-1.5 text-[11px] font-semibold text-forge-orange hover:bg-forge-orange/20 disabled:opacity-50">
-              Start {agentProfiles.find((item) => item.id === selectedProfileId)?.label ?? 'Agent'}
-            </button>
             <button disabled={busy} onClick={() => void createTerminal('shell', 'shell', 'Shell')} className="rounded-lg border border-forge-border bg-white/5 px-2.5 py-1.5 text-[11px] font-semibold text-forge-text/85 hover:bg-white/10 disabled:opacity-50">
-              Shell
+              New Shell
+            </button>
+            <button disabled={busy} onClick={() => void createTerminal('agent', 'codex', 'Codex')} className="rounded-lg border border-forge-blue/30 bg-forge-blue/10 px-2.5 py-1.5 text-[11px] font-semibold text-forge-blue hover:bg-forge-blue/20 disabled:opacity-50">
+              New Codex
+            </button>
+            <button disabled={busy} onClick={() => void createTerminal('agent', 'claude_code', 'Claude')} className="rounded-lg border border-forge-orange/30 bg-forge-orange/10 px-2.5 py-1.5 text-[11px] font-semibold text-forge-orange hover:bg-forge-orange/20 disabled:opacity-50">
+              New Claude
             </button>
             {/* Overflow menu */}
             <div ref={overflowRef} className="relative">
@@ -734,10 +801,24 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                 <div className="absolute right-0 top-full z-20 mt-1 min-w-[160px] overflow-hidden rounded-lg border border-forge-border bg-forge-surface shadow-lg">
                   <button
                     disabled={busy}
-                    onClick={() => { void createTerminal('shell', 'shell', 'Split Shell'); setShowOverflow(false); }}
+                    onClick={() => { void createTerminal('shell', 'shell', 'Shell'); setShowOverflow(false); }}
                     className="flex w-full items-center gap-2 px-3 py-2 text-[11px] text-forge-text/85 hover:bg-white/5 disabled:opacity-50"
                   >
-                    Split Shell
+                    New shell tab
+                  </button>
+                  <button
+                    disabled={busy}
+                    onClick={() => { void createTerminal('agent', 'codex', 'Codex'); setShowOverflow(false); }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-[11px] text-forge-text/85 hover:bg-white/5 disabled:opacity-50"
+                  >
+                    New Codex tab
+                  </button>
+                  <button
+                    disabled={busy}
+                    onClick={() => { void createTerminal('agent', 'claude_code', 'Claude'); setShowOverflow(false); }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-[11px] text-forge-text/85 hover:bg-white/5 disabled:opacity-50"
+                  >
+                    New Claude tab
                   </button>
                   <button
                     disabled={!focusedSession}
@@ -897,21 +978,57 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
               </div>
             </div>
           </div>
-        ) : (
-          visibleSessions.map((session) => (
+        ) : focusedSession ? (
+          <>
+            <div className="flex shrink-0 items-center gap-1 overflow-x-auto rounded-xl border border-forge-border bg-forge-surface/85 p-1">
+              {visibleSessions.map((session) => {
+                const title = session.title || profileLabels[session.profile as TerminalProfile] || session.profile;
+                const active = focusedSession.id === session.id;
+                return (
+                  <button
+                    key={session.id}
+                    type="button"
+                    onClick={() => void attachTerminal(session)}
+                    className={`group flex max-w-[220px] shrink-0 items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition-colors ${active ? 'border-forge-orange/40 bg-forge-orange/10 text-forge-text' : 'border-transparent bg-transparent text-forge-muted hover:bg-white/5 hover:text-forge-text/85'}`}
+                    title={`${title} · ${session.status} · ${session.cwd}`}
+                  >
+                    <span className="truncate text-[11px] font-semibold">{title}</span>
+                    <span className={`rounded-full border px-1.5 py-0.5 text-[8px] font-bold uppercase ${terminalStatusBadgeClass(session)}`}>
+                      {session.stale ? 'stale' : session.status}
+                    </span>
+                    <span
+                      role="button"
+                      tabIndex={-1}
+                      onClick={(event) => { event.stopPropagation(); void closeTerminal(session.id); }}
+                      className="rounded p-0.5 text-forge-muted opacity-70 hover:bg-white/10 hover:text-forge-text group-hover:opacity-100"
+                      title={`Close ${title}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
             <TerminalPane
-              key={session.id}
-              session={session}
-              chunks={outputs[session.id] ?? []}
-              focused={focusedSession?.id === session.id}
-              onFocus={() => setFocusedId(session.id)}
-              onAttach={() => void attachTerminal(session)}
-              onStop={() => void stopTerminal(session.id)}
-              onClose={() => void closeTerminal(session.id)}
-              onData={(data) => void writeWorkspaceTerminalSessionInput(session.id, data).catch(setActionError)}
-              onResize={(cols, rows) => void resizeWorkspaceTerminalSession(session.id, cols, rows).catch(() => undefined)}
+              key={focusedSession.id}
+              session={focusedSession}
+              chunks={outputs[focusedSession.id] ?? []}
+              focused
+              onFocus={() => {
+                focusedIdRef.current = focusedSession.id;
+                setFocusedId(focusedSession.id);
+              }}
+              onAttach={() => void attachTerminal(focusedSession)}
+              onStop={() => void stopTerminal(focusedSession.id)}
+              onClose={() => void closeTerminal(focusedSession.id)}
+              onData={(data) => void writeWorkspaceTerminalSessionInput(focusedSession.id, data).catch(setActionError)}
+              onResize={(cols, rows) => void resizeWorkspaceTerminalSession(focusedSession.id, cols, rows).catch(() => undefined)}
             />
-          ))
+          </>
+        ) : (
+          <div className="flex h-full items-center justify-center rounded-xl border border-forge-border bg-forge-bg p-8 text-center text-[12px] text-forge-muted">
+            No terminal tab selected.
+          </div>
         )}
       </div>
 
@@ -993,10 +1110,48 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                 <Link2 className="inline h-3 w-3" /> Insert linked context ({agentContext.linkedWorktrees.length})
               </button>
             )}
+            <button disabled={contextBusy} onClick={() => void previewRepoContext()} className="rounded-md border border-forge-border bg-white/5 px-2 py-1 text-[10px] font-semibold text-forge-muted hover:bg-white/10 disabled:opacity-50">
+              <FileText className="inline h-3 w-3" /> {contextBusy ? 'Loading context…' : 'Preview context'}
+            </button>
+            <button disabled={contextBusy} onClick={() => void injectRepoContext()} className="rounded-md border border-forge-green/25 bg-forge-green/10 px-2 py-1 text-[10px] font-semibold text-forge-green hover:bg-forge-green/15 disabled:opacity-50">
+              <Link2 className="inline h-3 w-3" /> Insert repo context
+            </button>
+            <button disabled={contextBusy} onClick={() => void refreshRepoContext()} title="Refresh .forge/context repo map" className="rounded-md border border-forge-border bg-white/5 px-2 py-1 text-[10px] font-semibold text-forge-muted hover:bg-white/10 disabled:opacity-50">
+              <RefreshCw className={`inline h-3 w-3 ${contextBusy ? 'animate-spin' : ''}`} /> Refresh map
+            </button>
             {promptTemplateWarning && (
               <span className="text-[10px] text-forge-yellow">{promptTemplateWarning}</span>
             )}
           </div>
+
+          {contextPreview && (
+            <div className="mb-2 rounded-lg border border-forge-border bg-forge-bg/80 p-2 text-[10px] text-forge-muted">
+              <div className="mb-1 flex flex-wrap items-center gap-2">
+                <span className="font-bold uppercase tracking-widest text-forge-text">Context being sent</span>
+                <span className={`rounded-full border px-1.5 py-0.5 ${contextPreview.status === 'fresh' ? 'border-forge-green/25 bg-forge-green/10 text-forge-green' : 'border-forge-yellow/25 bg-forge-yellow/10 text-forge-yellow'}`}>
+                  {contextPreview.status}
+                </span>
+                <span>{contextPreview.defaultBranch}@{contextPreview.commitHash.slice(0, 8)}</span>
+                <span>{contextPreview.approxChars.toLocaleString()} / {contextPreview.maxChars.toLocaleString()} chars</span>
+                {contextPreview.trimmed && <span className="text-forge-yellow">trimmed</span>}
+              </div>
+              {contextPreview.warning && <div className="mb-1 text-forge-yellow">{contextPreview.warning}</div>}
+              <div className="flex flex-wrap gap-1">
+                {contextPreview.items.slice(0, 18).map((item, index) => (
+                  <span
+                    key={`${item.kind}-${item.path ?? item.label}-${index}`}
+                    title={`${item.path ?? item.label} · ${item.chars.toLocaleString()} chars${item.trimmed ? ' · trimmed' : ''}`}
+                    className={`max-w-[220px] truncate rounded border px-1.5 py-0.5 ${item.included ? 'border-forge-blue/20 bg-forge-blue/10 text-forge-blue' : 'border-forge-border bg-white/5 text-forge-muted line-through'}`}
+                  >
+                    {item.label}{item.trimmed ? ' …' : ''}
+                  </span>
+                ))}
+                {contextPreview.items.length > 18 && (
+                  <span className="rounded border border-forge-border bg-white/5 px-1.5 py-0.5">+{contextPreview.items.length - 18} more</span>
+                )}
+              </div>
+            </div>
+          )}
 
           <PromptQueueStrip
             entries={promptEntries}
@@ -1260,6 +1415,13 @@ function WorkspacePortsStrip({
   );
 }
 
+function terminalStatusBadgeClass(session: TerminalSession) {
+  if (session.stale) return 'border-forge-yellow/25 bg-forge-yellow/10 text-forge-yellow';
+  if (session.status === 'running') return 'border-forge-green/25 bg-forge-green/10 text-forge-green';
+  if (session.status === 'failed' || session.status === 'interrupted') return 'border-forge-red/25 bg-forge-red/10 text-forge-red';
+  return 'border-forge-border bg-white/5 text-forge-muted';
+}
+
 function TerminalPane({
   session,
   chunks,
@@ -1357,7 +1519,7 @@ function TerminalPane({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="truncate text-[12px] font-bold text-forge-text">{title}</span>
-            <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase ${running ? 'border-forge-green/25 bg-forge-green/10 text-forge-green' : session.stale ? 'border-forge-yellow/25 bg-forge-yellow/10 text-forge-yellow' : 'border-forge-border bg-white/5 text-forge-muted'}`}>{session.stale ? 'stale' : session.status}</span>
+            <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase ${terminalStatusBadgeClass(session)}`}>{session.stale ? 'stale' : session.status}</span>
             <span className="rounded-full border border-forge-border bg-white/5 px-1.5 py-0.5 text-[9px] uppercase text-forge-muted">{session.backend}</span>
           </div>
           <p className="mt-0.5 truncate font-mono text-[10px] text-forge-text/82">{session.cwd}</p>

@@ -88,18 +88,18 @@ impl Database {
     pub fn prune_old_data(&self) -> Result<(), String> {
         self.with_connection_mut(|connection| {
             let transaction = connection.transaction()?;
-            
+
             // 7-day TTL for heavy tables
             transaction.execute(
                 "DELETE FROM activity_items WHERE created_at < datetime('now', '-7 days')",
                 [],
             )?;
-            
+
             transaction.execute(
                 "DELETE FROM terminal_output_chunks WHERE created_at < datetime('now', '-7 days')",
                 [],
             )?;
-            
+
             transaction.execute(
                 "DELETE FROM workspace_run_logs WHERE created_at < datetime('now', '-7 days')",
                 [],
@@ -110,9 +110,8 @@ impl Database {
         })?;
 
         // VACUUM must run outside a transaction
-        self.with_connection(|connection| {
-            connection.execute("VACUUM", [])
-        }).map_err(|err| format!("Failed to vacuum database: {err}"))?;
+        self.with_connection(|connection| connection.execute("VACUUM", []))
+            .map_err(|err| format!("Failed to vacuum database: {err}"))?;
 
         Ok(())
     }

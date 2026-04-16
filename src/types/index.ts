@@ -15,7 +15,7 @@ export type {
   RepositoryWorkspaceOptions,
 } from './workspace';
 export { toWorkspace } from './workspace';
-export type { AgentContextWorktree, WorkspaceAgentContext } from './agent-context';
+export type { AgentContextWorktree, RepoMap, RepoMapEntry, RepoMapMeta, WorkspaceAgentContext, WorkspaceContextItem, WorkspaceContextPreview } from './agent-context';
 export type { AgentProfile } from './agent-profile';
 export type { ReviewItem } from './review';
 export type { MarkWorkspaceFileReviewedInput, QueueReviewAgentPromptInput, QueueReviewAgentPromptResult, ReviewCockpitFile, WorkspaceFileReviewState, WorkspacePrComment, WorkspaceReviewCockpit } from './review-cockpit';
@@ -29,6 +29,7 @@ export type { ReviewFileStatus, WorkspaceChangedFile, WorkspaceFileDiff } from '
 export type { AgentRunStatus, AgentRunStreamType, AgentRunType, StartWorkspaceRunInput, WorkspaceRun, WorkspaceRunLog } from './agent-run';
 export type { DiscoveredRepository, DiscoveredWorktree, ScanRepositoriesResult } from './repository';
 export type { AppSettings, SaveRepoRootsInput } from './settings';
+export type { EnvironmentCheckItem, EnvironmentCheckStatus } from './environment';
 export type { WorkspaceAttention, WorkspaceAttentionStatus } from './workspace-attention';
 export type { WorkspaceHealth, WorkspaceTerminalHealth } from './workspace-health';
 export type { WorkspaceReadiness } from './workspace-readiness';

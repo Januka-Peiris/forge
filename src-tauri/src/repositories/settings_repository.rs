@@ -3,6 +3,7 @@ use rusqlite::{params, OptionalExtension};
 use crate::db::Database;
 
 const REPO_ROOTS_KEY: &str = "repo_roots";
+const ENV_CHECK_KEY: &str = "has_completed_env_check";
 
 pub fn get_repo_roots(db: &Database) -> Result<Vec<String>, String> {
     db.with_connection(|connection| {
@@ -48,7 +49,7 @@ fn normalize_repo_roots(repo_roots: &[String]) -> Vec<String> {
         .iter()
         .map(|root| root.trim())
         .filter(|root| !root.is_empty())
-        .map(|root| expand_home(root))
+        .map(expand_home)
         .collect::<Vec<_>>();
 
     roots.sort();
@@ -70,4 +71,40 @@ fn expand_home(path: &str) -> String {
     }
 
     path.to_string()
+}
+
+pub fn get_has_completed_env_check(db: &Database) -> Result<bool, String> {
+    db.with_connection(|connection| {
+        let value: Option<String> = connection
+            .query_row(
+                "SELECT value FROM settings WHERE key = ?1",
+                params![ENV_CHECK_KEY],
+                |row| row.get(0),
+            )
+            .optional()?;
+
+        Ok(value
+            .and_then(|json| serde_json::from_str::<bool>(&json).ok())
+            .unwrap_or(false))
+    })
+}
+
+pub fn save_has_completed_env_check(db: &Database, completed: bool) -> Result<bool, String> {
+    let value = serde_json::to_string(&completed)
+        .map_err(|err| format!("Failed to serialize environment check flag: {err}"))?;
+
+    db.with_connection(|connection| {
+        connection.execute(
+            r#"
+            INSERT INTO settings (key, value, updated_at)
+            VALUES (?1, ?2, CURRENT_TIMESTAMP)
+            ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value,
+                updated_at = CURRENT_TIMESTAMP
+            "#,
+            params![ENV_CHECK_KEY, value],
+        )?;
+
+        Ok(completed)
+    })
 }

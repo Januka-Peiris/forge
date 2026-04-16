@@ -1,14 +1,15 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FolderOpen, GitBranch, RefreshCw, Save, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, FolderOpen, GitBranch, RefreshCw, Save, Trash2 } from 'lucide-react';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
 import { DetailPanel } from './components/detail/DetailPanel';
 import { Sidebar, type NavView } from './components/layout/Sidebar';
 import { WorkspaceTerminal } from './components/terminal/WorkspaceTerminal';
 import { removeRepository, scanRepositories } from './lib/tauri-api/repositories';
-import { getSettings, resolveGitRepositoryPath, saveRepoRoots } from './lib/tauri-api/settings';
+import { getSettings, resolveGitRepositoryPath, saveHasCompletedEnvCheck, saveRepoRoots } from './lib/tauri-api/settings';
 import { listActivity } from './lib/tauri-api/activity';
 import { openDeepLink } from './lib/tauri-api/deep-links';
+import { checkEnvironment } from './lib/tauri-api/environment';
 import { listWorkspaceAttention, markWorkspaceAttentionRead } from './lib/tauri-api/workspace-attention';
 import { formatCursorOpenError } from './lib/ui-errors';
 import { forgeLog, forgeWarn } from './lib/forge-log';
@@ -24,7 +25,7 @@ import {
   openInCursor,
   openWorktreeInCursor,
 } from './lib/tauri-api/workspaces';
-import type { ActivityItem, AppSettings, CreateWorkspaceInput, DiscoveredRepository, TerminalOutputEvent, Workspace, WorkspaceAttention } from './types';
+import type { ActivityItem, AppSettings, CreateWorkspaceInput, DiscoveredRepository, EnvironmentCheckItem, TerminalOutputEvent, Workspace, WorkspaceAttention } from './types';
 
 
 const APP_BOOT_MARK = 'forge:app-boot';
@@ -38,6 +39,7 @@ const SELECTED_WORKSPACE_KEY = 'forge:selected-workspace-id';
 const ARCHIVED_WORKSPACES_KEY = 'forge:archived-workspace-ids';
 const SIDEBAR_WIDTH_KEY = 'forge:sidebar-width';
 const DETAIL_PANEL_WIDTH_KEY = 'forge:detail-panel-width';
+const DETAIL_PANEL_COLLAPSED_KEY = 'forge:detail-panel-collapsed';
 
 interface AttentionToast {
   id: string;
@@ -65,6 +67,65 @@ function LoadingView() {
       <div>
         <div className="mx-auto mb-3 h-8 w-8 rounded-full border-2 border-forge-border border-t-forge-orange animate-spin" />
         <p className="text-[13px] font-medium text-forge-muted">Loading Forge backend state…</p>
+      </div>
+    </div>
+  );
+}
+
+interface EnvironmentSetupModalProps {
+  items: EnvironmentCheckItem[];
+  busy: boolean;
+  onContinue: () => void;
+  onRerun: () => void;
+}
+
+function EnvironmentSetupModal({ items, busy, onContinue, onRerun }: EnvironmentSetupModalProps) {
+  const copyCommand = async (command: string) => {
+    await navigator.clipboard?.writeText(command);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-2xl">
+        <div className="mb-3">
+          <h2 className="text-[16px] font-bold text-forge-text">Environment Setup</h2>
+          <p className="mt-1 text-[12px] text-forge-muted">Forge checked your local tools. Missing tools will not block app usage.</p>
+        </div>
+        <div className="space-y-2">
+          {items.map((item) => (
+            <div key={item.binary} className="rounded-xl border border-forge-border bg-forge-bg/80 px-3 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className={item.status === 'ok' ? 'text-forge-green' : item.status === 'missing' ? 'text-forge-red' : 'text-forge-yellow'}>
+                    {item.status === 'ok' ? '✓' : item.status === 'missing' ? '✗' : '?'}
+                  </span>
+                  <span className="text-[13px] font-semibold text-forge-text">{item.name}</span>
+                  {item.optional && <span className="rounded-full border border-forge-border px-1.5 py-0.5 text-[9px] text-forge-muted">optional</span>}
+                </div>
+                <span className="text-[10px] uppercase tracking-widest text-forge-muted">{item.status}</span>
+              </div>
+              {item.status !== 'ok' && (
+                <div className="mt-2 flex items-center gap-2 rounded-lg border border-forge-border bg-black/20 px-2 py-1.5">
+                  <span className="text-[11px] text-forge-muted">Run:</span>
+                  <code className="flex-1 truncate text-[11px] text-forge-text">{item.fix}</code>
+                  <button
+                    type="button"
+                    onClick={() => void copyCommand(item.fix)}
+                    className="rounded-md border border-forge-border bg-white/5 px-2 py-1 text-[10px] font-semibold text-forge-muted hover:bg-white/10"
+                  >
+                    <Copy className="inline h-3 w-3" /> Copy
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" onClick={onContinue} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-[12px] font-semibold text-forge-muted hover:bg-white/10">Continue anyway</button>
+          <button type="button" disabled={busy} onClick={onRerun} className="rounded-lg border border-forge-orange/30 bg-forge-orange/10 px-3 py-2 text-[12px] font-semibold text-forge-orange hover:bg-forge-orange/20 disabled:opacity-50">
+            {busy ? 'Checking…' : 'Re-run checks'}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -142,7 +203,7 @@ function SettingsView({
       const result = await scanRepositories();
       setRepositories(result.repositories);
       setWarnings(result.warnings);
-      onSettingsChange({ repoRoots: result.repoRoots, discoveredRepositories: result.repositories });
+      onSettingsChange({ repoRoots: result.repoRoots, discoveredRepositories: result.repositories, hasCompletedEnvCheck: settings?.hasCompletedEnvCheck ?? false });
       setMessage(`Added repository root: ${toplevel}. Scan complete: ${result.repositories.length} repositories.`);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : String(err));
@@ -177,7 +238,7 @@ function SettingsView({
       const result = await scanRepositories();
       setRepositories(result.repositories);
       setWarnings(result.warnings);
-      onSettingsChange({ repoRoots: result.repoRoots, discoveredRepositories: result.repositories });
+      onSettingsChange({ repoRoots: result.repoRoots, discoveredRepositories: result.repositories, hasCompletedEnvCheck: settings?.hasCompletedEnvCheck ?? false });
       setMessage(`Scan complete: ${result.repositories.length} repositories discovered.`);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : String(err));
@@ -348,6 +409,9 @@ export default function App() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [reviewTargetCommentId, setReviewTargetCommentId] = useState<string | null>(null);
   const [settingsState, setSettingsState] = useState<AppSettings | null>(null);
+  const [environmentItems, setEnvironmentItems] = useState<EnvironmentCheckItem[]>([]);
+  const [environmentModalOpen, setEnvironmentModalOpen] = useState(false);
+  const [environmentCheckBusy, setEnvironmentCheckBusy] = useState(false);
   const [linkedWorktreesByWorkspaceId, setLinkedWorktreesByWorkspaceId] = useState<Record<string, { worktreeId: string; repoId: string; repoName: string; path: string; branch?: string; head?: string }[]>>({});
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const raw = window.localStorage.getItem(SIDEBAR_WIDTH_KEY);
@@ -359,6 +423,11 @@ export default function App() {
     const parsed = raw ? Number(raw) : NaN;
     return Number.isFinite(parsed) ? Math.min(520, Math.max(240, parsed)) : 280;
   });
+  const COLLAPSED_RAIL_WIDTH = 44;
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [detailPanelCollapsed, setDetailPanelCollapsed] = useState<boolean>(() =>
+    window.localStorage.getItem(DETAIL_PANEL_COLLAPSED_KEY) === 'true',
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const attentionRefreshTimerRef = useRef<number | null>(null);
@@ -366,6 +435,7 @@ export default function App() {
   const workspaceSwitchMarkRef = useRef<string | null>(null);
   const selectedIdRef = useRef<string | null>(selectedId);
   const workspacesRef = useRef<Workspace[]>([]);
+  const firstRunEnvCheckStartedRef = useRef(false);
 
   useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
   useEffect(() => { workspacesRef.current = workspaces; }, [workspaces]);
@@ -381,6 +451,17 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  useEffect(() => {
+    if (view !== 'reviews') return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setView('workspaces');
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [view]);
+
   /** Fresh repo list whenever the new-workspace modal opens (avoids stale worktrees; does not create workspaces). */
   useEffect(() => {
     if (!modalOpen) return;
@@ -391,7 +472,11 @@ export default function App() {
         if (cancelled) return;
         setSettingsState((current) =>
           current
-            ? { ...current, repoRoots: result.repoRoots, discoveredRepositories: result.repositories }
+            ? {
+                ...current,
+                repoRoots: result.repoRoots,
+                discoveredRepositories: result.repositories,
+              }
             : current,
         );
       } catch (err) {
@@ -429,6 +514,41 @@ export default function App() {
         .catch((err) => forgeWarn('attention', 'mark read failed', { err, workspaceId }));
     }, 300);
   }, [scheduleAttentionLoad]);
+
+  const runEnvironmentCheck = useCallback(async (showModal = true) => {
+    setEnvironmentCheckBusy(true);
+    try {
+      const items = await checkEnvironment();
+      setEnvironmentItems(items);
+      if (showModal) setEnvironmentModalOpen(true);
+      return items;
+    } catch (err) {
+      forgeWarn('environment', 'check failed', { err });
+      const unknownItems: EnvironmentCheckItem[] = ['git', 'tmux', 'codex', 'claude', 'gh'].map((binary) => ({
+        name: binary === 'codex' ? 'codex CLI' : binary === 'claude' ? 'claude CLI' : binary === 'gh' ? 'GitHub CLI' : binary,
+        binary,
+        status: 'unknown',
+        fix: `brew install ${binary}`,
+        optional: binary === 'gh',
+        path: null,
+      }));
+      setEnvironmentItems(unknownItems);
+      if (showModal) setEnvironmentModalOpen(true);
+      return unknownItems;
+    } finally {
+      setEnvironmentCheckBusy(false);
+    }
+  }, []);
+
+  const completeFirstRunEnvironmentCheck = useCallback(async () => {
+    setEnvironmentModalOpen(false);
+    try {
+      const nextSettings = await saveHasCompletedEnvCheck(true);
+      setSettingsState(nextSettings);
+    } catch (err) {
+      forgeWarn('environment', 'failed to persist completion flag', { err });
+    }
+  }, []);
 
   useEffect(() => () => {
     if (attentionRefreshTimerRef.current !== null) window.clearTimeout(attentionRefreshTimerRef.current);
@@ -480,6 +600,16 @@ export default function App() {
   useEffect(() => {
     void loadBackendState();
   }, [loadBackendState]);
+
+  useEffect(() => {
+    if (!settingsState || settingsState.hasCompletedEnvCheck || firstRunEnvCheckStartedRef.current) return;
+    firstRunEnvCheckStartedRef.current = true;
+    void runEnvironmentCheck(true).finally(() => {
+      void saveHasCompletedEnvCheck(true)
+        .then((nextSettings) => setSettingsState(nextSettings))
+        .catch((err) => forgeWarn('environment', 'failed to persist first-run completion', { err }));
+    });
+  }, [runEnvironmentCheck, settingsState]);
 
   const handleDeepLinkUrl = useCallback(async (url: string) => {
     setDeepLinkNotice(null);
@@ -579,6 +709,10 @@ export default function App() {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem(DETAIL_PANEL_WIDTH_KEY, String(detailPanelWidth));
   }, [detailPanelWidth]);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(DETAIL_PANEL_COLLAPSED_KEY, String(detailPanelCollapsed));
+  }, [detailPanelCollapsed]);
 
   const selected = useMemo(
     () => workspaces.find((w) => w.id === selectedId) ?? null,
@@ -703,6 +837,8 @@ export default function App() {
     event: React.MouseEvent<HTMLDivElement>,
     panel: 'left' | 'right',
   ) => {
+    if (panel === 'left' && sidebarCollapsed) return;
+    if (panel === 'right' && detailPanelCollapsed) return;
     event.preventDefault();
     const startX = event.clientX;
     const startWidth = panel === 'left' ? sidebarWidth : detailPanelWidth;
@@ -741,6 +877,7 @@ export default function App() {
             onSelectedPathChange={setSelectedReviewPath}
             targetCommentId={reviewTargetCommentId}
             onTargetCommentHandled={() => setReviewTargetCommentId(null)}
+            onBackToWorkspaces={() => setView('workspaces')}
           />
         </Suspense>
       );
@@ -750,38 +887,63 @@ export default function App() {
   };
 
   const isReviewView = view === 'reviews';
+  const effectiveSidebarWidth = sidebarCollapsed ? COLLAPSED_RAIL_WIDTH : sidebarWidth;
 
   return (
     <div className="h-[100dvh] flex flex-col overflow-hidden bg-forge-bg text-forge-text antialiased selection:bg-forge-orange/25">
       <div className="flex flex-1 min-h-0">
         {!isReviewView && (
-          <>
-            <div className="shrink-0 h-full" style={{ width: `${sidebarWidth}px` }}>
-              <Sidebar
-                activeView={view}
-                onNavigate={setView}
-                repositories={settingsState?.discoveredRepositories ?? []}
-                workspaces={workspaces}
-                archivedWorkspaceIds={archivedWorkspaceIds}
-                workspaceAttention={workspaceAttention}
-                selectedWorkspaceId={selectedId}
-                onSelectWorkspace={setSelectedId}
-                onDeleteWorkspace={(workspaceId) => void handleDeleteWorkspace(workspaceId)}
-                onRemoveRepository={(repositoryId) => void handleRemoveRepository(repositoryId)}
-                onNewWorkspace={(repositoryId) => {
-                  setModalRepositoryId(repositoryId);
-                  setBranchFromWorkspaceId(null);
-                  setModalOpen(true);
-                }}
-              />
-            </div>
+          sidebarCollapsed ? (
             <div
-              role="separator"
-              aria-label="Resize sidebar"
-              onMouseDown={(event) => startResize(event, 'left')}
-              className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-forge-border/70 active:bg-forge-orange/60"
-            />
-          </>
+              className="shrink-0 h-full flex flex-col items-center justify-start bg-forge-surface border-r border-forge-border"
+              style={{ width: `${COLLAPSED_RAIL_WIDTH}px` }}
+            >
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed(false)}
+                className="mt-2.5 rounded-md border border-forge-border bg-white/5 p-1 text-forge-muted hover:bg-white/10"
+                title="Expand sidebar"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="shrink-0 h-full relative" style={{ width: `${sidebarWidth}px` }}>
+                <button
+                  type="button"
+                  onClick={() => setSidebarCollapsed(true)}
+                  className="absolute top-2.5 right-2 z-[5] rounded-md border border-forge-border bg-white/5 p-1 text-forge-muted hover:bg-white/10"
+                  title="Collapse sidebar"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+                <Sidebar
+                  activeView={view}
+                  onNavigate={setView}
+                  repositories={settingsState?.discoveredRepositories ?? []}
+                  workspaces={workspaces}
+                  archivedWorkspaceIds={archivedWorkspaceIds}
+                  workspaceAttention={workspaceAttention}
+                  selectedWorkspaceId={selectedId}
+                  onSelectWorkspace={setSelectedId}
+                  onDeleteWorkspace={(workspaceId) => void handleDeleteWorkspace(workspaceId)}
+                  onRemoveRepository={(repositoryId) => void handleRemoveRepository(repositoryId)}
+                  onNewWorkspace={(repositoryId) => {
+                    setModalRepositoryId(repositoryId);
+                    setBranchFromWorkspaceId(null);
+                    setModalOpen(true);
+                  }}
+                />
+              </div>
+              <div
+                role="separator"
+                aria-label="Resize sidebar"
+                onMouseDown={(event) => startResize(event, 'left')}
+                className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-forge-border/70 active:bg-forge-orange/60"
+              />
+            </>
+          )
         )}
 
         <div className="flex flex-1 min-w-0 min-h-0">
@@ -801,45 +963,74 @@ export default function App() {
 
           {!isReviewView && (
             <>
-              <div
-                role="separator"
-                aria-label="Resize detail panel"
-                onMouseDown={(event) => startResize(event, 'right')}
-                className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-forge-border/70 active:bg-forge-orange/60"
-              />
-              <div className="relative z-[2] shrink-0 h-full shadow-forge-panel" style={{ width: `${detailPanelWidth}px` }}>
-                <DetailPanel
-                  workspace={selected}
-                  onOpenInCursor={() => void handleOpenInCursor()}
-                  isArchived={selected ? archivedWorkspaceIds.includes(selected.id) : false}
-                  onArchiveWorkspace={handleArchiveWorkspace}
-                  onDeleteWorkspace={selected ? () => void handleDeleteWorkspace(selected.id) : undefined}
-                  activityItems={selected ? activityItems.filter((item) => item.workspaceId === selected.id) : []}
-                  repositories={settingsState?.discoveredRepositories ?? []}
-                  linkedWorktrees={selected ? linkedWorktreesByWorkspaceId[selected.id] ?? [] : []}
-                  onAttachLinkedWorktree={(worktreeId) => {
-                    if (!selectedId) return;
-                    void attachWorkspaceLinkedWorktree(selectedId, worktreeId).then((linked) => {
-                      setLinkedWorktreesByWorkspaceId((current) => ({ ...current, [selectedId]: linked }));
-                    }).catch((err) => setError(err instanceof Error ? err.message : String(err)));
-                  }}
-                  onDetachLinkedWorktree={(worktreeId) => {
-                    if (!selectedId) return;
-                    void detachWorkspaceLinkedWorktree(selectedId, worktreeId).then((linked) => {
-                      setLinkedWorktreesByWorkspaceId((current) => ({ ...current, [selectedId]: linked }));
-                    }).catch((err) => setError(err instanceof Error ? err.message : String(err)));
-                  }}
-                  onOpenLinkedWorktreeInCursor={(path) => {
-                    void openWorktreeInCursor(path).catch((err) => window.alert(formatCursorOpenError(err)));
-                  }}
-                  onCreateChildWorkspace={() => {
-                    if (!selected) return;
-                    setModalRepositoryId(selected.repositoryId);
-                    setBranchFromWorkspaceId(selected.id);
-                    setModalOpen(true);
-                  }}
-                />
-              </div>
+              {!detailPanelCollapsed ? (
+                <>
+                  <div
+                    role="separator"
+                    aria-label="Resize detail panel"
+                    onMouseDown={(event) => startResize(event, 'right')}
+                    className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-forge-border/70 active:bg-forge-orange/60"
+                  />
+                  <div
+                    className="relative z-[2] shrink-0 h-full shadow-forge-panel"
+                    style={{ width: `${detailPanelWidth}px` }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setDetailPanelCollapsed(true)}
+                      className="absolute top-2.5 left-2 z-[5] rounded-md border border-forge-border bg-white/5 p-1 text-forge-muted hover:bg-white/10"
+                      title="Collapse detail panel"
+                    >
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                    <DetailPanel
+                      workspace={selected}
+                      onOpenInCursor={() => void handleOpenInCursor()}
+                      isArchived={selected ? archivedWorkspaceIds.includes(selected.id) : false}
+                      onArchiveWorkspace={handleArchiveWorkspace}
+                      onDeleteWorkspace={selected ? () => void handleDeleteWorkspace(selected.id) : undefined}
+                      activityItems={selected ? activityItems.filter((item) => item.workspaceId === selected.id) : []}
+                      repositories={settingsState?.discoveredRepositories ?? []}
+                      linkedWorktrees={selected ? linkedWorktreesByWorkspaceId[selected.id] ?? [] : []}
+                      onAttachLinkedWorktree={(worktreeId) => {
+                        if (!selectedId) return;
+                        void attachWorkspaceLinkedWorktree(selectedId, worktreeId).then((linked) => {
+                          setLinkedWorktreesByWorkspaceId((current) => ({ ...current, [selectedId]: linked }));
+                        }).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+                      }}
+                      onDetachLinkedWorktree={(worktreeId) => {
+                        if (!selectedId) return;
+                        void detachWorkspaceLinkedWorktree(selectedId, worktreeId).then((linked) => {
+                          setLinkedWorktreesByWorkspaceId((current) => ({ ...current, [selectedId]: linked }));
+                        }).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+                      }}
+                      onOpenLinkedWorktreeInCursor={(path) => {
+                        void openWorktreeInCursor(path).catch((err) => window.alert(formatCursorOpenError(err)));
+                      }}
+                      onCreateChildWorkspace={() => {
+                        if (!selected) return;
+                        setModalRepositoryId(selected.repositoryId);
+                        setBranchFromWorkspaceId(selected.id);
+                        setModalOpen(true);
+                      }}
+                    />
+                  </div>
+                </>
+              ) : (
+                <div
+                  className="shrink-0 h-full flex items-start justify-center bg-forge-surface border-l border-forge-border"
+                  style={{ width: `${COLLAPSED_RAIL_WIDTH}px` }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setDetailPanelCollapsed(false)}
+                    className="mt-2.5 rounded-md border border-forge-border bg-white/5 p-1 text-forge-muted hover:bg-white/10"
+                    title="Expand detail panel"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -864,8 +1055,18 @@ export default function App() {
               setReviewTargetCommentId(commentId);
               setView('reviews');
             }}
+            onCheckEnvironment={() => void runEnvironmentCheck(true)}
           />
         </Suspense>
+      )}
+
+      {environmentModalOpen && (
+        <EnvironmentSetupModal
+          items={environmentItems}
+          busy={environmentCheckBusy}
+          onContinue={() => void completeFirstRunEnvironmentCheck()}
+          onRerun={() => void runEnvironmentCheck(true)}
+        />
       )}
 
       {modalOpen && (
@@ -884,7 +1085,7 @@ export default function App() {
       )}
 
       {attentionToasts.length > 0 && (
-        <div className="pointer-events-none fixed bottom-4 z-50 flex w-[360px] flex-col gap-2" style={{ left: `${isReviewView ? 16 : sidebarWidth + 16}px` }}>
+        <div className="pointer-events-none fixed bottom-4 z-50 flex w-[360px] flex-col gap-2" style={{ left: `${effectiveSidebarWidth + 16}px` }}>
           {attentionToasts.map((toast) => (
             <button
               key={toast.id}
