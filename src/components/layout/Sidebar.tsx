@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ElementType } from 'react';
 import {
+  ChevronLeft,
   ClipboardCheck,
   Filter,
   GitBranch,
@@ -35,6 +36,7 @@ interface SidebarProps {
   onDeleteWorkspace: (workspaceId: string) => void;
   onRemoveRepository: (repositoryId: string) => void;
   onNewWorkspace: (repositoryId?: string) => void;
+  onCollapse?: () => void;
 }
 
 const navItems: { id: NavView; label: string; icon: ElementType }[] = [
@@ -57,6 +59,7 @@ export function Sidebar({
   onDeleteWorkspace,
   onRemoveRepository,
   onNewWorkspace,
+  onCollapse,
 }: SidebarProps) {
   const [filter, setFilter] = useState<'all' | 'active' | 'archived'>('all');
   const [sort, setSort] = useState<'recent' | 'name' | 'status'>('recent');
@@ -186,8 +189,8 @@ export function Sidebar({
 
   return (
     <aside className="w-full shrink-0 flex flex-col h-full bg-forge-surface border-r border-forge-border">
-      <div className="border-b border-forge-border px-4 py-5 pr-12 sm:px-5 sm:pr-14">
-        <div className="flex min-w-0 items-center">
+      <div className="border-b border-forge-border px-4 py-3 sm:px-5">
+        <div className="flex min-w-0 items-center gap-2">
           <img
             src="/brand/logo-word.png"
             alt="Forge"
@@ -195,12 +198,23 @@ export function Sidebar({
             height={1048}
             decoding="async"
             draggable={false}
-            className="block h-[52px] w-auto max-w-full object-contain object-left"
+            className="block h-[44px] w-auto max-w-full object-contain object-left"
           />
           {totalSpend && (
             <span className="text-[10px] font-mono text-forge-muted/70 shrink-0" title="Total estimated agent spend across all workspaces">
-              {totalSpend} total
+              {totalSpend}
             </span>
+          )}
+          <div className="flex-1" />
+          {onCollapse && (
+            <button
+              type="button"
+              onClick={onCollapse}
+              className="shrink-0 rounded-md border border-forge-border bg-forge-surface p-1 text-forge-muted hover:bg-forge-card hover:text-forge-text hover:border-forge-orange/35"
+              title="Collapse sidebar"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" strokeWidth={2.25} />
+            </button>
           )}
         </div>
       </div>

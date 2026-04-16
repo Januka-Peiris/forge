@@ -15,6 +15,7 @@ fn memory_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentMemory> {
 }
 
 /// List all global memory entries (workspace_id IS NULL).
+#[allow(dead_code)]
 pub fn list_global(db: &Database) -> Result<Vec<AgentMemory>, String> {
     db.with_connection(|connection| {
         let mut stmt = connection.prepare(

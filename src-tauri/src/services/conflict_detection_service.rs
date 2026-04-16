@@ -1,5 +1,3 @@
-use rusqlite::params;
-
 use crate::db::Database;
 use crate::models::{WorkspaceConflict, WorkspaceConflicts};
 
