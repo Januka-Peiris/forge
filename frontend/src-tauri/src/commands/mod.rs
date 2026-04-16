@@ -1,0 +1,25 @@
+pub mod activity;
+pub mod agent_context;
+pub mod agent_profiles;
+pub mod agent_runs;
+pub mod deep_links;
+pub mod reviews;
+pub mod workspaces;
+
+pub mod git_review;
+pub mod merge_readiness;
+pub mod perf;
+pub mod pr_draft;
+pub mod prompt_templates;
+pub mod repositories;
+pub mod review_cockpit;
+pub mod review_summary;
+pub mod settings;
+
+pub mod terminal;
+pub mod workspace_attention;
+pub mod workspace_cleanup;
+pub mod workspace_health;
+pub mod workspace_ports;
+pub mod workspace_readiness;
+pub mod workspace_scripts;
