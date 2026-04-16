@@ -11,7 +11,8 @@ export default defineConfig({
   },
   envPrefix: ['VITE_', 'TAURI_'],
   optimizeDeps: {
-    exclude: ['lucide-react'],
+    // Pre-bundle icons in dev to avoid huge per-request fan-out from bare lucide-react imports.
+    include: ['lucide-react'],
   },
   build: {
     rollupOptions: {

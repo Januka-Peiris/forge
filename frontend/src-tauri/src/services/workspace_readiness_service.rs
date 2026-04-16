@@ -2,7 +2,7 @@ use crate::models::WorkspaceReadiness;
 use crate::repositories::{
     agent_run_repository, review_cockpit_repository, terminal_repository, workspace_repository,
 };
-use crate::services::{git_review_service, workspace_health_service, workspace_port_service};
+use crate::services::{git_review_service, workspace_health_service};
 use crate::state::AppState;
 
 pub fn get_workspace_readiness(
@@ -52,9 +52,8 @@ pub fn get_workspace_readiness(
         .into_iter()
         .filter(|comment| comment.state != "resolved_local")
         .count() as u32;
-    let port_count = workspace_port_service::list_workspace_ports(state, workspace_id)
-        .unwrap_or_default()
-        .len() as u32;
+    // Port count is not computed here (see workspace_health_service): avoids repeated full-system lsof.
+    let port_count = 0u32;
     let status = if terminal_health == "needs_attention" {
         "needs_attention"
     } else if agent_status == "running" {
@@ -66,7 +65,7 @@ pub fn get_workspace_readiness(
     }
     .to_string();
     let summary = format!(
-        "Agent {} · {} files · {}/{} accepted · tests {} · {} PR comment{} · {} port{}",
+        "Agent {} · {} files · {}/{} accepted · tests {} · {} PR comment{}",
         agent_status,
         changed_files.len(),
         reviewed_files,
@@ -74,8 +73,6 @@ pub fn get_workspace_readiness(
         test_status,
         pr_comment_count,
         if pr_comment_count == 1 { "" } else { "s" },
-        port_count,
-        if port_count == 1 { "" } else { "s" },
     );
     Ok(WorkspaceReadiness {
         workspace_id: workspace_id.to_string(),
@@ -96,8 +93,14 @@ mod tests {
     #[test]
     fn readiness_summary_shape_is_stable() {
         let summary = format!(
-            "Agent {} · {} files · {}/{} accepted · tests {} · {} PR comments · {} ports",
-            "idle", 2, 1, 2, "unknown", 0, 0
+            "Agent {} · {} files · {}/{} accepted · tests {} · {} PR comment{}",
+            "idle",
+            2,
+            1,
+            2,
+            "unknown",
+            0,
+            "s",
         );
         assert!(summary.contains("1/2 accepted"));
     }

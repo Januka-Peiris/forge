@@ -1,9 +1,21 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use crate::models::WorkspacePort;
 use crate::repositories::workspace_repository;
 use crate::state::AppState;
+
+const PORT_CACHE_TTL: Duration = Duration::from_secs(15);
+static PORT_CACHE: OnceLock<Mutex<HashMap<String, CachedPorts>>> = OnceLock::new();
+
+#[derive(Debug, Clone)]
+struct CachedPorts {
+    scanned_at: Instant,
+    ports: Vec<WorkspacePort>,
+}
 
 #[derive(Debug, Clone, Default)]
 struct RawListener {
@@ -14,6 +26,39 @@ struct RawListener {
 }
 
 pub fn list_workspace_ports(
+    state: &AppState,
+    workspace_id: &str,
+) -> Result<Vec<WorkspacePort>, String> {
+    let cache = PORT_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut cache = cache
+        .lock()
+        .map_err(|_| "Workspace port cache lock poisoned".to_string())?;
+    if let Some(entry) = cache.get(workspace_id) {
+        if entry.scanned_at.elapsed() < PORT_CACHE_TTL {
+            return Ok(entry.ports.clone());
+        }
+    }
+
+    let ports = scan_workspace_ports(state, workspace_id)?;
+    cache.insert(
+        workspace_id.to_string(),
+        CachedPorts {
+            scanned_at: Instant::now(),
+            ports: ports.clone(),
+        },
+    );
+    Ok(ports)
+}
+
+fn invalidate_workspace_port_cache(workspace_id: &str) {
+    if let Some(cache) = PORT_CACHE.get() {
+        if let Ok(mut cache) = cache.lock() {
+            cache.remove(workspace_id);
+        }
+    }
+}
+
+fn scan_workspace_ports(
     state: &AppState,
     workspace_id: &str,
 ) -> Result<Vec<WorkspacePort>, String> {
@@ -32,10 +77,11 @@ pub fn list_workspace_ports(
         });
     }
 
+    let cwd_by_pid = process_cwds().unwrap_or_default();
     let text = String::from_utf8_lossy(&output.stdout);
     let mut ports = parse_lsof_listeners(&text)
         .into_iter()
-        .filter_map(|listener| listener_to_workspace_port(listener, &root))
+        .filter_map(|listener| listener_to_workspace_port(listener, &root, &cwd_by_pid))
         .filter(|port| port.workspace_matched)
         .collect::<Vec<_>>();
     ports.sort_by_key(|port| port.port);
@@ -78,6 +124,7 @@ pub fn kill_workspace_port_process(
         ));
     }
 
+    invalidate_workspace_port_cache(workspace_id);
     let output = Command::new("kill")
         .args(["-TERM", &pid.to_string()])
         .output()
@@ -91,17 +138,19 @@ pub fn kill_workspace_port_process(
         });
     }
 
-    Ok(list_workspace_ports(state, workspace_id).unwrap_or_default())
+    invalidate_workspace_port_cache(workspace_id);
+    Ok(scan_workspace_ports(state, workspace_id).unwrap_or_default())
 }
 
 fn listener_to_workspace_port(
     listener: RawListener,
     workspace_root: &Path,
+    cwd_by_pid: &HashMap<u32, String>,
 ) -> Option<WorkspacePort> {
     let pid = listener.pid?;
     let name = listener.name.unwrap_or_default();
     let port = parse_port_from_name(&name)?;
-    let cwd = process_cwd(pid).ok();
+    let cwd = cwd_by_pid.get(&pid).cloned();
     let workspace_matched = cwd
         .as_deref()
         .map(|path| path_is_inside_workspace(Path::new(path), workspace_root))
@@ -159,19 +208,33 @@ fn parse_port_from_name(name: &str) -> Option<u16> {
     digits.parse::<u16>().ok()
 }
 
-fn process_cwd(pid: u32) -> Result<String, String> {
+fn process_cwds() -> Result<HashMap<u32, String>, String> {
     let output = Command::new("lsof")
-        .args(["-a", "-p", &pid.to_string(), "-d", "cwd", "-Fn"])
+        .args(["-nP", "-d", "cwd", "-F", "pn"])
         .output()
-        .map_err(|err| format!("Failed to inspect cwd for process {pid}: {err}"))?;
+        .map_err(|err| format!("Failed to inspect process working directories with lsof: {err}"))?;
     if !output.status.success() {
-        return Err(format!("Could not inspect cwd for process {pid}"));
+        return Err("Could not inspect process working directories".to_string());
     }
-    let text = String::from_utf8_lossy(&output.stdout);
-    text.lines()
-        .find_map(|line| line.strip_prefix('n'))
-        .map(|cwd| cwd.to_string())
-        .ok_or_else(|| format!("No cwd found for process {pid}"))
+    Ok(parse_lsof_cwds(&String::from_utf8_lossy(&output.stdout)))
+}
+
+fn parse_lsof_cwds(text: &str) -> HashMap<u32, String> {
+    let mut cwd_by_pid = HashMap::new();
+    let mut current_pid: Option<u32> = None;
+    for line in text.lines().filter(|line| !line.is_empty()) {
+        let (field, value) = line.split_at(1);
+        match field {
+            "p" => current_pid = value.parse::<u32>().ok(),
+            "n" => {
+                if let Some(pid) = current_pid {
+                    cwd_by_pid.insert(pid, value.to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+    cwd_by_pid
 }
 
 fn workspace_root_path(state: &AppState, workspace_id: &str) -> Result<PathBuf, String> {
@@ -216,6 +279,16 @@ mod tests {
         assert_eq!(
             parse_port_from_name(listeners[1].name.as_deref().unwrap()),
             Some(8000)
+        );
+    }
+
+    #[test]
+    fn parses_lsof_cwd_output() {
+        let cwds = parse_lsof_cwds("p123\nn/tmp/app\np456\nn/Users/example/project\n");
+        assert_eq!(cwds.get(&123).map(String::as_str), Some("/tmp/app"));
+        assert_eq!(
+            cwds.get(&456).map(String::as_str),
+            Some("/Users/example/project")
         );
     }
 

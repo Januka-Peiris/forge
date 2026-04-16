@@ -525,10 +525,7 @@ pub fn get_workspace_terminal_output(
 
     let chunks =
         terminal_repository::list_output_chunks(&state.db, &session.id, since_seq.unwrap_or(0))?;
-    let next_seq = chunks
-        .last()
-        .map(|chunk| chunk.seq.saturating_add(1))
-        .unwrap_or_else(|| terminal_repository::next_seq(&state.db, &session.id).unwrap_or(0));
+    let next_seq = terminal_repository::next_seq(&state.db, &session.id).unwrap_or(0);
 
     Ok(TerminalOutputResponse {
         session: Some(session),
@@ -554,10 +551,7 @@ pub fn get_workspace_terminal_output_for_session(
 
     let chunks =
         terminal_repository::list_output_chunks(&state.db, &session.id, since_seq.unwrap_or(0))?;
-    let next_seq = chunks
-        .last()
-        .map(|chunk| chunk.seq.saturating_add(1))
-        .unwrap_or_else(|| terminal_repository::next_seq(&state.db, &session.id).unwrap_or(0));
+    let next_seq = terminal_repository::next_seq(&state.db, &session.id).unwrap_or(0);
 
     Ok(TerminalOutputResponse {
         session: Some(session),

@@ -2,7 +2,7 @@ use rusqlite::{params, OptionalExtension};
 
 use crate::models::{TerminalSession, WorkspaceHealth, WorkspaceTerminalHealth};
 use crate::repositories::{terminal_repository, workspace_repository};
-use crate::services::{tmux_service, workspace_port_service};
+use crate::services::tmux_service;
 use crate::state::AppState;
 
 pub fn get_workspace_health(
@@ -54,13 +54,10 @@ pub fn get_workspace_health(
         });
     }
 
-    let ports = match workspace_port_service::list_workspace_ports(state, workspace_id) {
-        Ok(ports) => ports,
-        Err(err) => {
-            warnings.push(format!("Port scan unavailable: {err}"));
-            Vec::new()
-        }
-    };
+    // Port discovery is intentionally not run here: it shells out to `lsof` twice (listeners + cwd map)
+    // and was dominating CPU/RAM when health polled frequently. Use `list_workspace_ports` from the
+    // Testing tab when the user wants an on-demand scan.
+    let ports = Vec::new();
 
     let status = derive_workspace_health_status(&terminals, &ports, &warnings);
     Ok(WorkspaceHealth {

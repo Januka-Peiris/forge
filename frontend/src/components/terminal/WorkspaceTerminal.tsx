@@ -61,6 +61,7 @@ const profileLabels: Record<TerminalProfile, string> = {
 };
 
 const MAX_VISIBLE_PANES = 3;
+const OUTPUT_RETENTION_CHUNKS = 1200;
 const AGENT_COMPOSER_HEIGHT_KEY = 'forge:agent-composer-height';
 
 export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTerminalProps) {
@@ -154,7 +155,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     if (chunks.length === 0 && !reset) return;
     setOutputs((current) => ({
       ...current,
-      [sessionId]: reset ? chunks : [...(current[sessionId] ?? []), ...chunks].slice(-5000),
+      [sessionId]: reset ? chunks : [...(current[sessionId] ?? []), ...chunks].slice(-OUTPUT_RETENTION_CHUNKS),
     }));
   }, []);
 
@@ -174,7 +175,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         for (const [pendingSessionId, pendingChunks] of Object.entries(pending)) {
           if (pendingChunks.length === 0) continue;
           if (next === current) next = { ...current };
-          next[pendingSessionId] = [...(next[pendingSessionId] ?? []), ...pendingChunks].slice(-5000);
+          next[pendingSessionId] = [...(next[pendingSessionId] ?? []), ...pendingChunks].slice(-OUTPUT_RETENTION_CHUNKS);
         }
         return next;
       });
@@ -342,27 +343,33 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     resetWorkspaceState();
     if (workspaceId) {
       void refreshForgeConfig();
-      void refreshPorts();
       void refreshPromptTemplates();
       void refreshPromptEntries();
       void refreshAgentContext();
-      void refreshHealth();
-      void refreshReadiness();
       void refreshAgentProfiles();
-      void refreshSessions(true);
+      void refreshSessions(false, true);
+      const timer = window.setTimeout(() => {
+        if (document.hidden) return;
+        void refreshHealth();
+        void refreshReadiness();
+      }, 1500);
+      return () => window.clearTimeout(timer);
     }
-  }, [refreshAgentContext, refreshAgentProfiles, refreshForgeConfig, refreshHealth, refreshReadiness, refreshPorts, refreshPromptEntries, refreshPromptTemplates, refreshSessions, resetWorkspaceState, workspaceId]);
+  }, [refreshAgentContext, refreshAgentProfiles, refreshForgeConfig, refreshHealth, refreshReadiness, refreshPromptEntries, refreshPromptTemplates, refreshSessions, resetWorkspaceState, workspaceId]);
 
   useEffect(() => {
     if (!workspaceId) return;
     const timer = window.setInterval(() => {
       if (document.hidden) return;
       metadataPollTickRef.current += 1;
-      const shouldBackfillOutput = metadataPollTickRef.current % 4 === 0;
+      const shouldBackfillOutput = metadataPollTickRef.current % 6 === 0;
+      const shouldRefreshExpensiveState = metadataPollTickRef.current % 3 === 0;
       void refreshSessions(false, shouldBackfillOutput);
       void refreshPromptEntries();
-      void refreshHealth();
-      void refreshReadiness();
+      if (shouldRefreshExpensiveState) {
+        void refreshHealth();
+        void refreshReadiness();
+      }
     }, 5000);
     return () => window.clearInterval(timer);
   }, [refreshHealth, refreshPromptEntries, refreshReadiness, refreshSessions, workspaceId]);
@@ -761,7 +768,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         </div>
 
         {/* Header tab bar — only shown when there's at least one strip to show */}
-        {(forgeConfig !== null || ports.length > 0 || workspaceReadiness !== null || workspaceHealth !== null) && (
+        {(forgeConfig !== null || workspaceId !== null || workspaceReadiness !== null || workspaceHealth !== null) && (
           <div className="mt-2 flex items-center gap-0.5">
             {forgeConfig !== null && (
               <button
@@ -780,16 +787,20 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                 <ChevronDown className={`h-3 w-3 transition-transform ${activeHeaderTab === 'commands' ? 'rotate-180' : ''}`} />
               </button>
             )}
-            {ports.length > 0 && (
-              <button
-                onClick={() => setActiveHeaderTab((v) => v === 'ports' ? null : 'ports')}
-                className={`flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold transition-colors ${activeHeaderTab === 'ports' ? 'bg-white/8 text-forge-text' : 'text-forge-muted hover:bg-white/5 hover:text-forge-text/80'}`}
-              >
-                <Globe2 className="h-3 w-3" />
-                {ports.length} port{ports.length === 1 ? '' : 's'}
-                <ChevronDown className={`h-3 w-3 transition-transform ${activeHeaderTab === 'ports' ? 'rotate-180' : ''}`} />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setActiveHeaderTab((v) => v === 'ports' ? null : 'ports')}
+              className={`flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold transition-colors ${activeHeaderTab === 'ports' ? 'bg-white/8 text-forge-text' : 'text-forge-muted hover:bg-white/5 hover:text-forge-text/80'}`}
+            >
+              <Globe2 className="h-3 w-3" />
+              Testing
+              {ports.length > 0 && (
+                <span className="rounded-full border border-forge-blue/25 bg-forge-blue/10 px-1.5 text-[9px] text-forge-blue">
+                  {ports.length}
+                </span>
+              )}
+              <ChevronDown className={`h-3 w-3 transition-transform ${activeHeaderTab === 'ports' ? 'rotate-180' : ''}`} />
+            </button>
             {workspaceReadiness !== null && (
               <button
                 onClick={() => setActiveHeaderTab((v) => v === 'readiness' ? null : 'readiness')}
@@ -841,6 +852,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         {activeHeaderTab === 'health' && workspaceHealth && (
           <WorkspaceHealthStrip
             health={workspaceHealth}
+            displayPortCount={ports.length}
             busy={busy}
             onRefresh={() => void refreshHealth()}
             onRecover={(sessionId) => {
@@ -1052,6 +1064,7 @@ function WorkspaceReadinessStrip({ readiness }: { readiness: WorkspaceReadiness 
 
 function WorkspaceHealthStrip({
   health,
+  displayPortCount,
   busy,
   onRefresh,
   onRecover,
@@ -1059,6 +1072,8 @@ function WorkspaceHealthStrip({
   onStartShell,
 }: {
   health: WorkspaceHealth;
+  /** From on-demand Testing tab scan (`list_workspace_ports`); health payload no longer runs port discovery. */
+  displayPortCount: number;
   busy: boolean;
   onRefresh: () => void;
   onRecover: (sessionId: string) => void;
@@ -1083,8 +1098,8 @@ function WorkspaceHealthStrip({
         <span className={`rounded-full border px-2 py-0.5 text-[10px] ${statusClasses}`}>
           {health.status === 'needs_attention' ? 'Needs attention' : health.status === 'healthy' ? 'Healthy' : 'Idle'}
         </span>
-        <span className="text-forge-muted">
-          {running} running · {health.ports.length} port{health.ports.length === 1 ? '' : 's'} · {stale} stale
+        <span className="text-forge-muted" title="Port count updates when you use Testing → Refresh ports">
+          {running} running · {displayPortCount} port{displayPortCount === 1 ? '' : 's'} · {stale} stale
         </span>
         {health.warnings.slice(0, 1).map((warning) => (
           <span key={warning} className="min-w-0 flex-1 truncate text-forge-yellow" title={warning}>{warning}</span>
@@ -1269,7 +1284,7 @@ function TerminalPane({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const renderedRef = useRef(0);
+  const lastRenderedSeqRef = useRef<number>(-1);
   const onDataRef = useRef(onData);
   const onResizeRef = useRef(onResize);
 
@@ -1284,7 +1299,7 @@ function TerminalPane({
       fontFamily: 'JetBrains Mono, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
       fontSize: 12,
       lineHeight: 1.15,
-      scrollback: 8000,
+      scrollback: 2500,
       theme: {
         background: '#08090c',
         foreground: '#d7dce5',
@@ -1297,7 +1312,7 @@ function TerminalPane({
     terminal.open(containerRef.current);
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
-    renderedRef.current = 0;
+    lastRenderedSeqRef.current = -1;
 
     const disposable = terminal.onData((data) => onDataRef.current(data));
     const fit = () => {
@@ -1323,9 +1338,11 @@ function TerminalPane({
   useEffect(() => {
     const terminal = terminalRef.current;
     if (!terminal) return;
-    const next = chunks.slice(renderedRef.current);
-    for (const chunk of next) terminal.write(chunk.data);
-    renderedRef.current = chunks.length;
+    const next = chunks.filter((chunk) => chunk.seq > lastRenderedSeqRef.current);
+    for (const chunk of next) {
+      terminal.write(chunk.data);
+      lastRenderedSeqRef.current = Math.max(lastRenderedSeqRef.current, chunk.seq);
+    }
   }, [chunks]);
 
   useEffect(() => {

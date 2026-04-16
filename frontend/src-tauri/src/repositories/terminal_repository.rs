@@ -285,29 +285,60 @@ pub fn list_output_chunks(
     session_id: &str,
     since_seq: u64,
 ) -> Result<Vec<TerminalOutputChunk>, String> {
+    const INITIAL_TAIL_LIMIT: i64 = 600;
+    const INCREMENTAL_LIMIT: i64 = 1000;
+
     db.with_connection(|connection| {
-        let mut stmt = connection.prepare(
-            r#"
-            SELECT id, session_id, seq, timestamp, stream_type, data
-            FROM terminal_output_chunks
-            WHERE session_id = ?1 AND seq >= ?2
-            ORDER BY seq ASC
-            LIMIT 2000
-            "#,
-        )?;
-        let chunks = stmt
-            .query_map(params![session_id, since_seq as i64], |row| {
-                Ok(TerminalOutputChunk {
-                    id: row.get("id")?,
-                    session_id: row.get("session_id")?,
-                    seq: row.get::<_, i64>("seq")? as u64,
-                    timestamp: row.get("timestamp")?,
-                    stream_type: row.get("stream_type")?,
-                    data: row.get("data")?,
-                })
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-        Ok(chunks)
+        let rows = if since_seq == 0 {
+            let mut stmt = connection.prepare(
+                r#"
+                SELECT id, session_id, seq, timestamp, stream_type, data
+                FROM terminal_output_chunks
+                WHERE session_id = ?1
+                ORDER BY seq DESC
+                LIMIT ?2
+                "#,
+            )?;
+            let mut chunks = stmt
+                .query_map(
+                    params![session_id, INITIAL_TAIL_LIMIT],
+                    terminal_output_chunk_from_row,
+                )?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            chunks.reverse();
+            chunks
+        } else {
+            let mut stmt = connection.prepare(
+                r#"
+                SELECT id, session_id, seq, timestamp, stream_type, data
+                FROM terminal_output_chunks
+                WHERE session_id = ?1 AND seq >= ?2
+                ORDER BY seq ASC
+                LIMIT ?3
+                "#,
+            )?;
+            let chunks = stmt
+                .query_map(
+                    params![session_id, since_seq as i64, INCREMENTAL_LIMIT],
+                    terminal_output_chunk_from_row,
+                )?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            chunks
+        };
+        Ok(rows)
+    })
+}
+
+fn terminal_output_chunk_from_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<TerminalOutputChunk> {
+    Ok(TerminalOutputChunk {
+        id: row.get("id")?,
+        session_id: row.get("session_id")?,
+        seq: row.get::<_, i64>("seq")? as u64,
+        timestamp: row.get("timestamp")?,
+        stream_type: row.get("stream_type")?,
+        data: row.get("data")?,
     })
 }
 
