@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Copy, FolderOpen, GitBranch, RefreshCw, Save, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, FolderOpen, GitBranch, RefreshCw, Save } from 'lucide-react';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
 import { DetailPanel } from './components/detail/DetailPanel';
@@ -249,53 +249,44 @@ function SettingsView({
   onSettingsChange: (settings: AppSettings) => void;
   onRemoveRepository: (repositoryId: string) => void;
 }) {
-  const [repoRootsText, setRepoRootsText] = useState(settings?.repoRoots.join('\n') ?? '');
   const [repositories, setRepositories] = useState<DiscoveredRepository[]>(settings?.discoveredRepositories ?? []);
-  const [warnings, setWarnings] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ repoId: string; x: number; y: number } | null>(null);
 
   useEffect(() => {
-    setRepoRootsText(settings?.repoRoots.join('\n') ?? '');
     setRepositories(settings?.discoveredRepositories ?? []);
   }, [settings]);
 
-  const repoRoots = () => repoRootsText.split('\n').map((root) => root.trim()).filter(Boolean);
-
-  const mergeUniqueRoots = (lines: string[], extra: string): string[] => {
-    const next = new Set([...lines.map((l) => l.trim()).filter(Boolean), extra.trim()].filter(Boolean));
-    return Array.from(next).sort();
-  };
+  // Close context menu on any click outside
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [contextMenu]);
 
   const isTauriShell = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
-  const handleAddSingleRepositoryFolder = async () => {
+  const handleAddRepository = async () => {
     setMessage(null);
-    setWarnings([]);
     if (!isTauriShell()) {
-      setMessage('Folder picker is only available in the Forge desktop app (not the standalone browser dev server).');
+      setMessage('Folder picker is only available in the Forge desktop app.');
       return;
     }
     setBusy(true);
     try {
-      const picked = await open({
-        directory: true,
-        multiple: false,
-        title: 'Choose a Git repository folder',
-      });
+      const picked = await open({ directory: true, multiple: false, title: 'Choose a Git repository' });
       if (picked === null) return;
-
       const toplevel = await resolveGitRepositoryPath(picked);
-      const merged = mergeUniqueRoots(repoRoots(), toplevel);
-      setRepoRootsText(merged.join('\n'));
-
+      const existing = repositories.map((r) => r.path);
+      const merged = Array.from(new Set([...existing, toplevel])).sort();
       const saved = await saveRepoRoots({ repoRoots: merged });
-      onSettingsChange(saved);
       const result = await scanRepositories();
       setRepositories(result.repositories);
-      setWarnings(result.warnings);
       onSettingsChange({ repoRoots: result.repoRoots, discoveredRepositories: result.repositories, hasCompletedEnvCheck: settings?.hasCompletedEnvCheck ?? false });
-      setMessage(`Added repository root: ${toplevel}. Scan complete: ${result.repositories.length} repositories.`);
+      setMessage(`Added — ${result.repositories.length} repositor${result.repositories.length === 1 ? 'y' : 'ies'} in Forge.`);
+      void saved;
     } catch (err) {
       setMessage(err instanceof Error ? err.message : String(err));
     } finally {
@@ -303,34 +294,14 @@ function SettingsView({
     }
   };
 
-  const handleSave = async () => {
+  const handleRefresh = async () => {
     setBusy(true);
     setMessage(null);
-    setWarnings([]);
     try {
-      const next = await saveRepoRoots({ repoRoots: repoRoots() });
-      onSettingsChange(next);
-      setRepositories(next.discoveredRepositories);
-      setMessage('Repo roots saved.');
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleScan = async () => {
-    setBusy(true);
-    setMessage(null);
-    setWarnings([]);
-    try {
-      const saved = await saveRepoRoots({ repoRoots: repoRoots() });
-      onSettingsChange(saved);
       const result = await scanRepositories();
       setRepositories(result.repositories);
-      setWarnings(result.warnings);
       onSettingsChange({ repoRoots: result.repoRoots, discoveredRepositories: result.repositories, hasCompletedEnvCheck: settings?.hasCompletedEnvCheck ?? false });
-      setMessage(`Scan complete: ${result.repositories.length} repositories discovered.`);
+      setMessage(`Refreshed — ${result.repositories.length} repositor${result.repositories.length === 1 ? 'y' : 'ies'} found.`);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : String(err));
     } finally {
@@ -342,137 +313,112 @@ function SettingsView({
     <div className="flex flex-1 flex-col min-h-0">
       <div className="px-6 pt-6 pb-4 border-b border-forge-border shrink-0">
         <h1 className="text-[22px] font-bold text-forge-text tracking-tight">Settings</h1>
-        <p className="text-[12px] text-forge-muted mt-1.5">Local repo roots and Git worktree discovery</p>
+        <p className="text-[12px] text-forge-muted mt-1.5">Manage repositories and AI model configuration</p>
       </div>
 
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
         <AiModelsCard />
 
         <div className="rounded-xl border border-forge-border bg-forge-card p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-3">
-            <div>
-              <h2 className="text-[14px] font-bold text-forge-text">Repositories on disk</h2>
-              <p className="text-[11px] text-forge-muted mt-0.5 max-w-xl">
-                Add one checkout with the folder picker (only that Git repo is registered), or list bulk scan roots below to discover many repos under a tree.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => void handleAddSingleRepositoryFolder()}
-                disabled={busy}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-forge-blue/15 hover:bg-forge-blue/25 disabled:opacity-60 text-[12px] font-semibold text-forge-blue border border-forge-blue/30"
-              >
-                <FolderOpen className="w-3.5 h-3.5" />
-                Add single repository…
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={busy}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-60 text-[12px] font-semibold text-forge-text border border-forge-border"
-              >
-                <Save className="w-3.5 h-3.5" />
-                Save
-              </button>
-              <button
-                type="button"
-                onClick={handleScan}
-                disabled={busy}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-forge-orange hover:bg-orange-500 disabled:opacity-60 text-[12px] font-semibold text-white"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${busy ? 'animate-spin' : ''}`} />
-                Scan
-              </button>
-            </div>
-          </div>
-
-          <p className="text-[11px] font-semibold text-forge-muted uppercase tracking-wider mb-1.5">Bulk scan roots (optional)</p>
-          <p className="text-[11px] text-forge-muted mb-2">One directory per line. Forge searches each tree for Git repositories (depth limited).</p>
-          <textarea
-            value={repoRootsText}
-            onChange={(event) => setRepoRootsText(event.target.value)}
-            rows={5}
-            placeholder="/Users/jay/dev\n/Users/jay/work"
-            className="w-full bg-forge-surface border border-forge-border rounded-lg px-3 py-2 text-[12px] font-mono text-forge-text placeholder:text-forge-muted/80 focus:outline-none focus:border-forge-blue/50 resize-none"
-          />
-
-          {message && <p className="mt-3 text-[12px] text-forge-muted">{message}</p>}
-          {warnings.length > 0 && (
-            <div className="mt-3 rounded-lg border border-forge-yellow/20 bg-forge-yellow/5 p-3">
-              <p className="text-[11px] font-semibold text-forge-yellow mb-1">Scan warnings</p>
-              <ul className="space-y-1 text-[11px] text-forge-muted">
-                {warnings.map((warning) => <li key={warning}>· {warning}</li>)}
-              </ul>
-            </div>
-          )}
-        </div>
-
-        <div className="rounded-xl border border-forge-border bg-forge-card p-4">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h2 className="text-[14px] font-bold text-forge-text">Discovered repositories</h2>
-              <p className="text-[11px] text-forge-muted mt-0.5">Persisted in local SQLite after each scan</p>
+              <h2 className="text-[14px] font-bold text-forge-text">Repositories</h2>
+              <p className="text-[11px] text-forge-muted mt-0.5">Right-click a repo to remove it.</p>
             </div>
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-forge-blue/15 text-forge-blue border border-forge-blue/20">
-              {repositories.length} repos
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handleRefresh()}
+                disabled={busy}
+                title="Re-scan all known roots"
+                className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-60 text-[11px] font-semibold text-forge-muted border border-forge-border"
+              >
+                <RefreshCw className={`w-3 h-3 ${busy ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleAddRepository()}
+                disabled={busy}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forge-blue/15 hover:bg-forge-blue/25 disabled:opacity-60 text-[12px] font-semibold text-forge-blue border border-forge-blue/30"
+              >
+                <FolderOpen className="w-3.5 h-3.5" />
+                Add repository…
+              </button>
+            </div>
           </div>
+
+          {message && <p className="mb-3 text-[12px] text-forge-muted">{message}</p>}
 
           {repositories.length === 0 ? (
             <div className="rounded-lg border border-dashed border-forge-border p-6 text-center">
-              <p className="text-[13px] text-forge-muted">No repositories discovered yet</p>
-              <p className="text-[12px] text-forge-muted mt-1">Add a repo root and run Scan.</p>
+              <p className="text-[13px] text-forge-muted">No repositories added yet</p>
+              <p className="text-[12px] text-forge-muted mt-1">Click "Add repository…" and choose a Git repo folder.</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {repositories.map((repo) => (
-                <div key={repo.id} className="rounded-lg border border-forge-border/80 bg-forge-surface/60 p-3">
+                <div
+                  key={repo.id}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setContextMenu({ repoId: repo.id, x: e.clientX, y: e.clientY });
+                  }}
+                  className="rounded-lg border border-forge-border/80 bg-forge-surface/60 p-3 cursor-default select-none"
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <GitBranch className="w-3.5 h-3.5 text-forge-orange" />
+                        <GitBranch className="w-3.5 h-3.5 text-forge-orange shrink-0" />
                         <h3 className="text-[13px] font-semibold text-forge-text truncate">{repo.name}</h3>
                         {repo.isDirty && <span className="text-[10px] text-forge-yellow">dirty</span>}
                       </div>
-                      <p className="text-[11px] font-mono text-forge-muted mt-1 truncate">{repo.path}</p>
+                      <p className="text-[11px] font-mono text-forge-muted mt-0.5 truncate">{repo.path}</p>
                     </div>
-                    <div className="flex items-start gap-3">
-                      <div className="text-right shrink-0">
-                        <p className="text-[11px] text-forge-text font-mono">{repo.currentBranch ?? 'detached'}</p>
-                        <p className="text-[10px] text-forge-muted font-mono">{repo.head ?? 'no HEAD'}</p>
-                      </div>
-                      <button
-                        onClick={() => onRemoveRepository(repo.id)}
-                        className="p-1 rounded text-forge-muted hover:bg-forge-red/15 hover:text-forge-red"
-                        title={`Remove repository "${repo.name}" from Forge`}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                    <div className="text-right shrink-0">
+                      <p className="text-[11px] text-forge-text font-mono">{repo.currentBranch ?? 'detached'}</p>
+                      <p className="text-[10px] text-forge-muted font-mono">{repo.head ?? 'no HEAD'}</p>
                     </div>
                   </div>
 
-                  <div className="mt-3 border-t border-forge-border/60 pt-2">
-                    <p className="text-[10px] font-semibold text-forge-muted uppercase tracking-widest mb-2">
-                      Worktrees · {repo.worktrees.length}
-                    </p>
-                    <div className="space-y-1">
+                  {repo.worktrees.length > 0 && (
+                    <div className="mt-2 border-t border-forge-border/40 pt-2 space-y-0.5">
                       {repo.worktrees.map((worktree) => (
                         <div key={worktree.id} className="flex items-center gap-2 text-[11px]">
-                          <span className={`h-1.5 w-1.5 rounded-full ${worktree.isDirty ? 'bg-forge-yellow' : 'bg-forge-green'}`} />
+                          <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${worktree.isDirty ? 'bg-forge-yellow' : 'bg-forge-green'}`} />
                           <span className="font-mono text-forge-text">{worktree.branch ?? 'detached'}</span>
                           <span className="text-forge-muted font-mono truncate">{worktree.path}</span>
-                          <span className="ml-auto text-forge-muted font-mono">{worktree.head ?? ''}</span>
+                          <span className="ml-auto text-forge-muted font-mono shrink-0">{worktree.head?.slice(0, 7) ?? ''}</span>
                         </div>
                       ))}
                     </div>
-                  </div>
+                  )}
                 </div>
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {/* Right-click context menu */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 rounded-lg border border-forge-border bg-forge-surface shadow-lg py-1 min-w-[160px]"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              onRemoveRepository(contextMenu.repoId);
+              setContextMenu(null);
+            }}
+            className="w-full text-left px-3 py-1.5 text-[12px] text-forge-red hover:bg-forge-red/10"
+          >
+            Remove from Forge
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1025,13 +971,15 @@ export default function App() {
           createPr: input.createPr,
         })
       : await createWorkspace(input);
+    // Workspace created — update state before any non-critical async work
     setWorkspaces((current) => [workspace, ...current]);
     setSelectedId(workspace.id);
     setView('workspaces');
-    setActivityItems(await listActivity());
     setModalOpen(false);
     setModalRepositoryId(undefined);
     setBranchFromWorkspaceId(null);
+    // Non-fatal: refresh activity feed; failure here must not surface as a creation error
+    listActivity().then(setActivityItems).catch(() => undefined);
     if (input.openInCursor) {
       await handleOpenInCursor(workspace.id);
     }
