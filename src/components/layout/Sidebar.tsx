@@ -219,19 +219,19 @@ export function Sidebar({
         </div>
       </div>
 
-      <div className="px-3 py-3 border-b border-forge-border flex items-center gap-1.5">
+      <div className="px-3 py-2 border-b border-forge-border flex items-center gap-1">
         {navItems.map(({ id, label, icon: Icon }) => {
           const isActive = activeView === id;
           return (
             <button
               key={id}
               onClick={() => onNavigate(id)}
-              className={`flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-semibold transition-colors ${
+              title={label}
+              className={`flex items-center justify-center w-8 h-8 rounded-md transition-colors ${
                 isActive ? 'bg-white/10 text-forge-text' : 'text-forge-muted hover:text-forge-text hover:bg-white/5'
               }`}
             >
-              <Icon className="w-3.5 h-3.5" />
-              {label}
+              <Icon className="w-4 h-4" />
             </button>
           );
         })}
