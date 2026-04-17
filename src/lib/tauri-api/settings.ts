@@ -25,3 +25,11 @@ export function saveAiModelSettings(input: SaveAiModelSettingsInput): Promise<Ai
 export function saveHasCompletedEnvCheck(completed: boolean): Promise<AppSettings> {
   return invokeCommand<AppSettings>('save_has_completed_env_check', { completed });
 }
+
+export function getSetting(key: string): Promise<string | null> {
+  return invokeCommand<string | null>('get_setting', { key });
+}
+
+export function setSetting(key: string, value: string): Promise<void> {
+  return invokeCommand<void>('set_setting', { key, value });
+}

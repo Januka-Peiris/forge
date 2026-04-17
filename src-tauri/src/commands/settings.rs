@@ -53,6 +53,16 @@ pub fn save_ai_model_settings(
 }
 
 #[tauri::command]
+pub fn get_setting(state: State<'_, AppState>, key: String) -> Result<Option<String>, String> {
+    settings_repository::get_value(&state.db, &key)
+}
+
+#[tauri::command]
+pub fn set_setting(state: State<'_, AppState>, key: String, value: String) -> Result<(), String> {
+    settings_repository::set_value(&state.db, &key, &value)
+}
+
+#[tauri::command]
 pub fn save_has_completed_env_check(
     state: State<'_, AppState>,
     completed: bool,

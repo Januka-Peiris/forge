@@ -579,6 +579,26 @@ pub fn latest_queued_prompt_for_workspace(
     })
 }
 
+pub fn count_sent_prompts_for_session(db: &Database, session_id: &str) -> Result<u32, String> {
+    db.with_connection(|conn| {
+        conn.query_row(
+            "SELECT COUNT(*) FROM terminal_prompt_entries WHERE session_id = ?1 AND status = 'sent'",
+            params![session_id],
+            |row| row.get(0),
+        )
+    })
+}
+
+pub fn get_active_session_id_for_workspace(db: &Database, workspace_id: &str) -> Result<Option<String>, String> {
+    db.with_connection(|conn| {
+        conn.query_row(
+            "SELECT id FROM terminal_sessions WHERE workspace_id = ?1 AND status = 'running' AND closed_at IS NULL ORDER BY started_at DESC LIMIT 1",
+            params![workspace_id],
+            |row| row.get::<_, String>(0),
+        ).optional()
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

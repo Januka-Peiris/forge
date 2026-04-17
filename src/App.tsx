@@ -9,7 +9,7 @@ import { removeRepository, scanRepositories } from './lib/tauri-api/repositories
 import { createWorkspacePr } from './lib/tauri-api/pr-draft';
 import { listAgentMemories, setAgentMemory, deleteAgentMemory } from './lib/tauri-api/agent-memory';
 import type { AgentMemory } from './types/agent-memory';
-import { getAiModelSettings, getSettings, resolveGitRepositoryPath, saveAiModelSettings, saveHasCompletedEnvCheck, saveRepoRoots } from './lib/tauri-api/settings';
+import { getAiModelSettings, getSettings, getSetting, setSetting, resolveGitRepositoryPath, saveAiModelSettings, saveHasCompletedEnvCheck, saveRepoRoots } from './lib/tauri-api/settings';
 import type { AiModelSettings } from './types/settings';
 import { listActivity } from './lib/tauri-api/activity';
 import { openDeepLink } from './lib/tauri-api/deep-links';
@@ -240,6 +240,42 @@ function AiModelsCard() {
   );
 }
 
+function RepoContextCard() {
+  const [contextEnabled, setContextEnabled] = useState(true);
+
+  useEffect(() => {
+    void getSetting('context_enabled').then((val) => {
+      if (val === 'false') setContextEnabled(false);
+    }).catch(() => undefined);
+  }, []);
+
+  return (
+    <div className="rounded-xl border border-forge-border bg-forge-card p-4">
+      <div className="mb-4">
+        <h2 className="text-[14px] font-bold text-forge-text">Repo Context</h2>
+        <p className="text-[11px] text-forge-muted mt-0.5">Inject repo map and diffs into the first prompt of each session.</p>
+      </div>
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-[12px] text-forge-text/70">Inject context into prompts</p>
+          <p className="text-[11px] text-forge-muted mt-0.5">Sends repo map + diffs at session start</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            const next = !contextEnabled;
+            setContextEnabled(next);
+            void setSetting('context_enabled', next ? 'true' : 'false').catch(console.error);
+          }}
+          className={`relative w-10 h-5 rounded-full transition-colors ${contextEnabled ? 'bg-blue-500' : 'bg-white/20'}`}
+        >
+          <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${contextEnabled ? 'left-5' : 'left-0.5'}`} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function SettingsView({
   settings,
   onSettingsChange,
@@ -318,6 +354,8 @@ function SettingsView({
 
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
         <AiModelsCard />
+
+        <RepoContextCard />
 
         <div className="rounded-xl border border-forge-border bg-forge-card p-4">
           <div className="flex items-center justify-between mb-3">
