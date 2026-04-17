@@ -39,7 +39,6 @@ interface WorkspaceHeaderProps {
   onOpenPort: (port: number) => void;
   onKillPort: (port: WorkspacePort) => void;
   onRefreshHealth: () => void;
-  onRecoverSession: (sessionId: string) => void;
   onCloseTerminal: (sessionId: string) => void;
   onStartShell: () => void;
   onAttachTerminal: (session: TerminalSession) => void;
@@ -72,7 +71,6 @@ export function WorkspaceHeader({
   onOpenPort,
   onKillPort,
   onRefreshHealth,
-  onRecoverSession,
   onCloseTerminal,
   onStartShell,
   onAttachTerminal,
@@ -226,10 +224,6 @@ export function WorkspaceHeader({
           displayPortCount={ports.length}
           busy={busy}
           onRefresh={onRefreshHealth}
-          onRecover={(sessionId) => {
-            const session = allSessions.find((s) => s.id === sessionId);
-            if (session) onAttachTerminal(session);
-          }}
           onClose={onCloseTerminal}
           onStartShell={onStartShell}
         />

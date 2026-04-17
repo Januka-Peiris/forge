@@ -37,7 +37,6 @@ export function WorkspaceHealthStrip({
   displayPortCount,
   busy,
   onRefresh,
-  onRecover,
   onClose,
   onStartShell,
 }: {
@@ -46,12 +45,10 @@ export function WorkspaceHealthStrip({
   displayPortCount: number;
   busy: boolean;
   onRefresh: () => void;
-  onRecover: (sessionId: string) => void;
   onClose: (sessionId: string) => void;
   onStartShell: () => void;
 }) {
   const running = health.terminals.filter((terminal) => terminal.status === 'running').length;
-  const unattached = health.terminals.filter((terminal) => terminal.recommendedAction === 'reattach');
   const failed = health.terminals.filter((terminal) => terminal.status === 'failed' || terminal.status === 'interrupted');
   const statusBadgeVariant =
     health.status === 'needs_attention'
@@ -77,17 +74,6 @@ export function WorkspaceHealthStrip({
           </span>
         ))}
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          {unattached.slice(0, 2).map((terminal) => (
-            <Button
-              key={terminal.sessionId}
-              variant="secondary"
-              size="sm"
-              disabled={busy}
-              onClick={() => onRecover(terminal.sessionId)}
-            >
-              Reattach {terminal.title || terminal.kind}
-            </Button>
-          ))}
           {failed.slice(0, 2).map((terminal) => (
             <Button
               key={terminal.sessionId}

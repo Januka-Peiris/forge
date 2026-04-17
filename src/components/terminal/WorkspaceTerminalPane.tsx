@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { RefreshCw, Square, X } from 'lucide-react';
+import { Square, X } from 'lucide-react';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
@@ -19,7 +19,6 @@ export function TerminalPane({
   chunks,
   focused,
   onFocus,
-  onAttach,
   onStop,
   onClose,
   onData,
@@ -30,7 +29,6 @@ export function TerminalPane({
   focused: boolean;
   stuckSince?: string | null;
   onFocus: () => void;
-  onAttach: () => void;
   onStop: () => void;
   onClose: () => void;
   onData: (data: string) => void;
@@ -127,16 +125,6 @@ export function TerminalPane({
           <p className="mt-0.5 truncate font-mono text-[10px] text-forge-text/82">{session.cwd}</p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={(event) => {
-              event.stopPropagation();
-              onAttach();
-            }}
-          >
-            <RefreshCw className="h-3 w-3" /> Attach
-          </Button>
           {running && (
             <Button
               variant="ghost"

@@ -8,7 +8,6 @@ import type { AgentChatEvent, AgentChatEventEnvelope, AgentChatNextAction, Agent
 import type { WorkspaceChangedFile } from '../../types/git-review';
 import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
 import {
-  attachWorkspaceTerminalSession,
   closeWorkspaceTerminalSessionById,
   createWorkspaceTerminal,
   getWorkspaceTerminalOutputForSession,
@@ -55,7 +54,6 @@ import {
 } from '../../lib/tauri-api/agent-profiles';
 import { forgeWarn } from '../../lib/forge-log';
 import { useAgentProfile } from '../../lib/hooks/useAgentProfile';
-import { measureAsync } from '../../lib/perf';
 import { formatCursorOpenError, formatSessionError } from '../../lib/ui-errors';
 import {
   deriveAgentRunSections,
@@ -205,7 +203,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     });
   }, []);
 
-  const refreshSessions = useCallback(async (attachDisplayed = false, fetchOutput = attachDisplayed, preferredFocusId?: string | null) => {
+  const refreshSessions = useCallback(async (fetchOutput = false, preferredFocusId?: string | null) => {
     if (!workspaceId) return;
     setError(null);
     try {
@@ -223,10 +221,6 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       setAllSessions(history);
       focusedIdRef.current = nextFocusedId;
       setFocusedId(nextFocusedId);
-
-      if (attachDisplayed && focused?.status === 'running') {
-        await attachWorkspaceTerminalSession({ workspaceId, sessionId: focused.id }).catch(() => undefined);
-      }
 
       if (fetchOutput && focused) {
         const output = await getWorkspaceTerminalOutputForSession(
@@ -406,7 +400,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       void refreshAgentContext();
       void refreshAgentProfiles();
       void refreshModelSettings();
-      void refreshSessions(false, true);
+      void refreshSessions(true);
       void refreshChatSessions();
       void refreshWorkbenchState();
       const timer = window.setTimeout(() => {
@@ -425,7 +419,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       metadataPollTickRef.current += 1;
       const shouldBackfillOutput = metadataPollTickRef.current % 6 === 0;
       const shouldRefreshExpensiveState = metadataPollTickRef.current % 3 === 0;
-      void refreshSessions(false, shouldBackfillOutput);
+      void refreshSessions(shouldBackfillOutput);
       void refreshChatSessions();
       if (shouldRefreshExpensiveState) {
         void refreshHealth();
@@ -501,9 +495,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       setFocusedId(session.id);
       focusedChatIdRef.current = null;
       setFocusedChatId(null);
-      focusedChatIdRef.current = null;
-      setFocusedChatId(null);
-      await refreshSessions(true, true, session.id);
+      await refreshSessions(true, session.id);
       await refreshHealth();
       await refreshReadiness();
     } catch (err) {
@@ -568,7 +560,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         focusedIdRef.current = sessions[0].id;
         setFocusedId(sessions[0].id);
       }
-      await refreshSessions(true, true, sessions[0]?.id ?? null);
+      await refreshSessions(true, sessions[0]?.id ?? null);
       await refreshHealth();
       await refreshReadiness();
     } catch (err) {
@@ -589,7 +581,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       nextSeqRef.current[session.id] = 0;
       focusedIdRef.current = session.id;
       setFocusedId(session.id);
-      await refreshSessions(true, true, session.id);
+      await refreshSessions(true, session.id);
       await refreshHealth();
       await refreshReadiness();
     } catch (err) {
@@ -666,19 +658,16 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       setFocusedChatId(null);
       focusedIdRef.current = session.id;
       setFocusedId(session.id);
-      if (session.status === 'running') {
-        await measureAsync('terminal:attach', () => attachWorkspaceTerminalSession({ workspaceId, sessionId: session.id }));
-      }
       nextSeqRef.current[session.id] = 0;
       const output = await getWorkspaceTerminalOutputForSession(workspaceId, session.id, 0);
       nextSeqRef.current[session.id] = output.nextSeq;
       appendOutput(session.id, output.chunks, true);
-      await refreshSessions(false, false, session.id);
+      await refreshSessions(false, session.id);
       await refreshHealth();
       await refreshReadiness();
     } catch (err) {
       setActionError(err);
-      await refreshSessions(false, false, session.id);
+      await refreshSessions(false, session.id);
     } finally {
       setBusy(false);
     }
@@ -936,10 +925,6 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         onOpenPort={(port) => void openPort(port)}
         onKillPort={(port) => void killPort(port)}
         onRefreshHealth={() => void refreshHealth()}
-        onRecoverSession={(sessionId) => {
-          const session = allSessions.find((s) => s.id === sessionId);
-          if (session) void attachTerminal(session);
-        }}
         onCloseTerminal={(sessionId) => void closeTerminal(sessionId)}
         onStartShell={() => void createTerminal('shell', 'shell', 'Shell')}
         onAttachTerminal={(session) => void attachTerminal(session)}
@@ -1107,7 +1092,6 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                   focused
                   stuckSince={workspaceHealth?.terminals.find((t) => t.sessionId === focusedSession.id)?.stuckSince ?? null}
                   onFocus={() => { focusedIdRef.current = focusedSession.id; setFocusedId(focusedSession.id); }}
-                  onAttach={() => void attachTerminal(focusedSession)}
                   onStop={() => void stopTerminal(focusedSession.id)}
                   onClose={() => void closeTerminal(focusedSession.id)}
                   onData={(data) => void writeWorkspaceTerminalSessionInput(focusedSession.id, data).catch(setActionError)}
