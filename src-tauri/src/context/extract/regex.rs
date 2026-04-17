@@ -6,8 +6,11 @@ pub fn extract(path: &str, content: &str, repo_files: &HashSet<String>) -> Extra
     let ext = std::path::Path::new(path).extension().and_then(|e| e.to_str()).unwrap_or("");
     let symbols = extract_symbols(content, ext);
     let imports_internal = extract_imports(content, ext, path, repo_files);
-    let content_preview: String = content.chars().take(500).collect();
-    ExtractResult { symbols, imports_internal, content_preview, engine: "regex".to_string() }
+    ExtractResult {
+        symbols,
+        imports_internal,
+        engine: "regex".to_string(),
+    }
 }
 
 fn extract_symbols(content: &str, ext: &str) -> Vec<RepoSymbol> {

@@ -24,17 +24,33 @@ pub fn build_candidate_pool(
         map.entries.iter().map(|e| (e.path.as_str(), e)).collect();
 
     let mut candidates: HashSet<String> = seeds.iter().cloned().collect();
+    let seed_set: HashSet<String> = seeds.iter().cloned().collect();
 
-    // Same-directory neighbours
-    let seed_dirs: HashSet<String> = seeds.iter()
+    // Same-directory neighbours: bounded per seed directory by PageRank
+    let seed_dirs: HashSet<String> = seeds
+        .iter()
         .filter_map(|s| Path::new(s).parent().map(|p| p.to_string_lossy().into_owned()))
         .collect();
 
-    for entry in &map.entries {
-        if candidates.contains(&entry.path) { continue; }
-        let dir = Path::new(&entry.path).parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
-        if seed_dirs.contains(&dir) {
-            candidates.insert(entry.path.clone());
+    let dir_limit = cfg.same_dir_limit_per_seed.max(1);
+    for dir in &seed_dirs {
+        let mut in_dir: Vec<&crate::context::schema::RepoEntry> = map
+            .entries
+            .iter()
+            .filter(|e| {
+                if seed_set.contains(&e.path) {
+                    return false;
+                }
+                let pdir = Path::new(&e.path)
+                    .parent()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                pdir == *dir
+            })
+            .collect();
+        in_dir.sort_by(|a, b| b.base_rank.partial_cmp(&a.base_rank).unwrap_or(std::cmp::Ordering::Equal));
+        for e in in_dir.into_iter().take(dir_limit) {
+            candidates.insert(e.path.clone());
         }
     }
 

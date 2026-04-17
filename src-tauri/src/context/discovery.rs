@@ -21,7 +21,7 @@ pub struct DefaultRef {
 }
 
 /// Check whether the cached map is up-to-date.
-pub fn is_stale(root: &Path, db: &Database) -> bool {
+pub fn is_stale(root: &Path, _db: &Database) -> bool {
     let meta_path = root.join(".forge").join("context").join("repo_map.meta.json");
     let Ok(raw) = fs::read_to_string(&meta_path) else { return true; };
     let Ok(meta) = serde_json::from_str::<RepoMapMetaV2>(&raw) else { return true; };

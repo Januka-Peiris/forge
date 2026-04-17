@@ -79,7 +79,7 @@ pub fn build_context_preview(
     let graph = FileGraph::build(&map.entries);
     let prompt = prompt_hint.unwrap_or("");
     let candidates = select::build_candidate_pool(prompt, &overlay_data, &map, &graph, cfg);
-    let (included, excluded) = token_fit::fit_to_budget(candidates, &map, &overlay_data, cfg.soft_repo_context_tokens);
+    let (included, excluded) = token_fit::fit_to_budget(candidates, &map, &overlay_data, cfg);
 
     let estimated_tokens_context: u32 = included.iter().map(|s| s.estimated_tokens).sum();
 

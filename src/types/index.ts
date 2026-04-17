@@ -15,7 +15,7 @@ export type {
   RepositoryWorkspaceOptions,
 } from './workspace';
 export { toWorkspace } from './workspace';
-export type { AgentContextWorktree, RepoMap, RepoMapEntry, RepoMapMeta, WorkspaceAgentContext, WorkspaceContextItem, WorkspaceContextPreview } from './agent-context';
+export type { AgentContextWorktree, WorkspaceAgentContext, WorkspaceContextItem, WorkspaceContextPreview } from './agent-context';
 export type { AgentProfile } from './agent-profile';
 export type { AgentChatEvent, AgentChatEventEnvelope, AgentChatSession } from './agent-chat';
 export type { ReviewItem } from './review';

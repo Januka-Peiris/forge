@@ -21,35 +21,6 @@ pub struct WorkspaceAgentContext {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct RepoMap {
-    pub version: u32,
-    pub generated_at: String,
-    pub branch: String,
-    pub ref_name: String,
-    pub commit_hash: String,
-    pub entries: Vec<RepoMapEntry>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct RepoMapEntry {
-    pub path: String,
-    pub kind: String,
-    pub symbols: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct RepoMapMeta {
-    pub version: u32,
-    pub branch: String,
-    pub ref_name: String,
-    pub commit_hash: String,
-    pub generated_at: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
 pub struct WorkspaceContextPreview {
     pub workspace_id: String,
     pub repo_root: String,

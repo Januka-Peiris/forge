@@ -13,29 +13,6 @@ export interface WorkspaceAgentContext {
   promptPreamble: string;
 }
 
-export interface RepoMapEntry {
-  path: string;
-  kind: string;
-  symbols: string[];
-}
-
-export interface RepoMapMeta {
-  version: number;
-  branch: string;
-  refName: string;
-  commitHash: string;
-  generatedAt: string;
-}
-
-export interface RepoMap {
-  version: number;
-  generatedAt: string;
-  branch: string;
-  refName: string;
-  commitHash: string;
-  entries: RepoMapEntry[];
-}
-
 export interface WorkspaceContextItem {
   label: string;
   path?: string | null;

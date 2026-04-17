@@ -10,5 +10,3 @@ pub mod schema;
 pub mod select;
 pub mod summary;
 pub mod token_fit;
-
-pub use schema::*;

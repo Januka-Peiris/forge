@@ -1,13 +1,15 @@
 use crate::context::schema::{
-    ContextCandidate, ContextSegment, RepoMapV2, RenderMode, WorkspaceOverlay, estimate_tokens,
+    ContextCandidate, ContextSegment, RepoMapV2, RenderMode, SelectConfig, WorkspaceOverlay,
+    estimate_tokens,
 };
 
 pub fn fit_to_budget(
     candidates: Vec<ContextCandidate>,
     map: &RepoMapV2,
     overlay: &WorkspaceOverlay,
-    target_tokens: u32,
+    cfg: &SelectConfig,
 ) -> (Vec<ContextSegment>, Vec<String>) {
+    let target_tokens = cfg.soft_repo_context_tokens;
     let entry_map: std::collections::HashMap<&str, &crate::context::schema::RepoEntry> =
         map.entries.iter().map(|e| (e.path.as_str(), e)).collect();
 
@@ -17,7 +19,7 @@ pub fn fit_to_budget(
 
     for mut candidate in candidates {
         loop {
-            let content = render(&candidate, &entry_map, overlay);
+            let content = render(&candidate, &entry_map, overlay, cfg);
             let tokens = estimate_tokens(&content);
 
             if candidate.mandatory || used + tokens <= target_tokens {
@@ -49,6 +51,7 @@ fn render(
     candidate: &ContextCandidate,
     entry_map: &std::collections::HashMap<&str, &crate::context::schema::RepoEntry>,
     overlay: &WorkspaceOverlay,
+    cfg: &SelectConfig,
 ) -> String {
     match &candidate.render_mode {
         RenderMode::Full => {
@@ -61,22 +64,30 @@ fn render(
                 return render_diff(f);
             }
             // Fall back to symbol card
-            render_symbol_card(&candidate.path, entry_map)
+            render_symbol_card(&candidate.path, entry_map, cfg)
         }
         RenderMode::DiffHunks => {
             if let Some(f) = overlay.changed.iter().find(|f| f.path == candidate.path) {
                 return render_diff(f);
             }
-            render_symbol_card(&candidate.path, entry_map)
+            render_symbol_card(&candidate.path, entry_map, cfg)
         }
-        RenderMode::SymbolCard => render_symbol_card(&candidate.path, entry_map),
+        RenderMode::SymbolCard => render_symbol_card(&candidate.path, entry_map, cfg),
         RenderMode::SummaryLine => {
-            let summary = entry_map.get(candidate.path.as_str())
-                .map(|e| e.summary.as_str())
-                .unwrap_or("");
+            let summary = entry_map
+                .get(candidate.path.as_str())
+                .map(|e| truncate_chars(&e.summary, cfg.summary_max_chars))
+                .unwrap_or_default();
             format!("- {} — {}", candidate.path, summary)
         }
     }
+}
+
+fn truncate_chars(s: &str, max: usize) -> String {
+    if max == 0 {
+        return String::new();
+    }
+    s.chars().take(max).collect()
 }
 
 fn render_diff(file: &crate::context::schema::OverlayFile) -> String {
@@ -86,12 +97,18 @@ fn render_diff(file: &crate::context::schema::OverlayFile) -> String {
     )
 }
 
-fn render_symbol_card(path: &str, entry_map: &std::collections::HashMap<&str, &crate::context::schema::RepoEntry>) -> String {
+fn render_symbol_card(
+    path: &str,
+    entry_map: &std::collections::HashMap<&str, &crate::context::schema::RepoEntry>,
+    cfg: &SelectConfig,
+) -> String {
     let Some(entry) = entry_map.get(path) else {
         return format!("- {}", path);
     };
-    let mut lines = vec![format!("### {} — {}", path, entry.summary)];
-    for sym in entry.top_symbols.iter().take(5) {
+    let head = truncate_chars(&entry.summary, cfg.summary_max_chars);
+    let mut lines = vec![format!("### {} — {}", path, head)];
+    let sym_take = cfg.top_symbols_per_file.max(1);
+    for sym in entry.top_symbols.iter().take(sym_take) {
         let sig = sym.signature.as_deref().unwrap_or(&sym.name);
         lines.push(format!("  {} {} (line {})", sym.kind, sig, sym.line_start));
     }

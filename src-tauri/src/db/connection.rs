@@ -109,6 +109,9 @@ impl Database {
             Ok(())
         })?;
 
+        // Drop old tree-sitter / symbol cache rows (blob-keyed; safe to prune aggressively)
+        crate::context::cache::prune_old(self, 45);
+
         // VACUUM must run outside a transaction
         self.with_connection(|connection| connection.execute("VACUUM", []))
             .map_err(|err| format!("Failed to vacuum database: {err}"))?;

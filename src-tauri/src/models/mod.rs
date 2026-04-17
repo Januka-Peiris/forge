@@ -29,8 +29,7 @@ pub mod workspace_template;
 
 pub use activity::ActivityItem;
 pub use agent_context::{
-    AgentContextWorktree, RepoMap, RepoMapEntry, RepoMapMeta, WorkspaceAgentContext,
-    WorkspaceContextItem, WorkspaceContextPreview,
+    AgentContextWorktree, WorkspaceAgentContext, WorkspaceContextItem, WorkspaceContextPreview,
 };
 pub use agent_chat::{
     AgentChatEvent, AgentChatEventEnvelope, AgentChatSession, CreateAgentChatSessionInput,
