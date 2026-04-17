@@ -57,7 +57,7 @@ import {
   WorkspacePortsStrip,
   WorkspaceReadinessStrip,
 } from './WorkspaceTerminalStrips';
-import { TerminalPane, terminalStatusBadgeClass } from './WorkspaceTerminalPane';
+import { TerminalPane } from './WorkspaceTerminalPane';
 
 interface WorkspaceTerminalProps {
   workspace: Workspace | null;
@@ -732,17 +732,8 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
           <div className="flex min-w-0 items-center gap-2">
             <TerminalIcon className="h-4 w-4 shrink-0 text-forge-orange" />
             <h1 className="truncate text-base font-bold text-forge-text">{workspace.name}</h1>
-            <span className="shrink-0 rounded-full border border-forge-border bg-white/5 px-2 py-0.5 text-xs font-bold uppercase text-forge-muted">
-              {visibleSessions.filter((session) => session.status === 'running').length} running
-            </span>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            <button disabled={busy} onClick={() => void createTerminal('shell', 'shell', 'Shell')} className="rounded-lg border border-forge-border bg-white/5 px-2.5 py-1.5 text-sm font-semibold text-forge-text/85 hover:bg-white/10 disabled:opacity-50">
-              New Shell
-            </button>
-            <button disabled={busy} onClick={() => void createTerminal('agent', 'codex', 'Codex')} className="rounded-lg border border-forge-blue/30 bg-forge-blue/10 px-2.5 py-1.5 text-sm font-semibold text-forge-blue hover:bg-forge-blue/20 disabled:opacity-50">
-              New Codex
-            </button>
             <button disabled={busy} onClick={() => void createTerminal('agent', 'claude_code', 'Claude')} className="rounded-lg border border-forge-orange/30 bg-forge-orange/10 px-2.5 py-1.5 text-sm font-semibold text-forge-orange hover:bg-forge-orange/20 disabled:opacity-50">
               New Claude
             </button>
@@ -810,9 +801,9 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         </div>
 
         {/* Compact status line */}
-        <div className="mt-1.5 flex items-center gap-2 text-sm">
+        <div className="mt-1 flex items-center gap-2 text-xs">
           <p className="min-w-0 flex-1 truncate font-mono text-forge-muted">
-            {workspace.repo} / {workspace.branch} · {workspace.workspaceRootPath ?? workspace.selectedWorktreePath ?? 'no root'}
+            {workspace.repo} / {workspace.branch}
           </p>
         </div>
 
@@ -948,7 +939,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
           </div>
         ) : focusedSession ? (
           <>
-            <div className="flex shrink-0 items-center gap-1 overflow-x-auto rounded-xl border border-forge-border bg-forge-surface/85 p-1">
+            <div className="flex shrink-0 items-center gap-1 overflow-x-auto px-1 pb-1">
               {visibleSessions.map((session) => {
                 const title = session.title || PROFILE_LABELS[session.profile as TerminalProfile] || session.profile;
                 const active = focusedSession.id === session.id;
@@ -961,7 +952,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                     title={`${title} · ${session.status} · ${session.cwd}`}
                   >
                     <span className="truncate text-sm font-semibold">{title}</span>
-                    <span className={`rounded-full border px-1.5 py-0.5 text-xs font-bold uppercase ${terminalStatusBadgeClass(session)}`}>
+                    <span className={`text-xs font-medium uppercase ${session.stale ? 'text-forge-yellow' : session.status === 'running' ? 'text-forge-green' : session.status === 'failed' || session.status === 'interrupted' ? 'text-forge-red' : 'text-forge-muted'} opacity-80`}>
                       {session.stale ? 'stale' : session.status}
                     </span>
                     <span
