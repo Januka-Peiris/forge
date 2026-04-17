@@ -39,8 +39,8 @@ function TimelineRow({ icon: Icon, color, label, time }: { icon: ElementType; co
         <Icon className="w-2.5 h-2.5 text-white" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-[11px] text-forge-text leading-snug">{label}</p>
-        <p className="text-[10px] text-forge-muted mt-0.5">{time}</p>
+        <p className="text-sm text-forge-text leading-snug">{label}</p>
+        <p className="text-xs text-forge-muted mt-0.5">{time}</p>
       </div>
     </div>
   );
@@ -107,13 +107,13 @@ export function DetailPanel({
 
   if (!workspace) {
     return (
-      <aside className="w-[300px] shrink-0 h-full bg-forge-surface border-l border-forge-border flex flex-col items-center justify-center">
+      <aside className="w-[300px] shrink-0 h-full bg-forge-surface flex flex-col items-center justify-center">
         <div className="text-center px-6">
           <div className="w-10 h-10 rounded-xl bg-forge-card border border-forge-border flex items-center justify-center mx-auto mb-3">
             <Activity className="w-5 h-5 text-forge-muted" />
           </div>
-          <p className="text-[13px] font-medium text-forge-muted">No workspace selected</p>
-          <p className="text-[11px] text-forge-muted mt-1">Select a workspace to inspect it</p>
+          <p className="text-sm font-medium text-forge-muted">No workspace selected</p>
+          <p className="text-sm text-forge-muted mt-1">Select a workspace to inspect it</p>
         </div>
       </aside>
     );
@@ -144,14 +144,14 @@ export function DetailPanel({
   });
 
   return (
-    <aside className="w-full shrink-0 h-full bg-forge-surface/95 border-l border-forge-border flex flex-col overflow-hidden">
+    <aside className="w-full shrink-0 h-full bg-forge-surface flex flex-col overflow-hidden">
       {/* Header — always visible */}
-      <div className="px-4 py-3 border-b border-forge-border shrink-0">
+      <div className="px-4 py-4 shrink-0">
         <div className="flex items-center justify-between mb-1">
-          <h2 className="text-[13px] font-bold text-forge-text truncate">{workspace.name}</h2>
+          <h2 className="text-sm font-bold text-forge-text truncate">{workspace.name}</h2>
           <StatusBadge status={workspace.status} />
         </div>
-        <div className="flex items-center gap-1.5 text-[11px] text-forge-muted mt-1">
+        <div className="flex items-center gap-1.5 text-sm text-forge-muted mt-1">
           <span className="text-forge-text/90 font-medium">{workspace.repo}</span>
           <span className="text-forge-muted">/</span>
           <GitBranch className="w-3 h-3 shrink-0 text-forge-muted" />
@@ -159,7 +159,7 @@ export function DetailPanel({
         </div>
         <div className="mt-1.5 flex items-center gap-2 flex-wrap">
           <AgentBadge agent={workspace.agent} />
-          <span className="text-[10px] text-forge-muted">{sessionStatus} · {sessionModel}</span>
+          <span className="text-xs text-forge-muted">{sessionStatus} · {sessionModel}</span>
         </div>
       </div>
 
@@ -167,34 +167,34 @@ export function DetailPanel({
       <div className="flex-1 overflow-y-auto">
         <>
             {/* Current Task */}
-            <div className="px-4 py-3 border-b border-forge-border/60">
-              <p className="text-[10px] font-semibold text-forge-muted uppercase tracking-widest mb-1.5">Current Task</p>
-              <p className="text-[11px] text-forge-text/92 leading-relaxed">{workspace.currentTask}</p>
+            <div className="px-4 py-4">
+              <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest mb-1.5">Current Task</p>
+              <p className="text-sm text-forge-text/92 leading-relaxed">{workspace.currentTask}</p>
             </div>
 
             {/* Branch Health */}
-            <div className="px-4 py-3 border-b border-forge-border/60">
-              <p className="text-[10px] font-semibold text-forge-muted uppercase tracking-widest mb-2">Branch Health</p>
-              <p className="text-[9px] leading-snug text-forge-muted/90 mb-2">
+            <div className="px-4 py-4">
+              <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest mb-2">Branch Health</p>
+              <p className="text-xs leading-snug text-forge-muted/90 mb-2">
                 Saved workspace row (not live git). For current ahead/behind vs base, use Readiness in the workspace view.
               </p>
               <div className="grid grid-cols-2 gap-2 mb-2">
                 <div className="bg-forge-card rounded-lg p-2.5 border border-forge-border">
                   <div className="flex items-center gap-1 text-forge-green mb-0.5">
                     <ArrowUp className="w-3 h-3" />
-                    <span className="text-[10px] font-semibold">Ahead</span>
+                    <span className="text-xs font-semibold">Ahead</span>
                   </div>
                   <p className="text-[18px] font-bold text-forge-text">{workspace.aheadBy}</p>
                 </div>
                 <div className="bg-forge-card rounded-lg p-2.5 border border-forge-border">
                   <div className="flex items-center gap-1 text-forge-yellow mb-0.5">
                     <ArrowDown className="w-3 h-3" />
-                    <span className="text-[10px] font-semibold">Behind</span>
+                    <span className="text-xs font-semibold">Behind</span>
                   </div>
                   <p className="text-[18px] font-bold text-forge-text">{workspace.behindBy}</p>
                 </div>
               </div>
-              <div className="flex items-center justify-between text-[11px]">
+              <div className="flex items-center justify-between text-sm">
                 <span className="flex items-center gap-1 text-forge-muted">
                   <AlertTriangle className="w-3 h-3" />
                   Merge risk:
@@ -208,18 +208,18 @@ export function DetailPanel({
             </div>
 
             {/* Pull Request */}
-            <div className="px-4 py-3 border-b border-forge-border/60">
-              <p className="text-[10px] font-semibold text-forge-muted uppercase tracking-widest mb-2">Pull Request</p>
+            <div className="px-4 py-4">
+              <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest mb-2">Pull Request</p>
               {workspace.prStatus && workspace.prNumber ? (
                 <div className="flex items-center gap-2 mb-2">
                   <GitPullRequest className="w-3.5 h-3.5 text-forge-green shrink-0" />
-                  <span className="text-[11px] text-forge-text font-medium">PR #{workspace.prNumber}</span>
-                  <span className="text-[10px] text-forge-muted capitalize">{workspace.prStatus}</span>
+                  <span className="text-sm text-forge-text font-medium">PR #{workspace.prNumber}</span>
+                  <span className="text-xs text-forge-muted capitalize">{workspace.prStatus}</span>
                 </div>
               ) : (
-                <p className="text-[10px] text-forge-muted mb-2">No PR open yet.</p>
+                <p className="text-xs text-forge-muted mb-2">No PR open yet.</p>
               )}
-              {prError && <p className="text-[10px] text-forge-red mb-1">{prError}</p>}
+              {prError && <p className="text-xs text-forge-red mb-1">{prError}</p>}
               {!workspace.prStatus && (
                 <button
                   disabled={prCreating}
@@ -235,7 +235,7 @@ export function DetailPanel({
                       setPrCreating(false);
                     }
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forge-green/15 hover:bg-forge-green/25 disabled:opacity-50 text-[11px] font-semibold text-forge-green border border-forge-green/20 transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forge-green/15 hover:bg-forge-green/25 disabled:opacity-50 text-sm font-semibold text-forge-green border border-forge-green/20 transition-colors"
                 >
                   {prCreating ? <Loader2 className="w-3 h-3 animate-spin" /> : <GitPullRequest className="w-3 h-3" />}
                   {prCreating ? 'Creating PR…' : 'Create PR'}
@@ -244,9 +244,9 @@ export function DetailPanel({
             </div>
 
             {/* Budget Cap */}
-            <div className="px-4 py-3 border-b border-forge-border/60">
-              <p className="text-[10px] font-semibold text-forge-muted uppercase tracking-widest mb-2">Budget Cap</p>
-              <p className="text-[10px] text-forge-muted mb-2">
+            <div className="px-4 py-4">
+              <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest mb-2">Budget Cap</p>
+              <p className="text-xs text-forge-muted mb-2">
                 {workspace.costLimitUsd ? `Current cap: $${workspace.costLimitUsd.toFixed(2)}` : 'No cap set'}
               </p>
               <div className="flex items-center gap-2">
@@ -267,9 +267,9 @@ export function DetailPanel({
                     }
                   }}
                   placeholder="e.g. 5.00"
-                  className="flex-1 bg-forge-card border border-forge-border rounded px-2 py-1 text-[11px] text-forge-text placeholder:text-forge-muted/70 focus:outline-none focus:border-forge-orange/40"
+                  className="flex-1 bg-forge-card border border-forge-border rounded px-2 py-1 text-sm text-forge-text placeholder:text-forge-muted/70 focus:outline-none focus:border-forge-orange/40"
                 />
-                <span className="text-[10px] text-forge-muted">USD</span>
+                <span className="text-xs text-forge-muted">USD</span>
               </div>
             </div>
 
@@ -279,9 +279,9 @@ export function DetailPanel({
             </div>
 
             {/* Timeline */}
-            <div className="px-4 py-3 border-b border-forge-border/60">
+            <div className="px-4 py-4">
               <div className="flex items-center justify-between mb-1">
-                <p className="text-[10px] font-semibold text-forge-muted uppercase tracking-widest">Timeline</p>
+                <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest">Timeline</p>
                 {timelineLoading && <Loader2 className="w-3 h-3 animate-spin text-forge-muted" />}
               </div>
               {(() => {
@@ -303,7 +303,7 @@ export function DetailPanel({
                     <div className="absolute left-2.5 top-2 bottom-2 w-px bg-forge-border" />
                     <div className="pl-1">
                       {visibleItems.length === 0 ? (
-                        <p className="text-[10px] text-forge-muted">No activity recorded yet.</p>
+                        <p className="text-xs text-forge-muted">No activity recorded yet.</p>
                       ) : visibleItems.map((item, i) => {
                         const { icon, color } = eventIcon(item.event, item.level ?? 'info');
                         const label = 'details' in item && item.details ? `${item.event} · ${item.details}` : item.event;
@@ -314,7 +314,7 @@ export function DetailPanel({
                     {allItems.length > 8 && (
                       <button
                         onClick={() => setTimelineExpanded((e) => !e)}
-                        className="mt-1 flex items-center gap-1 text-[10px] text-forge-muted hover:text-forge-text"
+                        className="mt-1 flex items-center gap-1 text-xs text-forge-muted hover:text-forge-text"
                       >
                         <ChevronDown className={`w-3 h-3 transition-transform ${timelineExpanded ? 'rotate-180' : ''}`} />
                         {timelineExpanded ? 'Show less' : `Show all ${allItems.length}`}
@@ -326,19 +326,19 @@ export function DetailPanel({
             </div>
 
             {/* Linked Worktrees */}
-            <div className="px-4 py-3 border-b border-forge-border/60">
-              <p className="text-[10px] font-semibold text-forge-muted uppercase tracking-widest mb-2">Linked Worktrees</p>
+            <div className="px-4 py-4">
+              <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest mb-2">Linked Worktrees</p>
               <input
                 value={linkedSearch}
                 onChange={(event) => setLinkedSearch(event.target.value)}
                 placeholder="Search repos/worktrees..."
-                className="mb-2 w-full bg-forge-card border border-forge-border rounded px-2 py-1 text-[10px] text-forge-text placeholder:text-forge-muted/80"
+                className="mb-2 w-full bg-forge-card border border-forge-border rounded px-2 py-1 text-xs text-forge-text placeholder:text-forge-muted/80"
               />
               <div className="flex gap-2 mb-2">
                 <select
                   value={selectedLinkedWorktreeId}
                   onChange={(event) => setSelectedLinkedWorktreeId(event.target.value)}
-                  className="flex-1 bg-forge-card border border-forge-border rounded px-2 py-1 text-[10px] text-forge-text"
+                  className="flex-1 bg-forge-card border border-forge-border rounded px-2 py-1 text-xs text-forge-text"
                 >
                   <option value="">Select worktree to attach</option>
                   {groupedAttachOptions.map((group) => (
@@ -353,28 +353,28 @@ export function DetailPanel({
                 </select>
                 <button
                   onClick={() => selectedLinkedWorktreeId && onAttachLinkedWorktree?.(selectedLinkedWorktreeId)}
-                  className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-[10px] text-forge-text/80 border border-forge-border"
+                  className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-xs text-forge-text/80 border border-forge-border"
                 >
                   Attach
                 </button>
               </div>
               {linkedWorktrees.length === 0 ? (
-                <p className="text-[10px] text-forge-muted leading-relaxed">No linked worktrees yet. Attach a worktree from another repo for supporting context.</p>
+                <p className="text-xs text-forge-muted leading-relaxed">No linked worktrees yet. Attach a worktree from another repo for supporting context.</p>
               ) : (
                 <div className="space-y-1.5">
                   {linkedWorktrees.map((linked) => (
                     <div key={linked.worktreeId} className="rounded border border-forge-border/60 bg-forge-card/60 px-2 py-1.5">
-                      <div className="flex items-center gap-1.5 text-[10px] text-forge-text">
+                      <div className="flex items-center gap-1.5 text-xs text-forge-text">
                         <Link2 className="w-3 h-3 text-forge-blue" />
                         <span className="font-semibold">{linked.repoName}</span>
                         <span className="font-mono text-forge-text/85">{linked.branch ?? 'detached'}</span>
                       </div>
-                      <p className="mt-1 text-[10px] font-mono text-forge-muted truncate">{linked.path}</p>
+                      <p className="mt-1 text-xs font-mono text-forge-muted truncate">{linked.path}</p>
                       <div className="mt-1 flex gap-2">
-                        <button onClick={() => onOpenLinkedWorktreeInCursor?.(linked.path)} className="text-[10px] text-forge-blue hover:underline">
+                        <button onClick={() => onOpenLinkedWorktreeInCursor?.(linked.path)} className="text-xs text-forge-blue hover:underline">
                           Open in Cursor
                         </button>
-                        <button onClick={() => onDetachLinkedWorktree?.(linked.worktreeId)} className="text-[10px] text-forge-red hover:underline">
+                        <button onClick={() => onDetachLinkedWorktree?.(linked.worktreeId)} className="text-xs text-forge-red hover:underline">
                           Detach
                         </button>
                       </div>
@@ -385,20 +385,20 @@ export function DetailPanel({
             </div>
 
             {/* Lineage */}
-            <div className="px-4 py-3 border-b border-forge-border/60">
+            <div className="px-4 py-4">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] font-semibold text-forge-muted uppercase tracking-widest">Lineage</p>
-                <button onClick={onCreateChildWorkspace} className="inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] bg-white/5 hover:bg-white/10 text-forge-text/80">
+                <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest">Lineage</p>
+                <button onClick={onCreateChildWorkspace} className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs bg-white/5 hover:bg-white/10 text-forge-text/80">
                   <Plus className="w-3 h-3" /> Branch From Here
                 </button>
               </div>
-              <p className="text-[10px] text-forge-muted">
+              <p className="text-xs text-forge-muted">
                 Parent: <span className="font-mono text-forge-text">{workspace.parentWorkspaceId ?? 'none'}</span>
               </p>
-              <p className="text-[10px] text-forge-muted mt-1">
+              <p className="text-xs text-forge-muted mt-1">
                 Source: <span className="font-mono text-forge-text">{workspace.sourceWorkspaceId ?? 'self'}</span>
               </p>
-              <p className="text-[10px] text-forge-muted mt-1">
+              <p className="text-xs text-forge-muted mt-1">
                 Derived:{' '}
                 <span className="font-mono text-forge-text">{workspace.derivedFromBranch ?? workspace.branch}</span>
               </p>
@@ -411,18 +411,18 @@ export function DetailPanel({
         <div className="flex gap-2">
           <button
             onClick={onArchiveWorkspace}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-white/5 hover:bg-white/8 text-[12px] font-medium text-forge-text/85 transition-colors border border-forge-border"
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-white/5 hover:bg-white/8 text-sm font-medium text-forge-text/85 transition-colors border border-forge-border"
           >
             {isArchived ? 'Unarchive' : 'Archive'}
           </button>
           <button
             onClick={onDeleteWorkspace}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-forge-red/10 hover:bg-forge-red/20 text-[12px] font-semibold text-forge-red transition-colors border border-forge-red/20"
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-forge-red/10 hover:bg-forge-red/20 text-sm font-semibold text-forge-red transition-colors border border-forge-red/20"
           >
             Delete
           </button>
         </div>
-        <button onClick={onOpenInCursor} className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-forge-blue/15 hover:bg-forge-blue/25 text-[12px] font-semibold text-forge-blue transition-colors border border-forge-blue/20">
+        <button onClick={onOpenInCursor} className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-forge-blue/15 hover:bg-forge-blue/25 text-sm font-semibold text-forge-blue transition-colors border border-forge-blue/20">
           <ExternalLink className="w-3.5 h-3.5" />
           Open in Cursor
         </button>

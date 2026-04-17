@@ -1212,7 +1212,7 @@ export default function App() {
         {!isReviewView && (
           sidebarCollapsed ? (
             <div
-              className="shrink-0 h-full flex flex-col items-center justify-start bg-forge-surface border-r border-forge-border"
+              className="shrink-0 h-full flex flex-col items-center justify-start bg-forge-surface"
               style={{ width: `${COLLAPSED_RAIL_WIDTH}px` }}
             >
               <button
@@ -1259,16 +1259,8 @@ export default function App() {
         )}
 
         <div className="flex flex-1 min-w-0 min-h-0">
-          <div className="relative flex flex-col flex-1 min-w-0 min-h-0 bg-gradient-to-br from-[#0b0d12] via-forge-bg to-[#08090c]">
-            <div
-              className="pointer-events-none absolute inset-0 opacity-[0.35]"
-              style={{
-                backgroundImage:
-                  'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(59,130,246,0.12), transparent), radial-gradient(ellipse 60% 40% at 100% 0%, rgba(249,115,22,0.06), transparent)',
-              }}
-            />
-
-            <div className="relative z-[1] flex flex-1 flex-col min-h-0">
+          <div className="relative flex flex-col flex-1 min-w-0 min-h-0 bg-forge-bg">
+            <div className="relative flex flex-1 flex-col min-h-0">
               {mainContent()}
             </div>
           </div>
@@ -1339,7 +1331,7 @@ export default function App() {
                 </>
               ) : (
                 <div
-                  className="shrink-0 h-full flex items-start justify-center bg-forge-surface border-l border-forge-border"
+                  className="shrink-0 h-full flex items-start justify-center bg-forge-surface"
                   style={{ width: `${COLLAPSED_RAIL_WIDTH}px` }}
                 >
                   <button
