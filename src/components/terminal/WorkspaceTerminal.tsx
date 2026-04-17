@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Copy, ExternalLink, FileText, Globe2, Link2, MoreHorizontal, PlugZap, RefreshCw, RotateCcw, Settings2, Square, Terminal as TerminalIcon, Wrench, X, Zap } from 'lucide-react';
+import { ChevronDown, Copy, ExternalLink, Globe2, Link2, MoreHorizontal, PlugZap, RefreshCw, RotateCcw, Settings2, Square, Terminal as TerminalIcon, Wrench, X, Zap } from 'lucide-react';
 import { Button } from '../ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { ForgeWorkspaceConfig, PromptTemplate, TerminalOutputChunk, TerminalOutputEvent, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceContextPreview, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
+import type { ForgeWorkspaceConfig, TerminalOutputChunk, TerminalOutputEvent, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceContextPreview, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
 import type { AgentChatEvent, AgentChatEventEnvelope, AgentChatNextAction, AgentChatSession } from '../../types/agent-chat';
 import type { WorkspaceChangedFile } from '../../types/git-review';
 import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
@@ -137,7 +137,6 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   const [forgeConfig, setForgeConfig] = useState<ForgeWorkspaceConfig | null>(null);
   const [ports, setPorts] = useState<WorkspacePort[]>([]);
   const [portsBusy, setPortsBusy] = useState(false);
-  const [promptTemplates, setPromptTemplates] = useState<PromptTemplate[]>([]);
   const [promptTemplateWarning, setPromptTemplateWarning] = useState<string | null>(null);
   const [agentContext, setAgentContext] = useState<WorkspaceAgentContext | null>(null);
   const [contextPreview, setContextPreview] = useState<WorkspaceContextPreview | null>(null);
@@ -360,11 +359,9 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     if (!workspaceId) return;
     try {
       const result = await listWorkspacePromptTemplates(workspaceId);
-      setPromptTemplates(result.templates);
       setPromptTemplateWarning(result.warning ?? null);
     } catch (err) {
       forgeWarn('prompt-templates', 'load error', { err });
-      setPromptTemplates([]);
       setPromptTemplateWarning(formatSessionError(err));
     }
   }, [workspaceId]);
@@ -456,7 +453,6 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     setFocusedChatId(null);
     setForgeConfig(null);
     setPorts([]);
-    setPromptTemplates([]);
     setPromptTemplateWarning(null);
     setAgentContext(null);
     setContextPreview(null);
@@ -728,13 +724,6 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     } finally {
       setBusy(false);
     }
-  };
-
-  const injectTemplate = (template: PromptTemplate) => {
-    setPromptInput((current) => {
-      const prefix = current.trim().length > 0 ? `${current.trim()}\n\n` : '';
-      return `${prefix}${template.body.trim()}`;
-    });
   };
 
   const injectLinkedContext = () => {
@@ -1400,9 +1389,9 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
             className="h-1 cursor-row-resize bg-transparent hover:bg-forge-border/70 active:bg-forge-orange/60"
           />
           <div className="flex h-[calc(100%-4px)] min-h-0 flex-col gap-2 overflow-hidden p-2">
-          <div className="shrink-0 flex flex-wrap items-center gap-2">
+          <div className="shrink-0 flex items-center gap-2 overflow-x-auto">
             {focusedChatSession && (
-              <div className="flex flex-wrap items-center gap-1 rounded-lg border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-muted">
+              <div className="flex shrink-0 items-center gap-1 rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-muted">
                 <span className="font-semibold text-forge-text">{selectedClaudeAgent}</span>
                 <span>·</span>
                 <Select value={selectedModel} onValueChange={setSelectedModel}>
@@ -1605,11 +1594,6 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
               </PopoverContent>
             </Popover>
 
-            {promptTemplates.slice(0, 5).map((template) => (
-              <button key={template.id} onClick={() => injectTemplate(template)} title={template.source} className="max-w-[180px] truncate rounded-md border border-forge-border bg-white/5 px-2 py-1 text-xs font-semibold text-forge-muted hover:bg-white/10">
-                <FileText className="inline h-3 w-3" /> {template.title}
-              </button>
-            ))}
             {!!agentContext?.linkedWorktrees.length && (
               <button onClick={injectLinkedContext} className="max-w-[220px] truncate rounded-md border border-forge-blue/25 bg-forge-blue/10 px-2 py-1 text-xs font-semibold text-forge-blue hover:bg-forge-blue/15" title={agentContext.linkedWorktrees.map((item) => item.path).join('\n')}>
                 <Link2 className="inline h-3 w-3" /> Insert linked context ({agentContext.linkedWorktrees.length})
@@ -1724,7 +1708,7 @@ function ContextFooter({ workspaceId }: { workspaceId: string }) {
   if (!status) return null;
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1 border-t border-white/5 text-sm text-white/30">
+    <div className="flex items-center gap-2 px-3 py-0.5 border-t border-white/5 text-xs text-white/30">
       <span>ctx {status.engine}</span>
       {status.stale && (
         <span className="text-amber-400/70">[stale]</span>

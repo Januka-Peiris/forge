@@ -11,8 +11,8 @@ export const PROFILE_LABELS: Record<TerminalProfile, string> = {
 export const OUTPUT_RETENTION_CHUNKS = 1200;
 
 export const AGENT_COMPOSER_HEIGHT_KEY = 'forge:agent-composer-height';
-export const AGENT_COMPOSER_DEFAULT_PX = 228;
-export const AGENT_COMPOSER_MIN_PX = 140;
+export const AGENT_COMPOSER_DEFAULT_PX = 160;
+export const AGENT_COMPOSER_MIN_PX = 120;
 export const AGENT_COMPOSER_MAX_PX = 420;
 
 /** Rough token estimate from string length (~4 chars per token); not provider-reported usage. */

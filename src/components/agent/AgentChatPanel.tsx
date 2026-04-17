@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bot,
   CheckCircle2,
-  ClipboardCheck,
   FileCode2,
   GitPullRequest,
   Hammer,
@@ -51,22 +50,22 @@ export function AgentChatPanel({
     if (tab === 'chat') bottomRef.current?.scrollIntoView({ block: 'end' });
   }, [events.length, tab]);
 
+  const hasSummary = !!summary && summary.changedFileCount > 0;
+  const hasNextActions = (nextActions ?? []).length > 0;
+
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-forge-border bg-forge-bg">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-forge-border bg-forge-bg">
       <Tabs value={tab} onValueChange={(v) => setTab(v as 'chat' | 'raw')} className="flex min-h-0 flex-1 flex-col">
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-forge-border bg-forge-surface px-3 py-2">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <Bot className="h-4 w-4 text-forge-orange" />
-              <h2 className="truncate text-sm font-bold text-forge-text">{session.title}</h2>
-              <StatusBadge status={session.status} />
-            </div>
-            <p className="mt-0.5 truncate font-mono text-[10px] text-forge-muted">{session.cwd}</p>
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-forge-border bg-forge-surface px-3 py-1.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <Bot className="h-3.5 w-3.5 shrink-0 text-forge-orange" />
+            <h2 className="truncate text-sm font-semibold text-forge-text">{session.title}</h2>
+            <StatusBadge status={session.status} />
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <TabsList>
               <TabsTrigger value="chat">Chat</TabsTrigger>
-              <TabsTrigger value="raw">Raw / Diagnostics</TabsTrigger>
+              <TabsTrigger value="raw">Raw</TabsTrigger>
             </TabsList>
             {running && (
               <Button type="button" variant="destructive" size="xs" onClick={onInterrupt}>
@@ -76,6 +75,10 @@ export function AgentChatPanel({
           </div>
         </div>
 
+        {(hasSummary || hasNextActions) && (
+          <ResultStrip summary={summary ?? null} nextActions={nextActions ?? []} onAction={handleAction} />
+        )}
+
         <TabsContent value="raw">
           <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap bg-[#08090c] p-3 font-mono text-xs leading-relaxed text-forge-text/85">
             {session.rawOutput || 'No raw diagnostic output yet.'}
@@ -83,8 +86,8 @@ export function AgentChatPanel({
         </TabsContent>
 
         <TabsContent value="chat">
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
-            <div className="mx-auto flex max-w-5xl flex-col gap-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+            <div className="flex flex-col gap-3">
               {events.length === 0 && <EmptyChat provider={session.provider} />}
               {sections.map((section) => (
                 <AgentRunSectionView
@@ -94,7 +97,6 @@ export function AgentChatPanel({
                   onAction={handleAction}
                 />
               ))}
-              <WorkbenchFooter summary={summary ?? null} nextActions={nextActions ?? []} onAction={handleAction} />
               {running && <RunningCard />}
               <div ref={bottomRef} />
             </div>
@@ -110,6 +112,42 @@ function StatusBadge({ status }: { status: string }) {
   if (status === 'failed' || status === 'interrupted') return <Badge variant="destructive" dot>{status}</Badge>;
   if (status === 'succeeded') return <Badge variant="info">{status}</Badge>;
   return <Badge>{status}</Badge>;
+}
+
+function ResultStrip({
+  summary,
+  nextActions,
+  onAction,
+}: {
+  summary: AgentWorkbenchSummary | null;
+  nextActions: AgentChatNextAction[];
+  onAction?: (action: AgentChatNextAction) => void;
+}) {
+  return (
+    <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-forge-border px-3 py-1.5 text-xs text-forge-muted">
+      {summary && (
+        <>
+          <span className="font-semibold text-forge-text">{summary.changedFileCount} changed</span>
+          <span>{summary.reviewedFileCount}/{summary.changedFileCount} reviewed</span>
+          <span>tests: <span className="text-forge-text">{summary.testStatus}</span></span>
+          <span>risk: <span className="text-forge-text">{summary.mergeRisk}</span></span>
+          {summary.prCommentCount > 0 && (
+            <span className="text-forge-yellow">{summary.prCommentCount} PR comment{summary.prCommentCount === 1 ? '' : 's'}</span>
+          )}
+          {summary.warnings.slice(0, 2).map((warning) => (
+            <span key={warning} className="text-forge-yellow">{warning}</span>
+          ))}
+        </>
+      )}
+      {nextActions.length > 0 && (
+        <div className="ml-auto flex flex-wrap gap-1">
+          {nextActions.map((action) => (
+            <ActionButton key={action.id} action={action} onClick={() => onAction?.(action)} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function AgentRunSectionView({
@@ -135,22 +173,22 @@ function AgentRunSectionView({
   }
 
   const icon = section.kind === 'planning'
-    ? <ListChecks className="h-3.5 w-3.5 text-forge-blue" />
+    ? <ListChecks className="h-3 w-3 text-forge-blue" />
     : section.kind === 'actions'
-      ? <Hammer className="h-3.5 w-3.5 text-forge-yellow" />
+      ? <Hammer className="h-3 w-3 text-forge-yellow" />
       : section.kind === 'results'
-        ? <CheckCircle2 className="h-3.5 w-3.5 text-forge-green" />
-        : <Terminal className="h-3.5 w-3.5 text-forge-red" />;
+        ? <CheckCircle2 className="h-3 w-3 text-forge-green" />
+        : <Terminal className="h-3 w-3 text-forge-red" />;
 
   const hasOnlyTimelineEvents = visibleEvents.every((event) => TIMELINE_EVENT_TYPES.has(event.eventType) || isCompactStatusEvent(event));
 
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center gap-2 px-1 text-[10px] font-bold uppercase tracking-widest text-forge-muted">
+    <div className="space-y-1">
+      <div className="flex items-center gap-1.5 px-1 text-[10px] font-bold uppercase tracking-widest text-forge-muted">
         {icon}
         {section.title}
       </div>
-      <div className={hasOnlyTimelineEvents ? 'rounded-lg border border-forge-border/50 bg-forge-surface/40 px-2.5 py-1.5' : 'space-y-3'}>
+      <div className={hasOnlyTimelineEvents ? 'border-l border-forge-border/40 pl-2.5 py-1' : 'space-y-3'}>
         {visibleEvents.map((event) => (
           <AgentEventCard key={event.id} event={event} accepted={acceptedPlanId === event.id} onAction={onAction} />
         ))}
@@ -172,11 +210,11 @@ function isCompactStatusEvent(event: AgentChatEvent): boolean {
 
 function EmptyChat({ provider }: { provider: string }) {
   return (
-    <div className="flex min-h-[260px] items-center justify-center text-center">
+    <div className="flex min-h-[200px] items-center justify-center text-center">
       <div className="max-w-sm">
-        <MessageSquare className="mx-auto mb-3 h-9 w-9 text-forge-muted" />
-        <h3 className="text-base font-bold text-forge-text">Start a clean agent chat</h3>
-        <p className="mt-1 text-sm leading-relaxed text-forge-muted">
+        <MessageSquare className="mx-auto mb-3 h-7 w-7 text-forge-muted" />
+        <h3 className="text-sm font-semibold text-forge-text">Start a clean agent chat</h3>
+        <p className="mt-1 text-xs leading-relaxed text-forge-muted">
           Send a prompt to {provider === 'codex' ? 'Codex' : 'Claude'} and Forge will render structured workbench events here instead of raw terminal output.
         </p>
       </div>
@@ -196,7 +234,7 @@ function AgentEventCard({
   if (event.eventType === 'user_message') {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[78%] rounded-2xl rounded-br-md bg-forge-orange px-3 py-2 text-sm leading-relaxed text-white shadow-lg shadow-orange-950/20">
+        <div className="max-w-[78%] rounded bg-forge-orange px-3 py-2 text-sm leading-relaxed text-white">
           {event.body}
         </div>
       </div>
@@ -206,7 +244,7 @@ function AgentEventCard({
   if (event.eventType === 'assistant_message') {
     return (
       <div className="flex justify-start">
-        <div className="max-w-[86%] rounded-2xl rounded-bl-md border border-forge-border bg-forge-surface px-3 py-2 text-sm leading-relaxed text-forge-text">
+        <div className="max-w-[86%] rounded border border-forge-border bg-forge-surface px-3 py-2 text-sm leading-relaxed text-forge-text">
           <MarkdownishText text={event.body} />
         </div>
       </div>
@@ -259,20 +297,20 @@ function AgentEventCard({
     ]
     : event.metadata?.nextActions ?? [];
 
-  const cardClass = isPlan
-    ? 'border-forge-blue/25 bg-forge-blue/5'
+  const accentClass = isPlan
+    ? 'border-l-forge-blue/60'
     : isResult
-      ? 'border-forge-green/20 bg-forge-green/5'
+      ? 'border-l-forge-green/60'
       : isError
-        ? 'border-forge-red/20 bg-forge-red/5'
-        : 'border-forge-border bg-forge-surface/70';
+        ? 'border-l-forge-red/60'
+        : 'border-l-forge-border/50';
 
   return (
-    <div className={`rounded-xl border px-3 py-2 ${cardClass}`}>
+    <div className={`border-l-2 pl-3 py-1.5 ${accentClass}`}>
       <div className="mb-1 flex items-center gap-2">
         {iconForEvent(event)}
-        <span className="text-xs font-bold uppercase tracking-widest text-forge-muted">{event.title || labelForEvent(event.eventType)}</span>
-        {accepted && <span className="rounded-full border border-forge-green/25 bg-forge-green/10 px-1.5 py-0.5 text-[9px] uppercase text-forge-green">accepted</span>}
+        <span className="text-xs font-semibold uppercase tracking-widest text-forge-muted">{event.title || labelForEvent(event.eventType)}</span>
+        {accepted && <span className="rounded border border-forge-green/25 bg-forge-green/10 px-1.5 py-0.5 text-[9px] uppercase text-forge-green">accepted</span>}
       </div>
       {event.body && (isPlan ? <MarkdownishText text={event.body} /> : <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-forge-text/85">{event.body}</pre>)}
       {!!eventActions.length && (
@@ -280,47 +318,6 @@ function AgentEventCard({
           {eventActions.map((action) => (
             <ActionButton key={action.id} action={action} disabled={accepted && action.kind === 'accept_plan'} onClick={() => onAction?.(action, event)} />
           ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function WorkbenchFooter({
-  summary,
-  nextActions,
-  onAction,
-}: {
-  summary: AgentWorkbenchSummary | null;
-  nextActions: AgentChatNextAction[];
-  onAction?: (action: AgentChatNextAction) => void;
-}) {
-  if (!summary && nextActions.length === 0) return null;
-
-  if (!summary) {
-    return (
-      <div className="flex flex-wrap gap-1.5 px-1">
-        {nextActions.map((action) => <ActionButton key={action.id} action={action} onClick={() => onAction?.(action)} />)}
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-xl border border-forge-green/20 bg-forge-green/5 px-3 py-2.5">
-      <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-forge-green">
-        <ClipboardCheck className="h-3.5 w-3.5" /> Workspace result
-      </div>
-      <div className="mb-2 flex flex-wrap gap-3 text-xs text-forge-muted">
-        <span><span className="font-semibold text-forge-text">{summary.changedFileCount}</span> changed</span>
-        <span><span className="font-semibold text-forge-text">{summary.reviewedFileCount}/{summary.changedFileCount}</span> reviewed</span>
-        <span>tests: <span className="font-semibold text-forge-text">{summary.testStatus}</span></span>
-        <span>risk: <span className="font-semibold text-forge-text">{summary.mergeRisk}</span></span>
-      </div>
-      {summary.prCommentCount > 0 && <p className="mb-1.5 text-xs text-forge-yellow">{summary.prCommentCount} unresolved PR comment{summary.prCommentCount === 1 ? '' : 's'}.</p>}
-      {summary.warnings.slice(0, 2).map((warning) => <p key={warning} className="mb-1.5 text-xs text-forge-yellow">{warning}</p>)}
-      {nextActions.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 border-t border-forge-green/15 pt-2">
-          {nextActions.map((action) => <ActionButton key={action.id} action={action} onClick={() => onAction?.(action)} />)}
         </div>
       )}
     </div>
@@ -345,8 +342,8 @@ function ActionButton({ action, disabled, onClick }: { action: AgentChatNextActi
 function RunningCard() {
   return (
     <div className="flex justify-start">
-      <div className="flex items-center gap-2 rounded-full border border-forge-border bg-forge-surface px-3 py-2 text-xs font-semibold text-forge-muted">
-        <span className="h-2 w-2 animate-pulse rounded-full bg-forge-green" />
+      <div className="flex items-center gap-2 rounded border border-forge-border bg-forge-surface/50 px-2 py-1 text-xs text-forge-muted">
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-forge-green" />
         Agent is working…
       </div>
     </div>
@@ -370,15 +367,15 @@ function timelineIconForEvent(event: AgentChatEvent) {
 }
 
 function iconForEvent(event: AgentChatEvent) {
-  if (event.eventType === 'command' || event.eventType === 'test_run') return <Terminal className="h-4 w-4 text-forge-blue" />;
-  if (event.eventType === 'file_change') return <FileCode2 className="h-4 w-4 text-forge-green" />;
-  if (event.eventType === 'file_read') return <Search className="h-4 w-4 text-forge-blue" />;
-  if (event.eventType === 'thinking') return <Bot className="h-4 w-4 animate-pulse text-forge-violet" />;
-  if (event.eventType === 'plan' || event.eventType === 'todo') return <ListChecks className="h-4 w-4 text-forge-blue" />;
-  if (event.eventType === 'result' || (event.eventType === 'status' && event.status === 'succeeded')) return <CheckCircle2 className="h-4 w-4 text-forge-green" />;
-  if (event.eventType === 'error' || (event.eventType === 'status' && event.status === 'failed')) return <XCircle className="h-4 w-4 text-forge-red" />;
-  if (event.eventType === 'next_action') return <GitPullRequest className="h-4 w-4 text-forge-orange" />;
-  return <Hammer className="h-4 w-4 text-forge-yellow" />;
+  if (event.eventType === 'command' || event.eventType === 'test_run') return <Terminal className="h-3.5 w-3.5 text-forge-blue" />;
+  if (event.eventType === 'file_change') return <FileCode2 className="h-3.5 w-3.5 text-forge-green" />;
+  if (event.eventType === 'file_read') return <Search className="h-3.5 w-3.5 text-forge-blue" />;
+  if (event.eventType === 'thinking') return <Bot className="h-3.5 w-3.5 animate-pulse text-forge-violet" />;
+  if (event.eventType === 'plan' || event.eventType === 'todo') return <ListChecks className="h-3.5 w-3.5 text-forge-blue" />;
+  if (event.eventType === 'result' || (event.eventType === 'status' && event.status === 'succeeded')) return <CheckCircle2 className="h-3.5 w-3.5 text-forge-green" />;
+  if (event.eventType === 'error' || (event.eventType === 'status' && event.status === 'failed')) return <XCircle className="h-3.5 w-3.5 text-forge-red" />;
+  if (event.eventType === 'next_action') return <GitPullRequest className="h-3.5 w-3.5 text-forge-orange" />;
+  return <Hammer className="h-3.5 w-3.5 text-forge-yellow" />;
 }
 
 function labelForEvent(eventType: string) {
