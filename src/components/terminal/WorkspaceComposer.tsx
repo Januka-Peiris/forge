@@ -6,12 +6,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import type { AgentChatSession, WorkspaceAgentContext, WorkspaceContextPreview } from '../../types';
 import { getWorkspaceContextPreview, refreshWorkspaceRepoContext } from '../../lib/tauri-api/agent-context';
 import { formatSessionError } from '../../lib/ui-errors';
-import { modelContextLabel, roughTokenEstimateFromChars } from '../../lib/agent-workbench';
+import { modelContextLabel } from '../../lib/agent-workbench';
 import {
   AGENT_COMPOSER_DEFAULT_PX,
   AGENT_COMPOSER_HEIGHT_KEY,
   AGENT_COMPOSER_MAX_PX,
   AGENT_COMPOSER_MIN_PX,
+  roughTokenEstimateFromChars,
 } from './workspace-terminal-constants';
 
 const CLAUDE_AGENT_OPTIONS = [

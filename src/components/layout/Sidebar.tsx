@@ -253,12 +253,12 @@ export function Sidebar({
           <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest">Workspaces</p>
           <Button
             variant="ghost"
-            size="xs"
+            size="icon-xs"
             onClick={() => onNewWorkspace()}
             className="text-forge-orange hover:text-forge-text"
+            title="New branch workspace"
           >
             <Plus className="w-3 h-3" />
-            New Branch Workspace
           </Button>
         </div>
 
