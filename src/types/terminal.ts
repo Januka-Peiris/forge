@@ -100,3 +100,11 @@ export interface QueueAgentPromptInput {
   /** Optional; server always dispatches to the agent terminal after recording the prompt. */
   mode?: 'send_now' | 'interrupt_send';
 }
+
+export interface TerminalSearchResult {
+  workspaceId: string;
+  workspaceName: string;
+  sessionId: string;
+  timestamp: string;
+  line: string;
+}

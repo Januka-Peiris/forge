@@ -1,7 +1,69 @@
 use rusqlite::{params, OptionalExtension};
+use serde::Serialize;
 
 use crate::db::Database;
 use crate::models::{AgentPromptEntry, TerminalOutputChunk, TerminalSession};
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalSearchResult {
+    pub workspace_id: String,
+    pub workspace_name: String,
+    pub session_id: String,
+    pub timestamp: String,
+    pub line: String,
+}
+
+pub fn search_output(
+    db: &Database,
+    query: &str,
+    workspace_id: Option<&str>,
+) -> Result<Vec<TerminalSearchResult>, String> {
+    db.with_connection(|connection| {
+        let like = format!("%{}%", query.to_lowercase());
+        if let Some(ws_id) = workspace_id {
+            let mut stmt = connection.prepare(
+                "SELECT toc.session_id, toc.timestamp, toc.data, ts.workspace_id, w.name \
+                 FROM terminal_output_chunks toc \
+                 JOIN terminal_sessions ts ON ts.id = toc.session_id \
+                 JOIN workspaces w ON w.id = ts.workspace_id \
+                 WHERE ts.workspace_id = ?1 AND LOWER(toc.data) LIKE ?2 \
+                 ORDER BY toc.timestamp DESC LIMIT 100",
+            )?;
+            let results = stmt.query_map(params![ws_id, like], |row| {
+                Ok(TerminalSearchResult {
+                    session_id: row.get(0)?,
+                    timestamp: row.get(1)?,
+                    line: row.get(2)?,
+                    workspace_id: row.get(3)?,
+                    workspace_name: row.get(4)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+            Ok(results)
+        } else {
+            let mut stmt = connection.prepare(
+                "SELECT toc.session_id, toc.timestamp, toc.data, ts.workspace_id, w.name \
+                 FROM terminal_output_chunks toc \
+                 JOIN terminal_sessions ts ON ts.id = toc.session_id \
+                 JOIN workspaces w ON w.id = ts.workspace_id \
+                 WHERE LOWER(toc.data) LIKE ?1 \
+                 ORDER BY toc.timestamp DESC LIMIT 100",
+            )?;
+            let results = stmt.query_map(params![like], |row| {
+                Ok(TerminalSearchResult {
+                    session_id: row.get(0)?,
+                    timestamp: row.get(1)?,
+                    line: row.get(2)?,
+                    workspace_id: row.get(3)?,
+                    workspace_name: row.get(4)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+            Ok(results)
+        }
+    })
+}
 
 pub fn insert_session(db: &Database, session: &TerminalSession) -> Result<(), String> {
     let args = serde_json::to_string(&session.args)

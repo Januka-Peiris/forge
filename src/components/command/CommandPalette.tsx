@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bot, FileCode, GitPullRequest, Play, Search, Terminal as TerminalIcon, Trash2, X, Zap } from 'lucide-react';
 import type { AgentProfile, TerminalProfile, TerminalSession, Workspace, WorkspaceChangedFile, WorkspacePrComment, WorkspaceReadiness } from '../../types';
-import { createWorkspaceTerminal, attachWorkspaceTerminalSession, listWorkspaceVisibleTerminalSessions } from '../../lib/tauri-api/terminal';
+import type { TerminalSearchResult } from '../../types/terminal';
+import { createWorkspaceTerminal, attachWorkspaceTerminalSession, listWorkspaceVisibleTerminalSessions, searchTerminalOutput } from '../../lib/tauri-api/terminal';
 import { getWorkspaceReviewCockpit, refreshWorkspacePrComments, queueReviewAgentPrompt } from '../../lib/tauri-api/review-cockpit';
 import { listWorkspaceAgentProfiles } from '../../lib/tauri-api/agent-profiles';
 import { runWorkspaceSetup, startWorkspaceRunCommand, getWorkspaceForgeConfig } from '../../lib/tauri-api/workspace-scripts';
@@ -53,8 +54,10 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
   const [readiness, setReadiness] = useState<WorkspaceReadiness | null>(null);
   const [runCommands, setRunCommands] = useState<string[]>([]);
   const [paletteChangedFiles, setPaletteChangedFiles] = useState<WorkspaceChangedFile[]>([]);
+  const [terminalSearchResults, setTerminalSearchResults] = useState<TerminalSearchResult[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const openPerfMarkRef = useRef<string | null>(null);
+  const terminalSearchTimerRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     if (!open) return;
@@ -118,6 +121,23 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
   }, [open, selectedWorkspace]);
 
   useEffect(() => {
+    if (!open) { setTerminalSearchResults([]); return; }
+    const isSearchMode = query.startsWith('>');
+    if (!isSearchMode) { setTerminalSearchResults([]); return; }
+    const searchQuery = query.slice(1).trim();
+    if (!searchQuery) { setTerminalSearchResults([]); return; }
+    if (terminalSearchTimerRef.current !== undefined) window.clearTimeout(terminalSearchTimerRef.current);
+    terminalSearchTimerRef.current = window.setTimeout(() => {
+      searchTerminalOutput(searchQuery, selectedWorkspace?.id)
+        .then(setTerminalSearchResults)
+        .catch(() => undefined);
+    }, 300);
+    return () => {
+      if (terminalSearchTimerRef.current !== undefined) window.clearTimeout(terminalSearchTimerRef.current);
+    };
+  }, [open, query, selectedWorkspace?.id]);
+
+  useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -130,6 +150,20 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
   }, [onClose, open]);
 
   const items = useMemo<CommandItem[]>(() => {
+    // Terminal search mode: show only search results
+    if (query.startsWith('>') && terminalSearchResults.length > 0) {
+      return terminalSearchResults.map((result, index) => ({
+        id: `tsearch-${index}`,
+        title: stripAnsi(result.line).trim().slice(0, 120) || result.line.trim().slice(0, 120),
+        subtitle: `Terminal search · ${result.workspaceName} · ${result.timestamp}`,
+        keywords: result.line,
+        icon: 'terminal' as const,
+        run: () => {
+          onSelectWorkspace(result.workspaceId);
+          onOpenWorkspace();
+        },
+      }));
+    }
     const selectedId = selectedWorkspace?.id;
     const availableChangedFiles = paletteChangedFiles.length > 0 ? paletteChangedFiles : changedFiles;
     const workspaceItems = workspaces.map((workspace) => ({
@@ -224,7 +258,7 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
       },
     ] : [];
     return [...globalActionItems, ...agentItems, ...actionItems, ...workspaceItems, ...fileItems, ...terminalItems, ...commentItems];
-  }, [agentProfiles, changedFiles, comments, onCheckEnvironment, onOpenReviewComment, onOpenReviewFile, onOpenWorkspace, onSelectWorkspace, paletteChangedFiles, readiness, runCommands, selectedWorkspace, sessions, workspaces]);
+  }, [agentProfiles, changedFiles, comments, onCheckEnvironment, onOpenReviewComment, onOpenReviewFile, onOpenWorkspace, onSelectWorkspace, paletteChangedFiles, query, readiness, runCommands, selectedWorkspace, sessions, terminalSearchResults, workspaces]);
 
   useEffect(() => {
     if (!open || !openPerfMarkRef.current) return;
@@ -268,7 +302,7 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
               if (event.key === 'ArrowUp') { event.preventDefault(); setActiveIndex((i) => Math.max(i - 1, 0)); }
               if (event.key === 'Enter') { event.preventDefault(); void runActive(); }
             }}
-            placeholder="Jump to workspace, file, agent session, or PR comment…"
+            placeholder="Jump to workspace, file, agent session… or type > to search terminal output"
             className="flex-1 bg-transparent text-[14px] text-forge-text outline-none placeholder:text-forge-muted"
           />
           <button onClick={onClose} className="rounded-md p-1 text-forge-muted hover:bg-white/5 hover:text-forge-text"><X className="h-4 w-4" /></button>
@@ -324,6 +358,11 @@ function CommandIcon({ icon }: { icon: CommandItem['icon'] }) {
 function firstLine(value: string) {
   const line = value.replace(/\s+/g, ' ').trim();
   return line.length > 80 ? `${line.slice(0, 79)}…` : line;
+}
+
+// eslint-disable-next-line no-control-regex
+function stripAnsi(value: string): string {
+  return value.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\x1b[^m]*/g, '');
 }
 
 function normalize(value: string) {

@@ -6,6 +6,7 @@ use crate::models::{
     DiscoveredRepository, LinkedWorktreeRef, RepositoryWorkspaceOptions, WorkspaceDetail,
     WorkspaceSummary,
 };
+use crate::repositories::workspace_repository;
 use crate::services::workspace_service;
 use crate::state::AppState;
 
@@ -109,4 +110,13 @@ pub fn detach_workspace_linked_worktree(
 #[tauri::command]
 pub fn open_worktree_in_cursor(path: String) -> Result<(), String> {
     workspace_service::open_worktree_in_cursor(&path)
+}
+
+#[tauri::command]
+pub fn set_workspace_cost_limit(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    limit_usd: Option<f64>,
+) -> Result<(), String> {
+    workspace_repository::set_cost_limit(&state.db, &workspace_id, limit_usd)
 }

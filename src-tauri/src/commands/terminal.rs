@@ -6,6 +6,7 @@ use crate::models::{
     CreateWorkspaceTerminalInput, QueueAgentPromptInput, StartTerminalSessionInput,
     TerminalOutputResponse, TerminalSession, TerminalSessionState,
 };
+use crate::repositories::terminal_repository::{self, TerminalSearchResult};
 use crate::services::terminal_service;
 use crate::state::AppState;
 
@@ -307,4 +308,13 @@ pub fn reconnect_workspace_utility_terminal_session(
         &workspace_id,
         session_id.as_deref(),
     )
+}
+
+#[tauri::command]
+pub fn search_terminal_output(
+    state: State<'_, AppState>,
+    query: String,
+    workspace_id: Option<String>,
+) -> Result<Vec<TerminalSearchResult>, String> {
+    terminal_repository::search_output(&state.db, &query, workspace_id.as_deref())
 }

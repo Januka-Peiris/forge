@@ -176,6 +176,7 @@ pub fn create_workspace(
             source_workspace_id: input.source_workspace_id.clone(),
             derived_from_branch: input.derived_from_branch.clone(),
             linked_worktrees: vec![],
+            cost_limit_usd: None,
         },
         worktree_path,
         base_branch: input.base_branch,

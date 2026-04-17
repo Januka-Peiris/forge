@@ -571,6 +571,7 @@ export default function App() {
     }
   });
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [displayedWorkspaces, setDisplayedWorkspaces] = useState<Workspace[]>([]);
   const [workspaceAttention, setWorkspaceAttention] = useState<Record<string, WorkspaceAttention>>({});
   const [conflictingWorkspaceIds, setConflictingWorkspaceIds] = useState<Set<string>>(new Set());
   const [attentionToasts, setAttentionToasts] = useState<AttentionToast[]>([]);
@@ -611,16 +612,37 @@ export default function App() {
   useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
   useEffect(() => { workspacesRef.current = workspaces; }, [workspaces]);
 
+  const sendForgeNotification = useCallback(async (title: string, body: string) => {
+    try {
+      const notificationsEnabled = window.localStorage.getItem('forge:notifications-enabled');
+      if (notificationsEnabled === 'false') return;
+      const { isPermissionGranted, requestPermission, sendNotification } = await import('@tauri-apps/plugin-notification');
+      let granted = await isPermissionGranted();
+      if (!granted) {
+        const permission = await requestPermission();
+        granted = permission === 'granted';
+      }
+      if (granted) sendNotification({ title, body });
+    } catch { /* non-fatal */ }
+  }, []);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         setCommandPaletteOpen((open) => !open);
       }
+      // Cmd+1..9 — jump to workspace by position in sidebar list
+      if ((event.metaKey || event.ctrlKey) && event.key >= '1' && event.key <= '9' && !event.shiftKey && !event.altKey) {
+        event.preventDefault();
+        const idx = parseInt(event.key) - 1;
+        const ws = displayedWorkspaces[idx];
+        if (ws) { setSelectedId(ws.id); setView('workspaces'); }
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [displayedWorkspaces]);
 
   useEffect(() => {
     if (view !== 'reviews') return;
@@ -855,11 +877,12 @@ export default function App() {
           ...current.slice(0, 2),
         ]);
         window.setTimeout(() => setAttentionToasts((current) => current.filter((t) => t.id !== id)), 8000);
+        void sendForgeNotification('Orchestrator', message);
       },
     ).then((fn) => { if (disposed) fn(); else unlisten = fn; })
       .catch(() => undefined);
     return () => { disposed = true; if (unlisten) unlisten(); };
-  }, []);
+  }, [sendForgeNotification]);
 
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
@@ -875,12 +898,13 @@ export default function App() {
           ...current.slice(0, 2),
         ]);
         window.setTimeout(() => setAttentionToasts((current) => current.filter((t) => t.id !== id)), 8000);
+        void sendForgeNotification('Rebase Conflict', `Conflict in ${branch} (${workspaceName})`);
       },
     ).then((fn) => {
       if (disposed) fn(); else unlisten = fn;
     }).catch(() => undefined);
     return () => { disposed = true; if (unlisten) unlisten(); };
-  }, []);
+  }, [sendForgeNotification]);
 
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
@@ -915,6 +939,56 @@ export default function App() {
       if (unlisten) unlisten();
     };
   }, [scheduleAttentionLoad, scheduleMarkAttentionRead, view]);
+
+  useEffect(() => {
+    let unlisten: UnlistenFn | undefined;
+    let disposed = false;
+    void listen<{ workspaceId: string; workspaceName: string; stuckFor: number }>(
+      'forge://terminal-stuck',
+      (event) => {
+        if (disposed) return;
+        const { workspaceName, stuckFor } = event.payload;
+        void sendForgeNotification('Agent Stuck', `${workspaceName} has been stuck for ${stuckFor}min`);
+      },
+    ).then((fn) => { if (disposed) fn(); else unlisten = fn; }).catch(() => undefined);
+    return () => { disposed = true; if (unlisten) unlisten(); };
+  }, [sendForgeNotification]);
+
+  useEffect(() => {
+    let unlisten: UnlistenFn | undefined;
+    let disposed = false;
+    void listen<{ workspaceId: string; command: string }>(
+      'forge://command-approval-required',
+      (event) => {
+        if (disposed) return;
+        const ws = workspacesRef.current.find((w) => w.id === event.payload.workspaceId);
+        const workspaceName = ws?.name ?? event.payload.workspaceId;
+        void sendForgeNotification('Approval Needed', `Agent wants to run a command in ${workspaceName}`);
+      },
+    ).then((fn) => { if (disposed) fn(); else unlisten = fn; }).catch(() => undefined);
+    return () => { disposed = true; if (unlisten) unlisten(); };
+  }, [sendForgeNotification]);
+
+  useEffect(() => {
+    let unlisten: UnlistenFn | undefined;
+    let disposed = false;
+    void listen<{ workspaceId: string; cost: string; limit: number }>(
+      'forge://workspace-budget-exceeded',
+      (event) => {
+        if (disposed) return;
+        const { cost } = event.payload;
+        void sendForgeNotification('Budget exceeded', `Workspace spend reached $${cost}`);
+        const ws = workspacesRef.current.find((w) => w.id === event.payload.workspaceId);
+        const id = `budget-${event.payload.workspaceId}-${Date.now()}`;
+        setAttentionToasts((current) => [
+          { id, workspaceId: event.payload.workspaceId, workspaceName: ws?.name ?? event.payload.workspaceId, text: `Budget cap reached: $${cost}` },
+          ...current.slice(0, 2),
+        ]);
+        window.setTimeout(() => setAttentionToasts((current) => current.filter((t) => t.id !== id)), 8000);
+      },
+    ).then((fn) => { if (disposed) fn(); else unlisten = fn; }).catch(() => undefined);
+    return () => { disposed = true; if (unlisten) unlisten(); };
+  }, [sendForgeNotification]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1152,6 +1226,7 @@ export default function App() {
                     setModalOpen(true);
                   }}
                   onCollapse={() => setSidebarCollapsed(true)}
+                  onFilteredWorkspacesChange={setDisplayedWorkspaces}
                 />
               </div>
               <div

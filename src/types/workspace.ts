@@ -61,6 +61,7 @@ export interface WorkspaceSummary {
   sourceWorkspaceId?: string;
   derivedFromBranch?: string;
   linkedWorktrees?: LinkedWorktreeRef[];
+  costLimitUsd?: number;
 }
 
 export interface WorkspaceDetail extends WorkspaceSummary {

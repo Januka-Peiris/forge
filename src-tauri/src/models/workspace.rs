@@ -63,6 +63,7 @@ pub struct WorkspaceSummary {
     pub source_workspace_id: Option<String>,
     pub derived_from_branch: Option<String>,
     pub linked_worktrees: Vec<LinkedWorktreeRef>,
+    pub cost_limit_usd: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

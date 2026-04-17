@@ -5,6 +5,7 @@ import type {
   QueueAgentPromptInput,
   StartTerminalSessionInput,
   TerminalOutputResponse,
+  TerminalSearchResult,
   TerminalSession,
   TerminalSessionState,
 } from '../../types/terminal';
@@ -153,4 +154,8 @@ export function reconnectWorkspaceUtilityTerminalSession(
     workspaceId,
     sessionId,
   });
+}
+
+export function searchTerminalOutput(query: string, workspaceId?: string): Promise<TerminalSearchResult[]> {
+  return invokeCommand<TerminalSearchResult[]>('search_terminal_output', { query, workspaceId });
 }
