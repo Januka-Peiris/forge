@@ -20,6 +20,16 @@ import type { DiscoveredRepository, Workspace, WorkspaceAttention } from '../../
 import type { OrchestratorStatus } from '../../types/orchestrator';
 import { batchDispatchWorkspaceAgentPrompt } from '../../lib/tauri-api/terminal';
 import { getOrchestratorStatus, setOrchestratorEnabled } from '../../lib/tauri-api/orchestrator';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Textarea } from '../ui/textarea';
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '../ui/select';
 
 export type NavView = 'workspaces' | 'reviews' | 'settings' | 'memory';
 
@@ -206,14 +216,16 @@ export function Sidebar({
           )}
           <div className="flex-1" />
           {onCollapse && (
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon-xs"
               onClick={onCollapse}
-              className="shrink-0 rounded-md border border-forge-border bg-forge-surface p-1 text-forge-muted hover:bg-forge-card hover:text-forge-text hover:border-forge-orange/35"
+              className="shrink-0 border border-forge-border bg-forge-surface hover:border-forge-orange/35"
               title="Collapse sidebar"
             >
               <ChevronLeft className="h-3.5 w-3.5" strokeWidth={2.25} />
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -222,16 +234,16 @@ export function Sidebar({
         {navItems.map(({ id, label, icon: Icon }) => {
           const isActive = activeView === id;
           return (
-            <button
+            <Button
               key={id}
+              variant="ghost"
+              size="icon-sm"
               onClick={() => onNavigate(id)}
               title={label}
-              className={`flex items-center justify-center w-8 h-8 rounded-md transition-colors ${
-                isActive ? 'bg-white/10 text-forge-text' : 'text-forge-muted hover:text-forge-text hover:bg-white/5'
-              }`}
+              className={isActive ? 'bg-white/10 text-forge-text' : 'text-forge-muted hover:text-forge-text hover:bg-white/5'}
             >
               <Icon className="w-4 h-4" />
-            </button>
+            </Button>
           );
         })}
       </div>
@@ -239,51 +251,55 @@ export function Sidebar({
       <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3">
         <div className="flex items-center justify-between px-2">
           <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest">Workspaces</p>
-          <button
+          <Button
+            variant="ghost"
+            size="xs"
             onClick={() => onNewWorkspace()}
-            className="inline-flex items-center gap-1 text-xs text-forge-orange hover:text-forge-text"
+            className="text-forge-orange hover:text-forge-text"
           >
             <Plus className="w-3 h-3" />
             New Branch Workspace
-          </button>
+          </Button>
         </div>
 
         <div className="mt-2 px-2 flex items-center gap-2">
           <div className="relative flex-1">
-            <Filter className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-forge-muted pointer-events-none" />
-            <select
-              value={filter}
-              onChange={(event) => setFilter(event.target.value as 'all' | 'active' | 'archived')}
-              className="w-full appearance-none bg-forge-card border border-forge-border rounded-md pl-6 pr-2 py-1 text-xs text-forge-text/90"
-            >
-              <option value="all">All</option>
-              <option value="active">Active</option>
-              <option value="archived">Archived</option>
-            </select>
+            <Filter className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-forge-muted pointer-events-none z-10" />
+            <Select value={filter} onValueChange={(v) => setFilter(v as 'all' | 'active' | 'archived')}>
+              <SelectTrigger className="w-full pl-6 pr-2 py-1 text-xs bg-forge-card border-forge-border rounded-md h-auto">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="archived">Archived</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="relative flex-1">
-            <ArrowUpDown className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-forge-muted pointer-events-none" />
-            <select
-              value={sort}
-              onChange={(event) => setSort(event.target.value as 'recent' | 'name' | 'status')}
-              className="w-full appearance-none bg-forge-card border border-forge-border rounded-md pl-6 pr-2 py-1 text-xs text-forge-text/90"
-            >
-              <option value="recent">Recent</option>
-              <option value="name">Name</option>
-              <option value="status">Status</option>
-            </select>
+            <ArrowUpDown className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-forge-muted pointer-events-none z-10" />
+            <Select value={sort} onValueChange={(v) => setSort(v as 'recent' | 'name' | 'status')}>
+              <SelectTrigger className="w-full pl-6 pr-2 py-1 text-xs bg-forge-card border-forge-border rounded-md h-auto">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="recent">Recent</SelectItem>
+                <SelectItem value="name">Name</SelectItem>
+                <SelectItem value="status">Status</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
         {/* Search input */}
         <div className="mt-2 px-2">
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-forge-muted pointer-events-none" />
-            <input
+            <Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-forge-muted pointer-events-none z-10" />
+            <Input
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Filter workspaces…"
-              className="w-full bg-forge-card border border-forge-border rounded-md pl-7 pr-3 py-1 text-xs text-forge-text/90 placeholder:text-forge-muted/70 focus:outline-none focus:border-forge-orange/40"
+              className="pl-7 pr-3 py-1 text-xs h-auto bg-forge-card border-forge-border placeholder:text-forge-muted/70"
             />
           </div>
         </div>
@@ -309,24 +325,28 @@ export function Sidebar({
                 <p className="text-xs font-semibold uppercase tracking-widest text-forge-muted truncate">{repo.name}</p>
                 <span className="text-xs text-forge-muted/60">({repo.workspaces.length})</span>
                 {hoveredRepoId === repo.id && !repo.id.startsWith('name:') && (
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
                     onClick={(e) => {
                       e.stopPropagation();
                       onRemoveRepository(repo.id);
                     }}
-                    className="p-1 rounded hover:bg-forge-red/15 text-forge-muted hover:text-forge-red"
+                    className="text-forge-muted hover:bg-forge-red/15 hover:text-forge-red"
                     title={`Remove repository "${repo.name}" from Forge`}
                   >
                     <Trash2 className="w-3 h-3" />
-                  </button>
+                  </Button>
                 )}
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
                   onClick={() => onNewWorkspace(repo.id.startsWith('name:') ? undefined : repo.id)}
-                  className="ml-auto p-1 rounded hover:bg-white/6 text-forge-muted hover:text-forge-orange"
+                  className="ml-auto text-forge-muted hover:bg-white/6 hover:text-forge-orange"
                   title="New branch workspace in repository"
                 >
                   <Plus className="w-3 h-3" />
-                </button>
+                </Button>
               </div>
 
               <div className="space-y-1">
@@ -434,16 +454,18 @@ export function Sidebar({
 
                         {/* Delete button — shown on hover */}
                         {isHovered && (
-                          <button
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
                             onClick={(e) => {
                               e.stopPropagation();
                               onDeleteWorkspace(workspace.id);
                             }}
-                            className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-forge-muted hover:bg-forge-red/15 hover:text-forge-red"
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-forge-muted hover:bg-forge-red/15 hover:text-forge-red"
                             title={`Delete workspace "${workspace.name}"`}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          </Button>
                         )}
                       </div>
                     );
@@ -511,26 +533,32 @@ export function Sidebar({
             <span className="text-sm font-semibold text-forge-orange">
               {batchSelected.size} workspace{batchSelected.size === 1 ? '' : 's'} selected
             </span>
-            <button onClick={clearBatch} className="rounded p-0.5 text-forge-muted hover:text-forge-text">
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={clearBatch}
+              className="text-forge-muted hover:text-forge-text"
+            >
               <XIcon className="h-3.5 w-3.5" />
-            </button>
+            </Button>
           </div>
-          <textarea
+          <Textarea
             value={batchPrompt}
             onChange={(e) => setBatchPrompt(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void sendBatch(); }}
             placeholder="Send prompt to all selected agents…"
             rows={3}
-            className="w-full resize-none rounded-md border border-forge-border bg-black/30 px-2.5 py-2 text-sm text-forge-text placeholder:text-forge-muted/60 focus:border-forge-orange/40 focus:outline-none"
+            className="border-forge-border bg-black/30 px-2.5 py-2 text-sm placeholder:text-forge-muted/60 focus:border-forge-orange/40"
           />
-          <button
+          <Button
+            variant="default"
             onClick={() => void sendBatch()}
             disabled={batchSending || !batchPrompt.trim()}
-            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md bg-forge-orange/90 px-3 py-1.5 text-sm font-semibold text-white hover:bg-forge-orange disabled:opacity-50"
+            className="mt-2 w-full bg-forge-orange/90 text-white hover:bg-forge-orange"
           >
             <Send className="h-3 w-3" />
             {batchSending ? 'Sending…' : `Send to ${batchSelected.size}`}
-          </button>
+          </Button>
         </div>
       )}
     </aside>

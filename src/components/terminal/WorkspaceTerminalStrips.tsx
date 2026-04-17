@@ -10,19 +10,23 @@ import {
   Wrench,
 } from 'lucide-react';
 import type { ForgeWorkspaceConfig, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
+import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
 
 export function WorkspaceReadinessStrip({ readiness }: { readiness: WorkspaceReadiness }) {
-  const tone =
+  const badgeVariant =
     readiness.status === 'needs_attention'
-      ? 'border-forge-yellow/25 bg-forge-yellow/10 text-forge-yellow'
+      ? 'warning'
       : readiness.status === 'running'
-        ? 'border-forge-blue/25 bg-forge-blue/10 text-forge-blue'
+        ? 'info'
         : readiness.status === 'review'
-          ? 'border-forge-orange/25 bg-forge-orange/10 text-forge-orange'
-          : 'border-forge-border bg-white/5 text-forge-muted';
+          ? 'orange'
+          : 'default';
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-forge-border/70 bg-white/[0.025] px-3 py-2 text-sm">
-      <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${tone}`}>{readiness.status.replace('_', ' ')}</span>
+      <Badge variant={badgeVariant} className="normal-case tracking-normal text-xs px-2">
+        {readiness.status.replace('_', ' ')}
+      </Badge>
       <span className="min-w-0 flex-1 truncate text-forge-muted">{readiness.summary}</span>
     </div>
   );
@@ -50,21 +54,21 @@ export function WorkspaceHealthStrip({
   const stale = health.terminals.filter((terminal) => terminal.stale || terminal.recommendedAction.includes('fresh')).length;
   const unattached = health.terminals.filter((terminal) => terminal.recommendedAction === 'reattach');
   const failed = health.terminals.filter((terminal) => terminal.status === 'failed' || terminal.status === 'interrupted');
-  const statusClasses =
+  const statusBadgeVariant =
     health.status === 'needs_attention'
-      ? 'border-forge-yellow/25 bg-forge-yellow/10 text-forge-yellow'
+      ? 'warning'
       : health.status === 'healthy'
-        ? 'border-forge-green/25 bg-forge-green/10 text-forge-green'
-        : 'border-forge-border bg-white/5 text-forge-muted';
+        ? 'success'
+        : 'default';
 
   return (
     <div className="mt-2 rounded-lg border border-forge-border/70 bg-white/[0.025] px-3 py-2">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <PlugZap className="h-3.5 w-3.5 text-forge-muted" />
         <span className="font-semibold text-forge-text">Health</span>
-        <span className={`rounded-full border px-2 py-0.5 text-xs ${statusClasses}`}>
+        <Badge variant={statusBadgeVariant} className="normal-case tracking-normal text-xs px-2">
           {health.status === 'needs_attention' ? 'Needs attention' : health.status === 'healthy' ? 'Healthy' : 'Idle'}
-        </span>
+        </Badge>
         <span className="text-forge-muted" title="Port count updates when you use Testing → Refresh ports">
           {running} running · {displayPortCount} port{displayPortCount === 1 ? '' : 's'} · {stale} stale
         </span>
@@ -75,33 +79,35 @@ export function WorkspaceHealthStrip({
         ))}
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
           {unattached.slice(0, 2).map((terminal) => (
-            <button
+            <Button
               key={terminal.sessionId}
+              variant="secondary"
+              size="sm"
               disabled={busy}
               onClick={() => onRecover(terminal.sessionId)}
-              className="rounded-md border border-forge-blue/25 bg-forge-blue/10 px-2 py-1 text-xs font-semibold text-forge-blue hover:bg-forge-blue/15 disabled:opacity-50"
             >
               Reattach {terminal.title || terminal.kind}
-            </button>
+            </Button>
           ))}
           {failed.slice(0, 2).map((terminal) => (
-            <button
+            <Button
               key={terminal.sessionId}
+              variant="secondary"
+              size="sm"
               disabled={busy}
               onClick={() => onClose(terminal.sessionId)}
-              className="rounded-md border border-forge-border bg-white/5 px-2 py-1 text-xs font-semibold text-forge-muted hover:bg-white/10 disabled:opacity-50"
             >
               Close {terminal.title || terminal.kind}
-            </button>
+            </Button>
           ))}
           {health.terminals.length === 0 && (
-            <button disabled={busy} onClick={onStartShell} className="rounded-md border border-forge-border bg-white/5 px-2 py-1 text-xs font-semibold text-forge-muted hover:bg-white/10 disabled:opacity-50">
+            <Button variant="secondary" size="sm" disabled={busy} onClick={onStartShell}>
               Start shell
-            </button>
+            </Button>
           )}
-          <button disabled={busy} onClick={onRefresh} className="rounded-md border border-forge-border bg-white/5 px-2 py-1 text-xs font-semibold text-forge-muted hover:bg-white/10 disabled:opacity-50">
-            <RefreshCw className="inline h-3 w-3" /> Refresh
-          </button>
+          <Button variant="secondary" size="sm" disabled={busy} onClick={onRefresh}>
+            <RefreshCw className="h-3 w-3" /> Refresh
+          </Button>
         </div>
       </div>
     </div>
@@ -137,57 +143,56 @@ export function WorkspaceCommandsStrip({
   }
 
   const hasCommands = config.setup.length > 0 || config.run.length > 0;
+  const configBadgeVariant = config.warning ? 'warning' : config.exists ? 'success' : 'default';
+
   return (
     <div className="mt-3 rounded-lg border border-forge-border/70 bg-white/[0.03] px-3 py-2">
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex min-w-0 items-center gap-2 text-sm">
           <Wrench className="h-3.5 w-3.5 text-forge-muted" />
           <span className="font-semibold text-forge-text">Workspace Commands</span>
-          <span
-            className={`rounded-full border px-2 py-0.5 text-xs ${
-              config.warning
-                ? 'border-forge-yellow/25 bg-forge-yellow/10 text-forge-yellow'
-                : config.exists
-                  ? 'border-forge-green/25 bg-forge-green/10 text-forge-green'
-                  : 'border-forge-border bg-white/5 text-forge-muted'
-            }`}
-          >
+          <Badge variant={configBadgeVariant} className="normal-case tracking-normal text-xs px-2">
             {config.warning ? 'config warning' : config.exists ? '.forge/config.json' : 'No Forge config found'}
-          </span>
+          </Badge>
           {runningRunCount > 0 && (
-            <span className="rounded-full border border-forge-blue/25 bg-forge-blue/10 px-2 py-0.5 text-xs text-forge-blue">{runningRunCount} run active</span>
+            <Badge variant="info" className="normal-case tracking-normal text-xs px-2">
+              {runningRunCount} run active
+            </Badge>
           )}
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
           {config.setup.length > 0 && (
-            <button disabled={busy} onClick={onRunSetup} className="rounded-md border border-forge-border bg-white/5 px-2 py-1 text-xs font-semibold text-forge-muted hover:bg-white/10 disabled:opacity-50">
-              <Play className="inline h-3 w-3" /> {commandBusy === 'setup' ? 'Starting setup…' : 'Run setup'}
-            </button>
+            <Button variant="secondary" size="sm" disabled={busy} onClick={onRunSetup}>
+              <Play className="h-3 w-3" /> {commandBusy === 'setup' ? 'Starting setup…' : 'Run setup'}
+            </Button>
           )}
           {config.run.map((command, index) => (
             <div key={`${index}-${command}`} className="flex items-center gap-1 rounded-md border border-forge-border/70 bg-forge-bg px-1.5 py-1">
-              <button
+              <Button
+                variant="default"
+                size="xs"
                 disabled={busy}
                 onClick={() => onStartRun(index)}
                 title={command}
-                className="max-w-[220px] truncate rounded px-1.5 py-0.5 text-xs font-semibold text-forge-orange hover:bg-forge-orange/10 disabled:opacity-50"
+                className="max-w-[220px] truncate"
               >
-                <Play className="inline h-3 w-3" /> {commandBusy === `run-${index}` ? 'Starting…' : command}
-              </button>
-              <button
+                <Play className="h-3 w-3" /> {commandBusy === `run-${index}` ? 'Starting…' : command}
+              </Button>
+              <Button
+                variant="ghost"
+                size="xs"
                 disabled={busy}
                 onClick={() => onRestartRun(index)}
                 title={`Restart ${command}`}
-                className="rounded px-1.5 py-0.5 text-xs text-forge-muted hover:bg-white/10 disabled:opacity-50"
               >
-                <RotateCcw className="inline h-3 w-3" /> Restart
-              </button>
+                <RotateCcw className="h-3 w-3" /> Restart
+              </Button>
             </div>
           ))}
           {runningRunCount > 0 && (
-            <button disabled={busy} onClick={onStopRuns} className="rounded-md border border-forge-red/20 bg-forge-red/10 px-2 py-1 text-xs font-semibold text-forge-red hover:bg-forge-red/15 disabled:opacity-50">
-              <Square className="inline h-3 w-3" /> {commandBusy === 'stop-all-runs' ? 'Stopping…' : 'Stop runs'}
-            </button>
+            <Button variant="destructive" size="sm" disabled={busy} onClick={onStopRuns}>
+              <Square className="h-3 w-3" /> {commandBusy === 'stop-all-runs' ? 'Stopping…' : 'Stop runs'}
+            </Button>
           )}
         </div>
       </div>
@@ -220,40 +225,42 @@ export function WorkspacePortsStrip({
         <div className="flex min-w-0 items-center gap-2 text-sm">
           <Globe2 className="h-3.5 w-3.5 text-forge-muted" />
           <span className="font-semibold text-forge-text">Testing</span>
-          <span
-            className={`rounded-full border px-2 py-0.5 text-xs ${
-              ports.length > 0 ? 'border-forge-blue/25 bg-forge-blue/10 text-forge-blue' : 'border-forge-border bg-white/5 text-forge-muted'
-            }`}
+          <Badge
+            variant={ports.length > 0 ? 'info' : 'default'}
+            className="normal-case tracking-normal text-xs px-2"
           >
             {ports.length > 0 ? `${ports.length} port${ports.length === 1 ? '' : 's'}` : 'No workspace ports'}
-          </span>
+          </Badge>
         </div>
-        <button
-          disabled={busy}
-          onClick={onRefresh}
-          className="ml-auto rounded-md border border-forge-border bg-white/5 px-2 py-1 text-xs font-semibold text-forge-muted hover:bg-white/10 disabled:opacity-50"
-        >
-          <RefreshCw className="inline h-3 w-3" /> {busy ? 'Scanning…' : 'Refresh ports'}
-        </button>
+        <Button variant="secondary" size="sm" disabled={busy} onClick={onRefresh} className="ml-auto">
+          <RefreshCw className="h-3 w-3" /> {busy ? 'Scanning…' : 'Refresh ports'}
+        </Button>
       </div>
       {ports.length > 0 ? (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {ports.map((port) => (
             <div key={`${port.pid}-${port.port}`} className="flex items-center gap-1 rounded-md border border-forge-border/70 bg-forge-bg px-1.5 py-1">
-              <button onClick={() => onOpen(port.port)} className="rounded px-1.5 py-0.5 text-xs font-semibold text-forge-blue hover:bg-forge-blue/10" title={port.cwd ?? port.address}>
-                <ExternalLink className="inline h-3 w-3" /> localhost:{port.port}
-              </button>
+              <Button
+                variant="ghost"
+                size="xs"
+                onClick={() => onOpen(port.port)}
+                title={port.cwd ?? port.address}
+                className="text-forge-blue hover:bg-forge-blue/10 hover:text-forge-blue"
+              >
+                <ExternalLink className="h-3 w-3" /> localhost:{port.port}
+              </Button>
               <span className="max-w-[140px] truncate font-mono text-xs text-forge-text/85">
                 {port.command} · pid {port.pid}
               </span>
-              <button
+              <Button
+                variant="destructive"
+                size="xs"
                 disabled={busy}
                 onClick={() => onKill(port)}
-                className="rounded px-1.5 py-0.5 text-xs text-forge-red hover:bg-forge-red/10 disabled:opacity-50"
                 title={`Kill process ${port.pid}`}
               >
-                <Trash2 className="inline h-3 w-3" /> Kill
-              </button>
+                <Trash2 className="h-3 w-3" /> Kill
+              </Button>
             </div>
           ))}
         </div>

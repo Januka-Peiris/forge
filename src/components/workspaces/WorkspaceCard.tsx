@@ -1,6 +1,7 @@
 import { GitBranch, FileCode, Clock, GitPullRequest, ChevronRight, Play, Eye } from 'lucide-react';
 import type { Workspace, WorkspaceStep } from '../../types';
 import { StatusBadge, AgentBadge } from './StatusBadge';
+import { Button } from '../ui/button';
 
 interface WorkspaceCardProps {
   workspace: Workspace;
@@ -142,28 +143,31 @@ export function WorkspaceCard({ workspace, isSelected, onSelect }: WorkspaceCard
       </div>
 
       <div className="px-4 pb-3 flex items-center gap-1.5">
-        <button
+        <Button
+          variant="default"
+          size="sm"
           onClick={(e) => { e.stopPropagation(); onSelect(); }}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-white/5 hover:bg-white/10 text-sm font-medium text-forge-text transition-colors border border-forge-border hover:border-forge-border-light"
         >
           <Eye className="w-3 h-3" />
           Open
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={(e) => { e.stopPropagation(); }}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-white/5 hover:bg-white/10 text-sm font-medium text-forge-text transition-colors border border-forge-border hover:border-forge-border-light"
         >
           <FileCode className="w-3 h-3" />
           Review Diff
-        </button>
+        </Button>
         {(workspace.status === 'Waiting' || workspace.status === 'Blocked') && (
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={(e) => { e.stopPropagation(); }}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-forge-orange/15 hover:bg-forge-orange/25 text-sm font-medium text-forge-orange transition-colors border border-forge-orange/20"
           >
             <Play className="w-3 h-3" />
             Resume
-          </button>
+          </Button>
         )}
       </div>
     </div>

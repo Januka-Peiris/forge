@@ -1,5 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Copy, ExternalLink, FileText, Globe2, Link2, MoreHorizontal, PlugZap, RefreshCw, RotateCcw, Settings2, Square, Terminal as TerminalIcon, Wrench, X, Zap } from 'lucide-react';
+import { Button } from '../ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '../ui/dropdown-menu';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { ForgeWorkspaceConfig, PromptTemplate, TerminalOutputChunk, TerminalOutputEvent, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceContextPreview, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
 import type { AgentChatEvent, AgentChatEventEnvelope, AgentChatNextAction, AgentChatSession } from '../../types/agent-chat';
@@ -151,9 +155,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   const [sendBehavior, setSendBehavior] = useState<'send_now' | 'interrupt_send'>('send_now');
   const [error, setError] = useState<string | null>(null);
   const [pendingCommand, setPendingCommand] = useState<PendingCommand | null>(null);
-  const [showOverflow, setShowOverflow] = useState(false);
   const [activeHeaderTab, setActiveHeaderTab] = useState<null | 'commands' | 'ports' | 'readiness' | 'health'>(null);
-  const [showComposerSettings, setShowComposerSettings] = useState(false);
   const [composerHeight, setComposerHeight] = useState<number>(() => {
     const raw = window.localStorage.getItem(AGENT_COMPOSER_HEIGHT_KEY);
     const parsed = raw ? Number(raw) : NaN;
@@ -161,8 +163,6 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       ? Math.min(AGENT_COMPOSER_MAX_PX, Math.max(AGENT_COMPOSER_MIN_PX, parsed))
       : AGENT_COMPOSER_DEFAULT_PX;
   });
-  const overflowRef = useRef<HTMLDivElement>(null);
-  const composerSettingsRef = useRef<HTMLDivElement>(null);
   const nextSeqRef = useRef<Record<string, number>>({});
   const pendingOutputRef = useRef<Record<string, TerminalOutputChunk[]>>({});
   const outputFlushRafRef = useRef<number | null>(null);
@@ -227,27 +227,6 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     return allSessions.filter((s) => !s.closedAt && !visibleIds.has(s.id));
   }, [allSessions, visibleSessions]);
 
-  useEffect(() => {
-    if (!showOverflow) return;
-    function handleClick(e: MouseEvent) {
-      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) {
-        setShowOverflow(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [showOverflow]);
-
-  useEffect(() => {
-    if (!showComposerSettings) return;
-    function handleClick(e: MouseEvent) {
-      if (composerSettingsRef.current && !composerSettingsRef.current.contains(e.target as Node)) {
-        setShowComposerSettings(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [showComposerSettings]);
   useEffect(() => {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem(AGENT_COMPOSER_HEIGHT_KEY, String(composerHeight));
@@ -781,7 +760,6 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         const suffix = current.trim().length > 0 ? `\n\n${current.trim()}` : '';
         return `${preview.promptContext}${suffix}`;
       });
-      setShowComposerSettings(false);
     } catch (err) {
       setActionError(err);
       setContextPreview(null);
@@ -798,7 +776,6 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     try {
       const preview = await refreshWorkspaceRepoContext(workspaceId);
       setContextPreview(preview);
-      setShowComposerSettings(false);
     } catch (err) {
       setActionError(err);
     } finally {
@@ -1177,69 +1154,62 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
             </div>
           )}
           <div className="flex shrink-0 items-center gap-1.5">
-            <button disabled={busy} onClick={() => void createChatSession('claude_code', 'Claude Chat')} className="rounded-lg border border-forge-orange/30 bg-forge-orange/10 px-2.5 py-1.5 text-sm font-semibold text-forge-orange hover:bg-forge-orange/20 disabled:opacity-50">
+            <Button variant="default" size="sm" disabled={busy} onClick={() => void createChatSession('claude_code', 'Claude Chat')}>
               New Claude
-            </button>
+            </Button>
             {/* Overflow menu */}
-            <div ref={overflowRef} className="relative">
-              <button
-                onClick={() => setShowOverflow((v) => !v)}
-                className="rounded-lg border border-forge-border bg-white/5 p-1.5 text-forge-muted hover:bg-white/10 hover:text-forge-text"
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </button>
-              {showOverflow && (
-                <div className="absolute right-0 top-full z-20 mt-1 min-w-[160px] overflow-hidden rounded-lg border border-forge-border bg-forge-surface shadow-lg">
-                  <button
-                    disabled={busy}
-                    onClick={() => { void createTerminal('shell', 'shell', 'Shell'); setShowOverflow(false); }}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-forge-text/85 hover:bg-white/5 disabled:opacity-50"
-                  >
-                    New shell tab
-                  </button>
-                  <button
-                    disabled={busy}
-                    onClick={() => { void createChatSession('codex', 'Codex Chat'); setShowOverflow(false); }}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-forge-text/85 hover:bg-white/5 disabled:opacity-50"
-                  >
-                    New Codex tab
-                  </button>
-                  <button
-                    disabled={busy}
-                    onClick={() => { void createChatSession('claude_code', 'Claude Chat'); setShowOverflow(false); }}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-forge-text/85 hover:bg-white/5 disabled:opacity-50"
-                  >
-                    New Claude tab
-                  </button>
-                  <button
-                    disabled={!focusedSession}
-                    onClick={() => { void copyFocusedOutput(); setShowOverflow(false); }}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-forge-text/85 hover:bg-white/5 disabled:opacity-50"
-                  >
-                    <Copy className="h-3.5 w-3.5" /> Copy output
-                  </button>
-                  <button
-                    disabled={busy || !focusedSession}
-                    title="Sends interrupt (e.g. Ctrl+C) to the focused terminal tab"
-                    onClick={() => {
-                      void interruptFocusedAgent();
-                      setShowOverflow(false);
-                    }}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-forge-text/85 hover:bg-white/5 disabled:opacity-50"
-                  >
-                    <Square className="h-3.5 w-3.5 text-forge-yellow" /> Interrupt terminal
-                  </button>
-                  {onOpenInCursor && (
-                    <button
-                      onClick={() => { try { onOpenInCursor(); } catch (err) { setError(formatCursorOpenError(err)); } setShowOverflow(false); }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-forge-blue hover:bg-white/5"
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon-sm">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  disabled={busy}
+                  onSelect={() => void createTerminal('shell', 'shell', 'Shell')}
+                >
+                  New shell tab
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={busy}
+                  onSelect={() => void createChatSession('codex', 'Codex Chat')}
+                >
+                  New Codex tab
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={busy}
+                  onSelect={() => void createChatSession('claude_code', 'Claude Chat')}
+                >
+                  New Claude tab
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  disabled={!focusedSession}
+                  onSelect={() => void copyFocusedOutput()}
+                >
+                  <Copy className="h-3.5 w-3.5" /> Copy output
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={busy || !focusedSession}
+                  onSelect={() => void interruptFocusedAgent()}
+                  title="Sends interrupt (e.g. Ctrl+C) to the focused terminal tab"
+                >
+                  <Square className="h-3.5 w-3.5 text-forge-yellow" /> Interrupt terminal
+                </DropdownMenuItem>
+                {onOpenInCursor && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-forge-blue focus:text-forge-blue"
+                      onSelect={() => { try { onOpenInCursor(); } catch (err) { setError(formatCursorOpenError(err)); } }}
                     >
                       <ExternalLink className="h-3.5 w-3.5" /> Open in Cursor
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -1435,34 +1405,38 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
               <div className="flex flex-wrap items-center gap-1 rounded-lg border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-muted">
                 <span className="font-semibold text-forge-text">{selectedClaudeAgent}</span>
                 <span>·</span>
-                <select
-                  value={selectedModel}
-                  onChange={(event) => setSelectedModel(event.target.value)}
-                  className="rounded border border-transparent bg-white/5 px-1.5 py-0.5 text-[11px] font-bold uppercase text-forge-text outline-none hover:bg-white/10"
-                  title="Claude model"
-                >
-                  {CLAUDE_MODEL_OPTIONS.map((model) => (
-                    <option key={model.value} value={model.value}>
-                      {compactClaudeModelLabel(model.value)}
-                    </option>
-                  ))}
-                  {!CLAUDE_MODEL_OPTIONS.some((model) => model.value === selectedModel) && (
-                    <option value={selectedModel}>{compactClaudeModelLabel(selectedModel)}</option>
-                  )}
-                </select>
+                <Select value={selectedModel} onValueChange={setSelectedModel}>
+                  <SelectTrigger compact title="Claude model">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CLAUDE_MODEL_OPTIONS.map((model) => (
+                      <SelectItem key={model.value} value={model.value}>
+                        {compactClaudeModelLabel(model.value)}
+                      </SelectItem>
+                    ))}
+                    {!CLAUDE_MODEL_OPTIONS.some((model) => model.value === selectedModel) && (
+                      <SelectItem value={selectedModel}>{compactClaudeModelLabel(selectedModel)}</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
                 <span>·</span>
-                <select
-                  value={selectedReasoning}
-                  onChange={(event) => setSelectedReasoning(event.target.value)}
-                  className={`rounded border border-transparent px-1.5 py-0.5 text-[11px] font-bold uppercase outline-none ${selectedReasoning === 'Default' ? 'bg-white/5 text-forge-muted hover:bg-white/10' : selectedReasoning === 'Max' || selectedReasoning === 'Extra High' ? 'bg-forge-violet/15 text-forge-violet' : 'bg-forge-blue/10 text-forge-blue'}`}
-                  title="Claude thinking / effort"
-                >
-                  {CLAUDE_THINKING_OPTIONS.map((level) => (
-                    <option key={level.value} value={level.value}>
-                      Thinking: {level.label}
-                    </option>
-                  ))}
-                </select>
+                <Select value={selectedReasoning} onValueChange={setSelectedReasoning}>
+                  <SelectTrigger
+                    compact
+                    title="Claude thinking / effort"
+                    className={selectedReasoning === 'Default' ? 'text-forge-muted' : selectedReasoning === 'Max' || selectedReasoning === 'Extra High' ? 'bg-forge-violet/15 text-forge-violet' : 'bg-forge-blue/10 text-forge-blue'}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CLAUDE_THINKING_OPTIONS.map((level) => (
+                      <SelectItem key={level.value} value={level.value}>
+                        Thinking: {level.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <span>·</span>
                 <span className="text-forge-muted">{modelContextLabel(selectedModel)}</span>
                 {promptMeter && (
@@ -1483,126 +1457,153 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
             )}
 
             {/* Gear popover for secondary settings */}
-            <div ref={composerSettingsRef} className="relative">
-              <button
-                onClick={() => setShowComposerSettings((v) => !v)}
-                title="Agent settings"
-                className={`flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold transition-colors ${showComposerSettings ? 'border-forge-orange/30 bg-forge-orange/10 text-forge-orange' : 'border-forge-border bg-white/5 text-forge-muted hover:bg-white/10 hover:text-forge-text/80'}`}
-              >
-                <Settings2 className="h-3 w-3" />
-              </button>
-              {showComposerSettings && (
-                <div className="absolute left-0 top-full z-30 mt-1 min-w-[240px] rounded-lg border border-forge-border bg-forge-surface p-3 shadow-lg">
-                  <p className="mb-2 text-xs font-bold uppercase tracking-widest text-forge-muted">Agent Settings</p>
-                  <div className="space-y-2">
-                    <div>
-                      <label className="mb-1 block text-xs text-forge-muted">Claude agent</label>
-                      <select value={selectedClaudeAgent} onChange={(event) => setSelectedClaudeAgent(event.target.value)} className="w-full rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-text">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="icon-sm" title="Agent settings">
+                  <Settings2 className="h-3 w-3" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="min-w-[240px]">
+                <p className="mb-2 text-xs font-bold uppercase tracking-widest text-forge-muted">Agent Settings</p>
+                <div className="space-y-2">
+                  <div>
+                    <label className="mb-1 block text-xs text-forge-muted">Claude agent</label>
+                    <Select value={selectedClaudeAgent} onValueChange={setSelectedClaudeAgent}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
                         {CLAUDE_AGENT_OPTIONS.map((agent) => (
-                          <option key={agent.value} value={agent.value}>{agent.label} · {agent.hint}</option>
+                          <SelectItem key={agent.value} value={agent.value}>{agent.label} · {agent.hint}</SelectItem>
                         ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs text-forge-muted">Model</label>
-                      <select value={selectedModel} onChange={(event) => setSelectedModel(event.target.value)} className="w-full rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-text">
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-forge-muted">Model</label>
+                    <Select value={selectedModel} onValueChange={setSelectedModel}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
                         {CLAUDE_MODEL_OPTIONS.map((model) => (
-                          <option key={model.value} value={model.value}>{model.label}</option>
+                          <SelectItem key={model.value} value={model.value}>{model.label}</SelectItem>
                         ))}
                         {!CLAUDE_MODEL_OPTIONS.some((model) => model.value === selectedModel) && (
-                          <option value={selectedModel}>{compactClaudeModelLabel(selectedModel)}</option>
+                          <SelectItem value={selectedModel}>{compactClaudeModelLabel(selectedModel)}</SelectItem>
                         )}
-                      </select>
-                      <p className="mt-1 text-xs text-forge-muted">Passed to Claude as <span className="font-mono">--model</span>.</p>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs text-forge-muted">Task mode</label>
-                      <select value={selectedTaskMode} onChange={(event) => {
-                        const next = event.target.value;
+                      </SelectContent>
+                    </Select>
+                    <p className="mt-1 text-xs text-forge-muted">Passed to Claude as <span className="font-mono">--model</span>.</p>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-forge-muted">Task mode</label>
+                    <Select
+                      value={selectedTaskMode}
+                      onValueChange={(next) => {
                         setSelectedTaskMode(next);
                         if (next === 'Plan') setSelectedClaudeAgent('Plan');
                         if (next === 'Review') setSelectedClaudeAgent('superpowers:code-reviewer');
                         if (next === 'Act' && selectedClaudeAgent === 'Plan') setSelectedClaudeAgent('general-purpose');
-                      }} className="w-full rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-text">
-                        {['Act', 'Plan', 'Review', 'Fix'].map((mode) => <option key={mode}>{mode}</option>)}
-                      </select>
-                      <p className="mt-1 text-xs text-forge-muted">Shortcut: Shift+Tab toggles Plan mode.</p>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs text-forge-muted">Thinking / effort</label>
-                      <select value={selectedReasoning} onChange={(event) => setSelectedReasoning(event.target.value)} className="w-full rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-text">
-                        {CLAUDE_THINKING_OPTIONS.map((level) => <option key={level.value} value={level.value}>{level.label} · {level.hint}</option>)}
-                      </select>
-                      <p className="mt-1 text-xs text-forge-muted">Maps to Claude <span className="font-mono">--effort</span>: low, medium, high, xhigh, max.</p>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs text-forge-muted">Send behavior</label>
-                      <select value={sendBehavior} onChange={(event) => setSendBehavior(event.target.value as typeof sendBehavior)} className="w-full rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-text">
-                        <option value="send_now">Send now</option>
-                        <option value="interrupt_send">Interrupt + send</option>
-                      </select>
-                      <p className="mt-1.5 text-xs leading-snug text-forge-muted">
-                        Stop the focused tab any time: header <span className="font-mono text-forge-text/70">⋯</span> menu → Interrupt terminal.
-                      </p>
-                    </div>
-                    <div className="border-t border-forge-border/60 pt-2">
-                      <p className="mb-1.5 text-xs font-bold uppercase tracking-widest text-forge-muted">Workflow presets</p>
-                      <div className="flex flex-col gap-1">
-                        <button
-                          type="button"
-                          onClick={() => { void applyWorkflowPreset('plan-act'); setShowComposerSettings(false); }}
-                          className="rounded-md border border-forge-border bg-white/5 px-2 py-1.5 text-left text-xs font-semibold text-forge-text hover:bg-white/10"
-                          title="Set up a planner-first run, then accept and continue in Act mode."
-                        >
-                          Plan → Act
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { void applyWorkflowPreset('plan-codex-review'); setShowComposerSettings(false); }}
-                          className="rounded-md border border-forge-border bg-white/5 px-2 py-1.5 text-left text-xs font-semibold text-forge-text hover:bg-white/10"
-                          title="Set up a plan that can be handed to an implementer and reviewer."
-                        >
-                          Plan → Codex → Review
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { void applyWorkflowPreset('implement-review-pr'); setShowComposerSettings(false); }}
-                          className="rounded-md border border-forge-border bg-white/5 px-2 py-1.5 text-left text-xs font-semibold text-forge-text hover:bg-white/10"
-                          title="Set up an implementation run that ends with review and PR readiness."
-                        >
-                          Implement → Review → PR
-                        </button>
-                      </div>
-                    </div>
-                    <div className="border-t border-forge-border/60 pt-2">
-                      <p className="mb-1.5 text-xs font-bold uppercase tracking-widest text-forge-muted">Repo context</p>
-                      <p className="mb-2 text-xs leading-snug text-forge-muted">
-                        Git paths + changed-file diffs (not a full aider-style map). Forge does not cap size—large repos can produce very large context. Use after changing branches or large file moves.
-                      </p>
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {['Act', 'Plan', 'Review', 'Fix'].map((mode) => (
+                          <SelectItem key={mode} value={mode}>{mode}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="mt-1 text-xs text-forge-muted">Shortcut: Shift+Tab toggles Plan mode.</p>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-forge-muted">Thinking / effort</label>
+                    <Select value={selectedReasoning} onValueChange={setSelectedReasoning}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CLAUDE_THINKING_OPTIONS.map((level) => (
+                          <SelectItem key={level.value} value={level.value}>{level.label} · {level.hint}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="mt-1 text-xs text-forge-muted">Maps to Claude <span className="font-mono">--effort</span>: low, medium, high, xhigh, max.</p>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-forge-muted">Send behavior</label>
+                    <Select value={sendBehavior} onValueChange={(v) => setSendBehavior(v as typeof sendBehavior)}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="send_now">Send now</SelectItem>
+                        <SelectItem value="interrupt_send">Interrupt + send</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="mt-1.5 text-xs leading-snug text-forge-muted">
+                      Stop the focused tab any time: header <span className="font-mono text-forge-text/70">⋯</span> menu → Interrupt terminal.
+                    </p>
+                  </div>
+                  <div className="border-t border-forge-border/60 pt-2">
+                    <p className="mb-1.5 text-xs font-bold uppercase tracking-widest text-forge-muted">Workflow presets</p>
+                    <div className="flex flex-col gap-1">
                       <button
                         type="button"
-                        disabled={contextBusy}
-                        onClick={() => void addRepoContextToPrompt()}
-                        className="mb-1.5 w-full rounded-md border border-forge-green/30 bg-forge-green/10 px-2 py-1.5 text-xs font-semibold text-forge-green hover:bg-forge-green/15 disabled:opacity-50"
-                        title="Fetch context, show summary below, append to prompt if not already present"
+                        onClick={() => void applyWorkflowPreset('plan-act')}
+                        className="rounded-md border border-forge-border bg-white/5 px-2 py-1.5 text-left text-xs font-semibold text-forge-text hover:bg-white/10"
+                        title="Set up a planner-first run, then accept and continue in Act mode."
                       >
-                        {contextBusy ? 'Working…' : 'Add repo context to prompt'}
+                        Plan → Act
                       </button>
                       <button
                         type="button"
-                        disabled={contextBusy}
-                        onClick={() => void refreshRepoPathMap()}
-                        className="flex w-full items-center justify-center gap-1 rounded-md border border-forge-border bg-white/5 px-2 py-1.5 text-xs font-semibold text-forge-muted hover:bg-white/10 disabled:opacity-50"
-                        title="Regenerate .forge/context path list from git (then update preview only)"
+                        onClick={() => void applyWorkflowPreset('plan-codex-review')}
+                        className="rounded-md border border-forge-border bg-white/5 px-2 py-1.5 text-left text-xs font-semibold text-forge-text hover:bg-white/10"
+                        title="Set up a plan that can be handed to an implementer and reviewer."
                       >
-                        <RefreshCw className={`h-3 w-3 ${contextBusy ? 'animate-spin' : ''}`} />
-                        Refresh path map
+                        Plan → Codex → Review
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void applyWorkflowPreset('implement-review-pr')}
+                        className="rounded-md border border-forge-border bg-white/5 px-2 py-1.5 text-left text-xs font-semibold text-forge-text hover:bg-white/10"
+                        title="Set up an implementation run that ends with review and PR readiness."
+                      >
+                        Implement → Review → PR
                       </button>
                     </div>
                   </div>
+                  <div className="border-t border-forge-border/60 pt-2">
+                    <p className="mb-1.5 text-xs font-bold uppercase tracking-widest text-forge-muted">Repo context</p>
+                    <p className="mb-2 text-xs leading-snug text-forge-muted">
+                      Git paths + changed-file diffs (not a full aider-style map). Forge does not cap size—large repos can produce very large context. Use after changing branches or large file moves.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={contextBusy}
+                      onClick={() => void addRepoContextToPrompt()}
+                      className="mb-1.5 w-full rounded-md border border-forge-green/30 bg-forge-green/10 px-2 py-1.5 text-xs font-semibold text-forge-green hover:bg-forge-green/15 disabled:opacity-50"
+                      title="Fetch context, show summary below, append to prompt if not already present"
+                    >
+                      {contextBusy ? 'Working…' : 'Add repo context to prompt'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={contextBusy}
+                      onClick={() => void refreshRepoPathMap()}
+                      className="flex w-full items-center justify-center gap-1 rounded-md border border-forge-border bg-white/5 px-2 py-1.5 text-xs font-semibold text-forge-muted hover:bg-white/10 disabled:opacity-50"
+                      title="Regenerate .forge/context path list from git (then update preview only)"
+                    >
+                      <RefreshCw className={`h-3 w-3 ${contextBusy ? 'animate-spin' : ''}`} />
+                      Refresh path map
+                    </button>
+                  </div>
                 </div>
-              )}
-            </div>
+              </PopoverContent>
+            </Popover>
 
             {promptTemplates.slice(0, 5).map((template) => (
               <button key={template.id} onClick={() => injectTemplate(template)} title={template.source} className="max-w-[180px] truncate rounded-md border border-forge-border bg-white/5 px-2 py-1 text-xs font-semibold text-forge-muted hover:bg-white/10">

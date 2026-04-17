@@ -1,39 +1,30 @@
 import type { WorkspaceStatus, AgentType } from '../../types';
+import { Badge } from '../ui/badge';
 
 export function StatusBadge({ status }: { status: WorkspaceStatus }) {
-  const config = {
-    'Running': 'bg-forge-blue/15 text-forge-blue border border-forge-blue/20',
-    'Waiting': 'bg-forge-yellow/10 text-forge-yellow border border-forge-yellow/15',
-    'Review Ready': 'bg-forge-teal/15 text-forge-teal border border-forge-teal/20',
-    'Blocked': 'bg-forge-red/15 text-forge-red border border-forge-red/20',
-    'Merged': 'bg-forge-violet/15 text-forge-violet border border-forge-violet/20',
-  }[status];
-
-  const dot = {
-    'Running': 'bg-forge-blue animate-pulse',
-    'Waiting': 'bg-forge-yellow',
-    'Review Ready': 'bg-forge-teal',
-    'Blocked': 'bg-forge-red',
-    'Merged': 'bg-forge-violet',
-  }[status];
-
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide uppercase ${config}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
-      {status}
-    </span>
-  );
+  switch (status) {
+    case 'Running':
+      return <Badge variant="success" dot>{status}</Badge>;
+    case 'Waiting':
+      return <Badge variant="warning" dot>{status}</Badge>;
+    case 'Review Ready':
+      return <Badge variant="info">{status}</Badge>;
+    case 'Blocked':
+      return <Badge variant="destructive" dot>{status}</Badge>;
+    case 'Merged':
+      return <Badge variant="violet">{status}</Badge>;
+    default:
+      return <Badge variant="default">{status}</Badge>;
+  }
 }
 
 export function AgentBadge({ agent }: { agent: AgentType }) {
-  const config = {
-    'Claude Code': 'bg-forge-violet/10 text-forge-violet border border-forge-violet/15',
-    'Codex': 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15',
-  }[agent];
-
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide ${config}`}>
-      {agent}
-    </span>
-  );
+  switch (agent) {
+    case 'Claude Code':
+      return <Badge variant="violet">{agent}</Badge>;
+    case 'Codex':
+      return <Badge variant="success">{agent}</Badge>;
+    default:
+      return <Badge variant="default">{agent}</Badge>;
+  }
 }
