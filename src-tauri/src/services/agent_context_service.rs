@@ -12,7 +12,7 @@ use crate::repositories::workspace_repository;
 use crate::services::git_review_service;
 use crate::state::AppState;
 
-const REPO_MAP_VERSION: u32 = 2;
+const REPO_MAP_VERSION: u32 = 3;
 
 pub fn get_workspace_agent_context(
     state: &AppState,
@@ -33,6 +33,70 @@ pub fn get_workspace_agent_context(
         linked_worktrees,
         prompt_preamble,
     })
+}
+
+pub fn build_session_open_context(state: &AppState, workspace_id: &str) -> Option<String> {
+    let workspace = workspace_repository::get_detail(&state.db, workspace_id).ok()??;
+    let primary_path = workspace.summary.workspace_root_path.clone()
+        .unwrap_or_else(|| workspace.worktree_path.clone());
+    let root = match repo_root(Path::new(&primary_path)) {
+        Ok(r) => r,
+        Err(_) => return None,
+    };
+    let default_ref = match resolve_default_ref(&root) {
+        Ok(r) => r,
+        Err(_) => return None,
+    };
+
+    let map_result = ensure_repo_map(&root, &default_ref, false);
+
+    let mut parts: Vec<String> = Vec::new();
+
+    match map_result {
+        Ok(map_state) => {
+            let compact = compressed_repo_map(&map_state.map);
+            parts.push(format!(
+                "Project map ({}@{}):\n{}",
+                map_state.meta.branch,
+                short_hash(&map_state.meta.commit_hash),
+                compact
+            ));
+        }
+        Err(e) => {
+            parts.push(format!("[repo map unavailable: {}]", e));
+        }
+    }
+
+    // Changed file diffs
+    let changed_files = git_review_service::get_workspace_changed_files(state, workspace_id)
+        .unwrap_or_default();
+    if !changed_files.is_empty() {
+        let mut diff_parts = vec!["Changed files in this workspace:".to_string()];
+        for file in &changed_files {
+            let diff = git_review_service::get_workspace_file_diff(state, workspace_id, &file.path)
+                .map(|d| d.diff)
+                .unwrap_or_else(|_| format!("[diff unavailable for {}]", file.path));
+            diff_parts.push(format!("### {} ({})\n```diff\n{}\n```", file.path, file.status, diff));
+        }
+        parts.push(diff_parts.join("\n\n"));
+    }
+
+    // Linked worktrees
+    if let Ok(linked) = linked_worktrees(state, workspace_id) {
+        let preamble = format_prompt_preamble(&primary_path, &linked);
+        if !preamble.trim().is_empty() {
+            parts.push(preamble);
+        }
+    }
+
+    if parts.is_empty() {
+        return None;
+    }
+
+    Some(format!(
+        "[FORGE CONTEXT]\n{}\n[END FORGE CONTEXT]",
+        parts.join("\n\n")
+    ))
 }
 
 pub fn get_workspace_context_preview(
@@ -295,6 +359,68 @@ fn ensure_repo_map(
     })
 }
 
+fn extract_symbols(content: &str, ext: &str) -> Vec<String> {
+    let mut symbols = Vec::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        let sym = match ext {
+            "rs" => {
+                if let Some(rest) = trimmed.strip_prefix("pub fn ") {
+                    rest.split('(').next().map(|s| s.trim().to_string())
+                } else if let Some(rest) = trimmed.strip_prefix("pub struct ") {
+                    rest.split(|c: char| !c.is_alphanumeric() && c != '_').next().map(|s| s.to_string())
+                } else if let Some(rest) = trimmed.strip_prefix("pub enum ") {
+                    rest.split(|c: char| !c.is_alphanumeric() && c != '_').next().map(|s| s.to_string())
+                } else if let Some(rest) = trimmed.strip_prefix("pub trait ") {
+                    rest.split(|c: char| !c.is_alphanumeric() && c != '_').next().map(|s| s.to_string())
+                } else if let Some(rest) = trimmed.strip_prefix("pub type ") {
+                    rest.split(|c: char| !c.is_alphanumeric() && c != '_').next().map(|s| s.to_string())
+                } else { None }
+            },
+            "ts" | "tsx" | "js" | "jsx" => {
+                if let Some(rest) = trimmed.strip_prefix("export function ") {
+                    rest.split('(').next().map(|s| s.trim().to_string())
+                } else if let Some(rest) = trimmed.strip_prefix("export async function ") {
+                    rest.split('(').next().map(|s| s.trim().to_string())
+                } else if let Some(rest) = trimmed.strip_prefix("export class ") {
+                    rest.split(|c: char| !c.is_alphanumeric() && c != '_').next().map(|s| s.to_string())
+                } else if let Some(rest) = trimmed.strip_prefix("export interface ") {
+                    rest.split(|c: char| !c.is_alphanumeric() && c != '_').next().map(|s| s.to_string())
+                } else if let Some(rest) = trimmed.strip_prefix("export type ") {
+                    rest.split(|c: char| !c.is_alphanumeric() && c != '_').next().map(|s| s.to_string())
+                } else if let Some(rest) = trimmed.strip_prefix("export const ") {
+                    rest.split(|c: char| !c.is_alphanumeric() && c != '_').next().map(|s| s.to_string())
+                } else if let Some(rest) = trimmed.strip_prefix("export default function ") {
+                    rest.split('(').next().map(|s| s.trim().to_string())
+                } else { None }
+            },
+            "py" => {
+                if let Some(rest) = trimmed.strip_prefix("def ") {
+                    rest.split('(').next().map(|s| s.trim().to_string())
+                } else if let Some(rest) = trimmed.strip_prefix("async def ") {
+                    rest.split('(').next().map(|s| s.trim().to_string())
+                } else if let Some(rest) = trimmed.strip_prefix("class ") {
+                    rest.split(|c: char| !c.is_alphanumeric() && c != '_').next().map(|s| s.to_string())
+                } else { None }
+            },
+            "go" => {
+                if trimmed.starts_with("func ") {
+                    trimmed.split('(').next().and_then(|s| s.strip_prefix("func ")).map(|s| s.trim().to_string())
+                } else { None }
+            },
+            _ => None,
+        };
+        if let Some(name) = sym {
+            let name = name.trim().to_string();
+            if !name.is_empty() && name.len() < 80 && !symbols.contains(&name) {
+                symbols.push(name);
+            }
+        }
+    }
+    symbols.truncate(30); // max 30 symbols per file
+    symbols
+}
+
 fn generate_repo_map(root: &Path, default_ref: &DefaultRef) -> Result<RepoMap, String> {
     let output = git(
         root,
@@ -302,6 +428,7 @@ fn generate_repo_map(root: &Path, default_ref: &DefaultRef) -> Result<RepoMap, S
     )?;
     let mut dirs = BTreeSet::new();
     let mut entries = Vec::new();
+    let mut processed_count: usize = 0;
 
     for raw in output.lines() {
         let path = raw.trim();
@@ -309,11 +436,21 @@ fn generate_repo_map(root: &Path, default_ref: &DefaultRef) -> Result<RepoMap, S
             continue;
         }
         collect_parent_dirs(path, &mut dirs);
-        // Path-only map: no per-file `git show` or regex "symbols" (fast on large repos; not aider-class).
+        let symbols = if processed_count < 500 {
+            let ext = Path::new(path).extension().and_then(|e| e.to_str()).unwrap_or("");
+            if matches!(ext, "rs" | "ts" | "tsx" | "js" | "jsx" | "py" | "go") {
+                processed_count += 1;
+                let content_result = git(root, &["show", &format!("{}:{}", default_ref.ref_name, path)]);
+                match content_result {
+                    Ok(content) if content.len() < 150_000 => extract_symbols(&content, ext),
+                    _ => Vec::new(),
+                }
+            } else { Vec::new() }
+        } else { Vec::new() };
         entries.push(RepoMapEntry {
             path: path.to_string(),
             kind: "file".to_string(),
-            symbols: Vec::new(),
+            symbols,
         });
     }
 

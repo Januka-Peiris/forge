@@ -82,6 +82,8 @@ pub fn run() {
             settings::resolve_git_repository_path,
             settings::get_ai_model_settings,
             settings::save_ai_model_settings,
+            settings::get_setting,
+            settings::set_setting,
             agent_context::get_workspace_agent_context,
             agent_context::get_workspace_context_preview,
             agent_context::refresh_workspace_repo_context,

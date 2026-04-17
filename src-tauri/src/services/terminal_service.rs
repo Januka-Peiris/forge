@@ -665,6 +665,35 @@ pub fn queue_workspace_agent_prompt(
             prompt = format!("{}\n\nUser request:\n{}", context.prompt_preamble, prompt);
         }
     }
+
+    // Session-open context injection: inject once on the first prompt of a new session
+    let context_enabled = crate::repositories::settings_repository::get_value(&state.db, "context_enabled")
+        .unwrap_or_default()
+        .map(|v| v != "false")
+        .unwrap_or(true);
+
+    if context_enabled {
+        let is_first_prompt = {
+            let active_session = terminal_repository::get_active_session_id_for_workspace(
+                &state.db,
+                &input.workspace_id,
+            ).unwrap_or(None);
+            match active_session {
+                None => true, // no active session yet — this will be the first
+                Some(session_id) => {
+                    terminal_repository::count_sent_prompts_for_session(&state.db, &session_id)
+                        .unwrap_or(1) == 0
+                }
+            }
+        };
+
+        if is_first_prompt && !prompt.contains("[FORGE CONTEXT]") {
+            if let Some(context_block) = agent_context_service::build_session_open_context(state, &input.workspace_id) {
+                prompt = format!("{}\n\nUser request:\n{}", context_block, prompt);
+            }
+        }
+    }
+
     let resolved_profile = agent_profile_service::resolve_agent_profile(
         state,
         Some(&input.workspace_id),
