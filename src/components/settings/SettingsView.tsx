@@ -1,0 +1,279 @@
+import { useEffect, useState } from 'react';
+import { FolderOpen, GitBranch, Save } from 'lucide-react';
+import { Button } from '../ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Switch } from '../ui/switch';
+import { open } from '@tauri-apps/plugin-dialog';
+import { addRepository, removeRepository } from '../../lib/tauri-api/repositories';
+import { getAiModelSettings, getSetting, setSetting, resolveGitRepositoryPath, saveAiModelSettings } from '../../lib/tauri-api/settings';
+import type { AiModelSettings } from '../../types/settings';
+import type { AppSettings, DiscoveredRepository } from '../../types';
+
+const AGENT_MODELS = [
+  { value: 'claude-opus-4-7', label: 'Claude Opus 4.7 (1M context)' },
+  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6 (1M context)' },
+  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (fast + capable)' },
+  { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 (fast + cheap)' },
+];
+
+const ORCHESTRATOR_MODELS = [
+  { value: 'claude-opus-4-7', label: 'Claude Opus 4.7 (1M context)' },
+  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6 (1M context)' },
+  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (fast + capable)' },
+  { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 (fast + cheap)' },
+  { value: 'gpt-4o', label: 'GPT-4o (OpenAI)' },
+  { value: 'gpt-4o-mini', label: 'GPT-4o Mini (OpenAI, fast)' },
+  { value: 'o3', label: 'o3 (OpenAI, reasoning)' },
+  { value: 'o4-mini', label: 'o4-mini (OpenAI, reasoning, fast)' },
+];
+
+function AiModelsCard() {
+  const [modelSettings, setModelSettings] = useState<AiModelSettings | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    void getAiModelSettings().then(setModelSettings).catch((err) => {
+      setMessage(err instanceof Error ? err.message : String(err));
+    });
+  }, []);
+
+  const handleSave = async () => {
+    if (!modelSettings) return;
+    setSaving(true);
+    setMessage(null);
+    try {
+      const saved = await saveAiModelSettings(modelSettings);
+      setModelSettings(saved);
+      setMessage('Model settings saved.');
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!modelSettings) return <div className="text-[12px] text-forge-muted">Loading model settings…</div>;
+
+  return (
+    <div className="rounded-xl border border-forge-border bg-forge-card p-4">
+      <div className="mb-4">
+        <h2 className="text-[14px] font-bold text-forge-text">AI Models</h2>
+        <p className="text-[11px] text-forge-muted mt-0.5">Choose which Claude model powers each role. Changes take effect immediately.</p>
+      </div>
+      <div className="space-y-4">
+        <div>
+          <label className="text-[12px] font-semibold text-forge-text block mb-1">Coding Agent model</label>
+          <p className="text-[11px] text-forge-muted mb-2">Used for all workspace terminal sessions (the agent that writes code).</p>
+          <Select value={modelSettings.agentModel} onValueChange={(v) => setModelSettings({ ...modelSettings, agentModel: v })}>
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {AGENT_MODELS.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <label className="text-[12px] font-semibold text-forge-text block mb-1">Orchestrator brain model</label>
+          <p className="text-[11px] text-forge-muted mb-2">Used by the Orchestrator to analyse workspaces and dispatch agent prompts. Supports Claude and OpenAI models.</p>
+          <Select value={modelSettings.orchestratorModel} onValueChange={(v) => setModelSettings({ ...modelSettings, orchestratorModel: v })}>
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {ORCHESTRATOR_MODELS.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      {message && <p className="mt-3 text-[12px] text-forge-muted">{message}</p>}
+      <Button type="button" size="sm" onClick={() => void handleSave()} disabled={saving} className="mt-4">
+        <Save className="w-3.5 h-3.5" />
+        {saving ? 'Saving…' : 'Save model settings'}
+      </Button>
+    </div>
+  );
+}
+
+function RepoContextCard() {
+  const [contextEnabled, setContextEnabled] = useState(true);
+
+  useEffect(() => {
+    void getSetting('context_enabled').then((val) => {
+      if (val === 'false') setContextEnabled(false);
+    }).catch(() => undefined);
+  }, []);
+
+  return (
+    <div className="rounded-xl border border-forge-border bg-forge-card p-4">
+      <div className="mb-4">
+        <h2 className="text-[14px] font-bold text-forge-text">Repo Context</h2>
+        <p className="text-[11px] text-forge-muted mt-0.5">Inject repo map and diffs into the first prompt of each session.</p>
+      </div>
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-[12px] text-forge-text/70">Inject context into prompts</p>
+          <p className="text-[11px] text-forge-muted mt-0.5">Sends repo map + diffs at session start</p>
+        </div>
+        <Switch
+          checked={contextEnabled}
+          onCheckedChange={(checked) => {
+            setContextEnabled(checked);
+            void setSetting('context_enabled', checked ? 'true' : 'false').catch(console.error);
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+export function SettingsView({
+  settings,
+  onSettingsChange,
+  onRemoveRepository,
+}: {
+  settings: AppSettings | null;
+  onSettingsChange: (settings: AppSettings) => void;
+  onRemoveRepository: (repositoryId: string) => void;
+}) {
+  const [repositories, setRepositories] = useState<DiscoveredRepository[]>(settings?.discoveredRepositories ?? []);
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ repoId: string; x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    setRepositories(settings?.discoveredRepositories ?? []);
+  }, [settings]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [contextMenu]);
+
+  const isTauriShell = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+
+  const handleAddRepository = async () => {
+    setMessage(null);
+    if (!isTauriShell()) {
+      setMessage('Folder picker is only available in the Forge desktop app.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const picked = await open({ directory: true, multiple: false, title: 'Choose a Git repository' });
+      if (picked === null) return;
+      const toplevel = await resolveGitRepositoryPath(picked);
+      const repos = await addRepository(toplevel);
+      setRepositories(repos);
+      onSettingsChange({ repoRoots: repos.map((r) => r.path), discoveredRepositories: repos, hasCompletedEnvCheck: settings?.hasCompletedEnvCheck ?? false });
+      setMessage(`Added — ${repos.length} repositor${repos.length === 1 ? 'y' : 'ies'} in Forge.`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-1 flex-col min-h-0">
+      <div className="px-6 pt-6 pb-4 border-b border-forge-border shrink-0">
+        <h1 className="text-[22px] font-bold text-forge-text tracking-tight">Settings</h1>
+        <p className="text-[12px] text-forge-muted mt-1.5">Manage repositories and AI model configuration</p>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        <AiModelsCard />
+        <RepoContextCard />
+
+        <div className="rounded-xl border border-forge-border bg-forge-card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-[14px] font-bold text-forge-text">Repositories</h2>
+              <p className="text-[11px] text-forge-muted mt-0.5">Right-click a repo to remove it.</p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => void handleAddRepository()}
+              disabled={busy}
+              className="text-forge-blue hover:bg-forge-blue/15 border border-forge-blue/30"
+            >
+              <FolderOpen className="w-3.5 h-3.5" />
+              Add repository…
+            </Button>
+          </div>
+
+          {message && <p className="mb-3 text-[12px] text-forge-muted">{message}</p>}
+
+          {repositories.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-forge-border p-6 text-center">
+              <p className="text-[13px] text-forge-muted">No repositories added yet</p>
+              <p className="text-[12px] text-forge-muted mt-1">Click "Add repository…" and choose a Git repo folder.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {repositories.map((repo) => (
+                <div
+                  key={repo.id}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setContextMenu({ repoId: repo.id, x: e.clientX, y: e.clientY });
+                  }}
+                  className="rounded-lg border border-forge-border/80 bg-forge-surface/60 p-3 cursor-default select-none"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <GitBranch className="w-3.5 h-3.5 text-forge-orange shrink-0" />
+                        <h3 className="text-[13px] font-semibold text-forge-text truncate">{repo.name}</h3>
+                        {repo.isDirty && <span className="text-[10px] text-forge-yellow">dirty</span>}
+                      </div>
+                      <p className="text-[11px] font-mono text-forge-muted mt-0.5 truncate">{repo.path}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-[11px] text-forge-text font-mono">{repo.currentBranch ?? 'detached'}</p>
+                      <p className="text-[10px] text-forge-muted font-mono">{repo.head ?? 'no HEAD'}</p>
+                    </div>
+                  </div>
+                  {repo.worktrees.length > 0 && (
+                    <div className="mt-2 border-t border-forge-border/40 pt-2 space-y-0.5">
+                      {repo.worktrees.map((worktree) => (
+                        <div key={worktree.id} className="flex items-center gap-2 text-[11px]">
+                          <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${worktree.isDirty ? 'bg-forge-yellow' : 'bg-forge-green'}`} />
+                          <span className="font-mono text-forge-text">{worktree.branch ?? 'detached'}</span>
+                          <span className="text-forge-muted font-mono truncate">{worktree.path}</span>
+                          <span className="ml-auto text-forge-muted font-mono shrink-0">{worktree.head?.slice(0, 7) ?? ''}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {contextMenu && (
+        <div
+          className="fixed z-50 rounded-lg border border-forge-border bg-forge-surface shadow-lg py-1 min-w-[160px]"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              onRemoveRepository(contextMenu.repoId);
+              setContextMenu(null);
+            }}
+            className="w-full justify-start text-forge-red hover:bg-forge-red/10"
+          >
+            Remove from Forge
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
