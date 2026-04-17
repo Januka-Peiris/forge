@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
+import type { ReactNode } from 'react';
 import {
   Bot,
   CheckCircle2,
@@ -353,35 +353,74 @@ function RunningCard() {
   );
 }
 
+function inlineMarkdown(text: string): ReactNode {
+  const parts: ReactNode[] = [];
+  const re = /(\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`)/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  let key = 0;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    if (m[2] !== undefined) parts.push(<strong key={key++} className="font-semibold text-forge-text">{m[2]}</strong>);
+    else if (m[3] !== undefined) parts.push(<em key={key++} className="italic">{m[3]}</em>);
+    else if (m[4] !== undefined) parts.push(<code key={key++} className="rounded bg-forge-bg px-1 py-0.5 font-mono text-xs text-forge-orange">{m[4]}</code>);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts.length === 1 ? parts[0] : <>{parts}</>;
+}
+
 function MarkdownishText({ text }: { text: string }) {
-  return (
-    <ReactMarkdown
-      className="prose-forge text-sm leading-relaxed text-forge-text"
-      components={{
-        p: ({ children }) => <p className="mb-2 last:mb-0 whitespace-pre-wrap break-words">{children}</p>,
-        h1: ({ children }) => <h1 className="mb-2 text-base font-bold text-forge-text">{children}</h1>,
-        h2: ({ children }) => <h2 className="mb-1.5 text-sm font-bold text-forge-text">{children}</h2>,
-        h3: ({ children }) => <h3 className="mb-1 text-sm font-semibold text-forge-text">{children}</h3>,
-        ul: ({ children }) => <ul className="mb-2 list-disc space-y-0.5 pl-4">{children}</ul>,
-        ol: ({ children }) => <ol className="mb-2 list-decimal space-y-0.5 pl-4">{children}</ol>,
-        li: ({ children }) => <li className="text-forge-text/90">{children}</li>,
-        code: ({ children, className }) => {
-          const isBlock = className?.startsWith('language-');
-          return isBlock
-            ? <code className="block overflow-x-auto rounded bg-forge-bg px-3 py-2 font-mono text-xs text-forge-text/90">{children}</code>
-            : <code className="rounded bg-forge-bg px-1 py-0.5 font-mono text-xs text-forge-orange">{children}</code>;
-        },
-        pre: ({ children }) => <pre className="mb-2 overflow-x-auto rounded border border-forge-border bg-forge-bg">{children}</pre>,
-        blockquote: ({ children }) => <blockquote className="mb-2 border-l-2 border-forge-border pl-3 text-forge-muted">{children}</blockquote>,
-        strong: ({ children }) => <strong className="font-semibold text-forge-text">{children}</strong>,
-        em: ({ children }) => <em className="italic text-forge-text/90">{children}</em>,
-        hr: () => <hr className="my-2 border-forge-border/50" />,
-        a: ({ href, children }) => <a href={href} className="text-forge-blue underline hover:text-forge-blue/80">{children}</a>,
-      }}
-    >
-      {text}
-    </ReactMarkdown>
-  );
+  const blocks = useMemo(() => {
+    const lines = text.split('\n');
+    const out: ReactNode[] = [];
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      // Fenced code block
+      if (line.startsWith('```')) {
+        const codeLines: string[] = [];
+        i++;
+        while (i < lines.length && !lines[i].startsWith('```')) { codeLines.push(lines[i]); i++; }
+        out.push(
+          <pre key={i} className="mb-2 overflow-x-auto rounded border border-forge-border bg-forge-bg">
+            <code className="block px-3 py-2 font-mono text-xs leading-relaxed text-forge-text/90">{codeLines.join('\n')}</code>
+          </pre>
+        );
+        i++; continue;
+      }
+      // Headings
+      const h1 = /^# (.+)/.exec(line); if (h1) { out.push(<h1 key={i} className="mb-2 text-base font-bold text-forge-text">{inlineMarkdown(h1[1])}</h1>); i++; continue; }
+      const h2 = /^## (.+)/.exec(line); if (h2) { out.push(<h2 key={i} className="mb-1.5 text-sm font-bold text-forge-text">{inlineMarkdown(h2[1])}</h2>); i++; continue; }
+      const h3 = /^### (.+)/.exec(line); if (h3) { out.push(<h3 key={i} className="mb-1 text-sm font-semibold text-forge-text">{inlineMarkdown(h3[1])}</h3>); i++; continue; }
+      // HR
+      if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) { out.push(<hr key={i} className="my-2 border-forge-border/50" />); i++; continue; }
+      // Blockquote
+      if (line.startsWith('> ')) { out.push(<blockquote key={i} className="mb-1 border-l-2 border-forge-border pl-3 text-forge-muted">{inlineMarkdown(line.slice(2))}</blockquote>); i++; continue; }
+      // Lists
+      if (/^[-*] /.test(line) || /^\d+\. /.test(line)) {
+        const ordered = /^\d+\. /.test(line);
+        const items: string[] = [];
+        while (i < lines.length && (/^[-*] /.test(lines[i]) || /^\d+\. /.test(lines[i]))) {
+          items.push(lines[i].replace(/^[-*] |^\d+\. /, '')); i++;
+        }
+        const Tag = ordered ? 'ol' : 'ul';
+        out.push(<Tag key={i} className={`mb-2 space-y-0.5 pl-4 ${ordered ? 'list-decimal' : 'list-disc'}`}>{items.map((it, j) => <li key={j} className="text-forge-text/90">{inlineMarkdown(it)}</li>)}</Tag>);
+        continue;
+      }
+      // Empty line
+      if (line.trim() === '') { i++; continue; }
+      // Paragraph: collect until blank or block-level start
+      const paraLines: string[] = [];
+      while (i < lines.length && lines[i].trim() !== '' && !/^[#>`]/.test(lines[i]) && !/^```/.test(lines[i]) && !/^[-*] /.test(lines[i]) && !/^\d+\. /.test(lines[i])) {
+        paraLines.push(lines[i]); i++;
+      }
+      if (paraLines.length > 0) out.push(<p key={i} className="mb-2 last:mb-0 whitespace-pre-wrap break-words">{inlineMarkdown(paraLines.join('\n'))}</p>);
+    }
+    return out;
+  }, [text]);
+
+  return <div className="text-sm leading-relaxed text-forge-text">{blocks}</div>;
 }
 
 function timelineIconForEvent(event: AgentChatEvent) {

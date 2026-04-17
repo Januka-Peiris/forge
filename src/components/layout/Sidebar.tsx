@@ -390,12 +390,15 @@ export function Sidebar({
                           hoverTimeoutRef.current = setTimeout(() => setHoveredId(null), 150);
                         }}
                       >
-                        <button
+                        <div
+                          role="button"
+                          tabIndex={0}
                           onClick={() => {
                             onNavigate('workspaces');
                             onSelectWorkspace(workspace.id);
                           }}
-                          className={`w-full rounded-md px-2.5 py-2.5 text-left transition-colors ${
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { onNavigate('workspaces'); onSelectWorkspace(workspace.id); } }}
+                          className={`w-full cursor-pointer rounded-md px-2.5 py-2.5 text-left transition-colors ${
                             isSelected
                               ? 'bg-forge-orange/12 border border-forge-orange/30'
                               : 'border border-transparent hover:bg-white/5'
@@ -450,7 +453,7 @@ export function Sidebar({
                               </div>
                             </div>
                           </div>
-                        </button>
+                        </div>
 
                         {/* Delete button — shown on hover */}
                         {isHovered && (
