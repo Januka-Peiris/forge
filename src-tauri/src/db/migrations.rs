@@ -356,6 +356,16 @@ pub fn run(connection: &Connection) -> Result<(), String> {
 
             CREATE INDEX IF NOT EXISTS idx_orchestrator_log_run_at
                 ON orchestrator_log(run_at DESC);
+
+            CREATE TABLE IF NOT EXISTS context_symbol_cache (
+                blob_oid TEXT NOT NULL,
+                parser_version TEXT NOT NULL,
+                symbols_json TEXT NOT NULL,
+                imports_json TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (blob_oid, parser_version)
+            );
             "#,
         )
         .map_err(|err| format!("Failed to run SQLite migrations: {err}"))?;

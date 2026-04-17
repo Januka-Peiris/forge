@@ -10,11 +10,10 @@ import type {
   LinkedWorktreeRef,
   Workspace,
 } from '../../types';
-import type { WorkspaceContextPreview } from '../../types/agent-context';
 import { listWorkspaceActivity } from '../../lib/tauri-api/activity';
 import { setWorkspaceCostLimit } from '../../lib/tauri-api/workspaces';
-import { getWorkspaceContextPreview, refreshWorkspaceRepoContext } from '../../lib/tauri-api/agent-context';
 import { StatusBadge, AgentBadge } from '../workspaces/StatusBadge';
+import { ContextPreviewPanel } from '../context/ContextPreviewPanel';
 
 interface DetailPanelProps {
   workspace: Workspace | null;
@@ -70,10 +69,6 @@ export function DetailPanel({
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [linkedSearch, setLinkedSearch] = useState('');
   const [budgetInput, setBudgetInput] = useState('');
-  const [contextPreview, setContextPreview] = useState<WorkspaceContextPreview | null>(null);
-  const [contextExpanded, setContextExpanded] = useState(false);
-  const [contextLoading, setContextLoading] = useState(false);
-
   useEffect(() => {
     if (!workspace) return;
     let cancelled = false;
@@ -84,32 +79,6 @@ export function DetailPanel({
       .finally(() => { if (!cancelled) setTimelineLoading(false); });
     return () => { cancelled = true; };
   }, [workspace?.id]);
-
-  const loadContextPreview = async () => {
-    if (!workspace || contextLoading) return;
-    setContextLoading(true);
-    try {
-      const preview = await getWorkspaceContextPreview(workspace.id);
-      setContextPreview(preview);
-    } catch (e) {
-      console.error('Failed to load context preview', e);
-    } finally {
-      setContextLoading(false);
-    }
-  };
-
-  const refreshContext = async () => {
-    if (!workspace || contextLoading) return;
-    setContextLoading(true);
-    try {
-      const preview = await refreshWorkspaceRepoContext(workspace.id);
-      setContextPreview(preview);
-    } catch (e) {
-      console.error('Failed to refresh context', e);
-    } finally {
-      setContextLoading(false);
-    }
-  };
 
   const workspaceRepositoryId = workspace?.repositoryId;
   const linkedById = useMemo(
@@ -305,68 +274,8 @@ export function DetailPanel({
             </div>
 
             {/* Context Preview */}
-            <div className="border border-white/5 rounded-lg overflow-hidden mx-4 my-3">
-              <button
-                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-white/5 transition-colors"
-                onClick={() => {
-                  setContextExpanded(!contextExpanded);
-                  if (!contextExpanded && !contextPreview) void loadContextPreview();
-                }}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-white/80">Context</span>
-                  {contextPreview && (
-                    <span className="text-xs text-white/40">
-                      ~{Math.round(contextPreview.approxChars / 4).toLocaleString()} tokens
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  {contextPreview && (
-                    <span className={`text-xs px-1.5 py-0.5 rounded ${contextPreview.status === 'fresh' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'}`}>
-                      {contextPreview.status}
-                    </span>
-                  )}
-                  <svg className={`w-4 h-4 text-white/40 transition-transform ${contextExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </button>
-              {contextExpanded && (
-                <div className="px-4 pb-4 space-y-2 border-t border-white/5 pt-3">
-                  {contextLoading && <p className="text-xs text-white/40">Loading…</p>}
-                  {contextPreview?.warning && (
-                    <p className="text-xs text-amber-400 bg-amber-500/10 rounded p-2">{contextPreview.warning}</p>
-                  )}
-                  {contextPreview?.trimmed && (
-                    <p className="text-xs text-amber-400">Context trimmed to fit budget</p>
-                  )}
-                  {contextPreview && !contextLoading && (
-                    <div className="space-y-1">
-                      {contextPreview.items.map((item, i) => (
-                        <div key={i} className="flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className={`px-1 py-0.5 rounded text-[10px] ${
-                              item.kind === 'changed_file' ? 'bg-blue-500/20 text-blue-400' :
-                              item.kind === 'repo_map' ? 'bg-purple-500/20 text-purple-400' :
-                              'bg-white/10 text-white/50'
-                            }`}>{item.kind.replace('_', ' ')}</span>
-                            <span className="text-white/70 truncate max-w-[180px]">{item.label}</span>
-                          </div>
-                          <span className="text-white/30 shrink-0">{item.chars.toLocaleString()}c</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <button
-                    onClick={() => void refreshContext()}
-                    disabled={contextLoading}
-                    className="text-xs text-white/40 hover:text-white/70 transition-colors mt-2"
-                  >
-                    {contextLoading ? 'Refreshing…' : 'Refresh map'}
-                  </button>
-                </div>
-              )}
+            <div className="mx-4 my-3">
+              <ContextPreviewPanel workspaceId={workspace.id} />
             </div>
 
             {/* Timeline */}

@@ -9,7 +9,6 @@ use crate::models::{
     WorkspaceContextItem, WorkspaceContextPreview,
 };
 use crate::repositories::workspace_repository;
-use crate::services::git_review_service;
 use crate::state::AppState;
 
 const REPO_MAP_VERSION: u32 = 3;
@@ -36,200 +35,72 @@ pub fn get_workspace_agent_context(
 }
 
 pub fn build_session_open_context(state: &AppState, workspace_id: &str) -> Option<String> {
-    let workspace = workspace_repository::get_detail(&state.db, workspace_id).ok()??;
-    let primary_path = workspace.summary.workspace_root_path.clone()
-        .unwrap_or_else(|| workspace.worktree_path.clone());
-    let root = match repo_root(Path::new(&primary_path)) {
-        Ok(r) => r,
-        Err(_) => return None,
-    };
-    let default_ref = match resolve_default_ref(&root) {
-        Ok(r) => r,
-        Err(_) => return None,
-    };
-
-    let map_result = ensure_repo_map(&root, &default_ref, false);
-
-    let mut parts: Vec<String> = Vec::new();
-
-    match map_result {
-        Ok(map_state) => {
-            let compact = compressed_repo_map(&map_state.map);
-            parts.push(format!(
-                "Project map ({}@{}):\n{}",
-                map_state.meta.branch,
-                short_hash(&map_state.meta.commit_hash),
-                compact
-            ));
-        }
-        Err(e) => {
-            parts.push(format!("[repo map unavailable: {}]", e));
-        }
-    }
-
-    // Changed file diffs
-    let changed_files = git_review_service::get_workspace_changed_files(state, workspace_id)
-        .unwrap_or_default();
-    if !changed_files.is_empty() {
-        let mut diff_parts = vec!["Changed files in this workspace:".to_string()];
-        for file in &changed_files {
-            let diff = git_review_service::get_workspace_file_diff(state, workspace_id, &file.path)
-                .map(|d| d.diff)
-                .unwrap_or_else(|_| format!("[diff unavailable for {}]", file.path));
-            diff_parts.push(format!("### {} ({})\n```diff\n{}\n```", file.path, file.status, diff));
-        }
-        parts.push(diff_parts.join("\n\n"));
-    }
-
-    // Linked worktrees
-    if let Ok(linked) = linked_worktrees(state, workspace_id) {
-        let preamble = format_prompt_preamble(&primary_path, &linked);
-        if !preamble.trim().is_empty() {
-            parts.push(preamble);
-        }
-    }
-
-    if parts.is_empty() {
-        return None;
-    }
-
-    Some(format!(
-        "[FORGE CONTEXT]\n{}\n[END FORGE CONTEXT]",
-        parts.join("\n\n")
-    ))
+    crate::context::preview::build_session_context_string(state, workspace_id)
 }
 
 pub fn get_workspace_context_preview(
     state: &AppState,
     workspace_id: &str,
 ) -> Result<WorkspaceContextPreview, String> {
-    build_workspace_context_preview(state, workspace_id, false)
+    let cfg = crate::context::schema::SelectConfig::default();
+    let preview = crate::context::preview::build_context_preview(state, workspace_id, None, &cfg)?;
+
+    // Map new ContextPreview → old WorkspaceContextPreview for frontend compat
+    let items = preview.included.iter().map(|seg| WorkspaceContextItem {
+        label: seg.path.clone(),
+        path: Some(seg.path.clone()),
+        kind: seg.tier.clone(),
+        priority: if seg.tier == "mandatory" { 10 } else { 30 },
+        chars: seg.content.chars().count(),
+        included: true,
+        trimmed: false,
+    }).collect();
+
+    let prompt_context = preview.included.iter().map(|s| s.content.as_str()).collect::<Vec<_>>().join("\n\n");
+    let approx_chars = prompt_context.chars().count();
+
+    // Get branch info for display
+    let workspace = workspace_repository::get_detail(&state.db, workspace_id)?
+        .ok_or_else(|| format!("Workspace {workspace_id} not found"))?;
+    let primary_path = workspace.summary.workspace_root_path.clone()
+        .unwrap_or_else(|| workspace.worktree_path.clone());
+    let root = std::path::Path::new(&primary_path);
+    let (repo_root_str, default_branch, ref_name, commit_hash) =
+        crate::context::discovery::resolve_default_ref(root)
+            .map(|r| (primary_path.clone(), r.branch.clone(), r.ref_name.clone(), r.commit_hash.clone()))
+            .unwrap_or_else(|_| (primary_path.clone(), "unknown".to_string(), "unknown".to_string(), String::new()));
+
+    let status = if preview.stale_map { "stale" } else { "fresh" };
+
+    Ok(WorkspaceContextPreview {
+        workspace_id: workspace_id.to_string(),
+        repo_root: repo_root_str,
+        status: status.to_string(),
+        default_branch,
+        ref_name,
+        commit_hash,
+        generated_at: None,
+        approx_chars,
+        max_chars: (cfg.soft_repo_context_tokens * 4) as usize,
+        trimmed: !preview.excluded.is_empty(),
+        items,
+        prompt_context,
+        warning: preview.warning,
+    })
 }
 
 pub fn refresh_workspace_repo_context(
     state: &AppState,
     workspace_id: &str,
 ) -> Result<WorkspaceContextPreview, String> {
-    build_workspace_context_preview(state, workspace_id, true)
-}
-
-fn build_workspace_context_preview(
-    state: &AppState,
-    workspace_id: &str,
-    force_refresh: bool,
-) -> Result<WorkspaceContextPreview, String> {
+    // Force-rebuild the map, then return preview
     let workspace = workspace_repository::get_detail(&state.db, workspace_id)?
-        .ok_or_else(|| format!("Workspace {workspace_id} was not found"))?;
-    let primary_path = workspace
-        .summary
-        .workspace_root_path
-        .clone()
+        .ok_or_else(|| format!("Workspace {workspace_id} not found"))?;
+    let primary_path = workspace.summary.workspace_root_path.clone()
         .unwrap_or_else(|| workspace.worktree_path.clone());
-    let root = repo_root(Path::new(&primary_path))?;
-    let default_ref = resolve_default_ref(&root)?;
-    let map_state = ensure_repo_map(&root, &default_ref, force_refresh)?;
-
-    let mut fragments: Vec<ContextFragment> = Vec::new();
-    let mut warning = map_state.warning.clone();
-
-    let changed_files = git_review_service::get_workspace_changed_files(state, workspace_id)
-        .unwrap_or_else(|err| {
-            warning = Some(format!("Changed-file overlay unavailable: {err}"));
-            Vec::new()
-        });
-    let changed_paths = changed_files
-        .iter()
-        .map(|file| file.path.clone())
-        .collect::<HashSet<_>>();
-
-    for file in &changed_files {
-        let diff = git_review_service::get_workspace_file_diff(state, workspace_id, &file.path)
-            .map(|item| item.diff)
-            .unwrap_or_else(|err| format!("Diff unavailable: {err}"));
-        let body = format!(
-            "### Changed file: {} ({})\n```diff\n{}\n```",
-            file.path,
-            file.status,
-            diff
-        );
-        fragments.push(ContextFragment::new(
-            format!("Changed: {}", file.path),
-            Some(file.path.clone()),
-            "changed_file",
-            10,
-            body,
-        ));
-    }
-
-    let related_paths = related_file_paths(&map_state.map, &changed_paths);
-    if !related_paths.is_empty() {
-        let body = format!(
-            "### Same-folder related files\n{}",
-            related_paths.join("\n")
-        );
-        fragments.push(ContextFragment::new(
-            format!("Related files ({})", related_paths.len()),
-            None,
-            "related_files",
-            30,
-            body,
-        ));
-    }
-
-    let compressed_map = compressed_repo_map(&map_state.map);
-    fragments.push(ContextFragment::new(
-        format!("Repository paths ({})", map_state.map.entries.len()),
-        None,
-        "repo_map",
-        40,
-        format!(
-            "### Repository paths (from git tree; symbols omitted for speed)\n{}",
-            compressed_map
-        ),
-    ));
-
-    let linked = linked_worktrees(state, workspace_id)?;
-    let linked_preamble = format_prompt_preamble(&primary_path, &linked);
-    if !linked_preamble.trim().is_empty() {
-        fragments.push(ContextFragment::new(
-            format!("Linked worktrees ({})", linked.len()),
-            None,
-            "linked_worktrees",
-            50,
-            linked_preamble,
-        ));
-    }
-
-    fragments.sort_by_key(|fragment| fragment.priority);
-
-    let mut prompt_parts = vec!["Forge repo context:".to_string()];
-    let mut items = Vec::new();
-
-    for fragment in fragments {
-        let chars = fragment.body.chars().count();
-        prompt_parts.push(fragment.body.clone());
-        items.push(fragment.into_item(chars, true, false));
-    }
-
-    let prompt_context = prompt_parts.join("\n\n");
-    let status = "fresh";
-
-    Ok(WorkspaceContextPreview {
-        workspace_id: workspace_id.to_string(),
-        repo_root: root.display().to_string(),
-        status: status.to_string(),
-        default_branch: map_state.meta.branch,
-        ref_name: map_state.meta.ref_name,
-        commit_hash: map_state.meta.commit_hash,
-        generated_at: Some(map_state.meta.generated_at),
-        approx_chars: prompt_context.chars().count(),
-        // 0 = no Forge-enforced character budget (UI shows size + rough token est. only).
-        max_chars: 0,
-        trimmed: false,
-        items,
-        prompt_context,
-        warning,
-    })
+    let root = std::path::Path::new(&primary_path);
+    let _ = crate::context::discovery::build_repo_map(root, true, &state.db);
+    get_workspace_context_preview(state, workspace_id)
 }
 
 pub fn format_prompt_preamble(primary_path: &str, linked: &[AgentContextWorktree]) -> String {
