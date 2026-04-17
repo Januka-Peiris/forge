@@ -154,10 +154,22 @@ function ErrorView({ message, onRetry }: { message: string; onRetry: () => void 
 }
 
 
-const KNOWN_MODELS = [
-  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6 (most capable)' },
+const AGENT_MODELS = [
+  { value: 'claude-opus-4-7', label: 'Claude Opus 4.7 (1M context)' },
+  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6 (1M context)' },
   { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (fast + capable)' },
   { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 (fast + cheap)' },
+];
+
+const ORCHESTRATOR_MODELS = [
+  { value: 'claude-opus-4-7', label: 'Claude Opus 4.7 (1M context)' },
+  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6 (1M context)' },
+  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (fast + capable)' },
+  { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 (fast + cheap)' },
+  { value: 'gpt-4o', label: 'GPT-4o (OpenAI)' },
+  { value: 'gpt-4o-mini', label: 'GPT-4o Mini (OpenAI, fast)' },
+  { value: 'o3', label: 'o3 (OpenAI, reasoning)' },
+  { value: 'o4-mini', label: 'o4-mini (OpenAI, reasoning, fast)' },
 ];
 
 function AiModelsCard() {
@@ -204,7 +216,7 @@ function AiModelsCard() {
             onChange={(e) => setModelSettings({ ...modelSettings, agentModel: e.target.value })}
             className="w-full bg-forge-surface border border-forge-border rounded-lg px-3 py-2 text-[12px] text-forge-text focus:outline-none focus:border-forge-blue/50"
           >
-            {KNOWN_MODELS.map((m) => (
+            {AGENT_MODELS.map((m) => (
               <option key={m.value} value={m.value}>{m.label}</option>
             ))}
           </select>
@@ -212,13 +224,13 @@ function AiModelsCard() {
 
         <div>
           <label className="text-[12px] font-semibold text-forge-text block mb-1">Orchestrator brain model</label>
-          <p className="text-[11px] text-forge-muted mb-2">Used by the Orchestrator to analyse workspaces and dispatch agent prompts. Opus recommended.</p>
+          <p className="text-[11px] text-forge-muted mb-2">Used by the Orchestrator to analyse workspaces and dispatch agent prompts. Supports Claude and OpenAI models.</p>
           <select
             value={modelSettings.orchestratorModel}
             onChange={(e) => setModelSettings({ ...modelSettings, orchestratorModel: e.target.value })}
             className="w-full bg-forge-surface border border-forge-border rounded-lg px-3 py-2 text-[12px] text-forge-text focus:outline-none focus:border-forge-blue/50"
           >
-            {KNOWN_MODELS.map((m) => (
+            {ORCHESTRATOR_MODELS.map((m) => (
               <option key={m.value} value={m.value}>{m.label}</option>
             ))}
           </select>
