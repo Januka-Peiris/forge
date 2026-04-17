@@ -1,15 +1,15 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Copy, FolderOpen, GitBranch, RefreshCw, Save } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, FolderOpen, GitBranch, Save } from 'lucide-react';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
 import { DetailPanel } from './components/detail/DetailPanel';
 import { Sidebar, type NavView } from './components/layout/Sidebar';
 import { WorkspaceTerminal } from './components/terminal/WorkspaceTerminal';
-import { removeRepository, scanRepositories } from './lib/tauri-api/repositories';
+import { addRepository, listRepositories, removeRepository } from './lib/tauri-api/repositories';
 import { createWorkspacePr } from './lib/tauri-api/pr-draft';
 import { listAgentMemories, setAgentMemory, deleteAgentMemory } from './lib/tauri-api/agent-memory';
 import type { AgentMemory } from './types/agent-memory';
-import { getAiModelSettings, getSettings, getSetting, setSetting, resolveGitRepositoryPath, saveAiModelSettings, saveHasCompletedEnvCheck, saveRepoRoots } from './lib/tauri-api/settings';
+import { getAiModelSettings, getSettings, getSetting, setSetting, resolveGitRepositoryPath, saveAiModelSettings, saveHasCompletedEnvCheck } from './lib/tauri-api/settings';
 import type { AiModelSettings } from './types/settings';
 import { listActivity } from './lib/tauri-api/activity';
 import { openDeepLink } from './lib/tauri-api/deep-links';
@@ -327,29 +327,10 @@ function SettingsView({
       const picked = await open({ directory: true, multiple: false, title: 'Choose a Git repository' });
       if (picked === null) return;
       const toplevel = await resolveGitRepositoryPath(picked);
-      const existing = repositories.map((r) => r.path);
-      const merged = Array.from(new Set([...existing, toplevel])).sort();
-      const saved = await saveRepoRoots({ repoRoots: merged });
-      const result = await scanRepositories();
-      setRepositories(result.repositories);
-      onSettingsChange({ repoRoots: result.repoRoots, discoveredRepositories: result.repositories, hasCompletedEnvCheck: settings?.hasCompletedEnvCheck ?? false });
-      setMessage(`Added — ${result.repositories.length} repositor${result.repositories.length === 1 ? 'y' : 'ies'} in Forge.`);
-      void saved;
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleRefresh = async () => {
-    setBusy(true);
-    setMessage(null);
-    try {
-      const result = await scanRepositories();
-      setRepositories(result.repositories);
-      onSettingsChange({ repoRoots: result.repoRoots, discoveredRepositories: result.repositories, hasCompletedEnvCheck: settings?.hasCompletedEnvCheck ?? false });
-      setMessage(`Refreshed — ${result.repositories.length} repositor${result.repositories.length === 1 ? 'y' : 'ies'} found.`);
+      const repos = await addRepository(toplevel);
+      setRepositories(repos);
+      onSettingsChange({ repoRoots: repos.map((r) => r.path), discoveredRepositories: repos, hasCompletedEnvCheck: settings?.hasCompletedEnvCheck ?? false });
+      setMessage(`Added — ${repos.length} repositor${repos.length === 1 ? 'y' : 'ies'} in Forge.`);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : String(err));
     } finally {
@@ -375,27 +356,15 @@ function SettingsView({
               <h2 className="text-[14px] font-bold text-forge-text">Repositories</h2>
               <p className="text-[11px] text-forge-muted mt-0.5">Right-click a repo to remove it.</p>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => void handleRefresh()}
-                disabled={busy}
-                title="Re-scan all known roots"
-                className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-60 text-[11px] font-semibold text-forge-muted border border-forge-border"
-              >
-                <RefreshCw className={`w-3 h-3 ${busy ? 'animate-spin' : ''}`} />
-                Refresh
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleAddRepository()}
-                disabled={busy}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forge-blue/15 hover:bg-forge-blue/25 disabled:opacity-60 text-[12px] font-semibold text-forge-blue border border-forge-blue/30"
-              >
-                <FolderOpen className="w-3.5 h-3.5" />
-                Add repository…
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => void handleAddRepository()}
+              disabled={busy}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forge-blue/15 hover:bg-forge-blue/25 disabled:opacity-60 text-[12px] font-semibold text-forge-blue border border-forge-blue/30"
+            >
+              <FolderOpen className="w-3.5 h-3.5" />
+              Add repository…
+            </button>
           </div>
 
           {message && <p className="mb-3 text-[12px] text-forge-muted">{message}</p>}
@@ -711,19 +680,19 @@ export default function App() {
     let cancelled = false;
     void (async () => {
       try {
-        const result = await scanRepositories();
+        const repos = await listRepositories();
         if (cancelled) return;
         setSettingsState((current) =>
           current
             ? {
                 ...current,
-                repoRoots: result.repoRoots,
-                discoveredRepositories: result.repositories,
+                repoRoots: repos.map((r) => r.path),
+                discoveredRepositories: repos,
               }
             : current,
         );
       } catch (err) {
-        forgeWarn('repositories', 'scan on new workspace modal failed', { err });
+        forgeWarn('repositories', 'list on new workspace modal failed', { err });
       }
     })();
     return () => {
