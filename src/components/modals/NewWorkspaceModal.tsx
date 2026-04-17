@@ -1,4 +1,4 @@
-import { Bot, FolderGit2, GitBranch, Sparkles, X, Zap, BookTemplate } from 'lucide-react';
+import { Bot, FolderGit2, GitBranch, Sparkles, Zap, BookTemplate } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getRepositoryWorkspaceOptions } from '../../lib/tauri-api/workspaces';
 import { listWorkspaceTemplates, createWorkspaceTemplate } from '../../lib/tauri-api/workspace-templates';
@@ -6,6 +6,12 @@ import { formatWorkspaceCreationError } from '../../lib/ui-errors';
 import { defaultBranchForWorkspaceLabel, suggestForgeWorkspaceLabel } from '../../lib/workspace-name-generator';
 import type { AgentType, CreateWorkspaceInput, DiscoveredRepository, RepositoryWorkspaceOptions } from '../../types';
 import type { WorkspaceTemplate } from '../../types/workspace-template';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Textarea } from '../ui/textarea';
+import { Checkbox } from '../ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogTitle, DialogDescription } from '../ui/dialog';
 
 interface NewWorkspaceModalProps {
   onClose: () => void;
@@ -122,21 +128,14 @@ export function NewWorkspaceModal({ onClose, onCreate, repositories, initialRepo
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="w-[520px] max-w-[95vw]">
+        <DialogHeader>
+          <DialogTitle>New Branch Workspace</DialogTitle>
+          <DialogDescription>Create a branch workspace in a repository and start a coding session</DialogDescription>
+        </DialogHeader>
 
-      <div className="relative w-[520px] bg-forge-surface border border-forge-border-light rounded-2xl shadow-forge-modal animate-fade-in">
-        <div className="px-6 py-5 border-b border-forge-border flex items-start justify-between">
-          <div>
-            <h2 className="text-[16px] font-bold text-forge-text">New Branch Workspace</h2>
-            <p className="text-[12px] text-forge-muted mt-0.5">Create a branch workspace in a repository and start a coding session</p>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/8 text-forge-muted hover:text-forge-text transition-colors">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+        <DialogBody className="space-y-4 max-h-[65vh] overflow-y-auto">
           {templates.length > 0 && (
             <div>
               <p className="text-[11px] font-semibold text-forge-muted uppercase tracking-wider mb-2">Quick Start Templates</p>
@@ -158,25 +157,26 @@ export function NewWorkspaceModal({ onClose, onCreate, repositories, initialRepo
               </div>
             </div>
           )}
+
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
               <div className="mb-1.5 flex items-center justify-between gap-2">
                 <label className="block text-[11px] font-semibold text-forge-muted uppercase tracking-wider">Branch Workspace Label</label>
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="xs"
                   onClick={shuffleWorkspaceLabel}
-                  className="inline-flex items-center gap-1 rounded-md border border-forge-border bg-white/5 px-2 py-1 text-[10px] font-semibold text-forge-muted hover:bg-white/10 hover:text-forge-text"
                   title="Pick another random name"
                 >
                   <Sparkles className="h-3 w-3" />
                   Shuffle
-                </button>
+                </Button>
               </div>
-              <input
+              <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. quiet-maple (editable)"
-                className="w-full px-3 py-2.5 bg-forge-card border border-forge-border rounded-lg text-[13px] text-forge-text placeholder:text-forge-muted/80 focus:outline-none focus:border-forge-blue/50 transition-colors"
               />
               <p className="mt-1 text-[10px] text-forge-muted">Random two-word default (shuffle anytime). Checkouts live under <span className="font-mono text-forge-text/80">{'forge/<workspace-id>'}</span> inside the repo you pick so everything stays with that main checkout.</p>
             </div>
@@ -185,16 +185,21 @@ export function NewWorkspaceModal({ onClose, onCreate, repositories, initialRepo
               <label className="block text-[11px] font-semibold text-forge-muted uppercase tracking-wider mb-1.5">
                 <div className="flex items-center gap-1.5"><FolderGit2 className="w-3 h-3" />Repository</div>
               </label>
-              <select
-                value={repositoryId}
-                onChange={(e) => setRepositoryId(e.target.value)}
-                className="w-full appearance-none px-3 py-2.5 bg-forge-card border border-forge-border rounded-lg text-[13px] text-forge-text focus:outline-none focus:border-forge-blue/50 cursor-pointer transition-colors"
-              >
-                {repositories.length === 0 && <option value="">No discovered repos — scan in Settings first</option>}
-                {repositories.map((repository) => (
-                  <option key={repository.id} value={repository.id}>{repository.name} · {repository.path}</option>
-                ))}
-              </select>
+              <Select value={repositoryId} onValueChange={setRepositoryId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select repository" />
+                </SelectTrigger>
+                <SelectContent>
+                  {repositories.length === 0 && (
+                    <SelectItem value="" disabled>No discovered repos — scan in Settings first</SelectItem>
+                  )}
+                  {repositories.map((repository) => (
+                    <SelectItem key={repository.id} value={repository.id}>
+                      {repository.name} · {repository.path}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div>
@@ -202,54 +207,58 @@ export function NewWorkspaceModal({ onClose, onCreate, repositories, initialRepo
                 <div className="flex items-center gap-1.5"><GitBranch className="w-3 h-3" />Start From Branch / Worktree</div>
               </label>
               <div className="mb-2 grid grid-cols-2 gap-2">
-                <button
+                <Button
                   type="button"
+                  variant={sourceMode === 'new_branch' ? 'default' : 'outline'}
+                  size="sm"
                   onClick={() => {
                     setSourceMode('new_branch');
                     setBranchName(defaultBranchForWorkspaceLabel(nameRef.current));
                   }}
-                  className={`rounded-lg border px-2 py-1.5 text-[11px] ${sourceMode === 'new_branch' ? 'border-forge-orange/40 bg-forge-orange/10 text-forge-orange' : 'border-forge-border bg-forge-card text-forge-text/80'}`}
                 >
                   Create New Branch
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  variant={sourceMode === 'existing' ? 'default' : 'outline'}
+                  size="sm"
                   onClick={() => setSourceMode('existing')}
-                  className={`rounded-lg border px-2 py-1.5 text-[11px] ${sourceMode === 'existing' ? 'border-forge-orange/40 bg-forge-orange/10 text-forge-orange' : 'border-forge-border bg-forge-card text-forge-text/80'}`}
                 >
                   Use Existing
-                </button>
+                </Button>
               </div>
               {sourceMode === 'new_branch' ? (
-                <input
+                <Input
                   value={branchName}
                   onChange={(e) => setBranchName(e.target.value)}
                   placeholder="feat/my-change"
-                  className="w-full px-3 py-2.5 bg-forge-card border border-forge-border rounded-lg text-[13px] text-forge-text focus:outline-none focus:border-forge-blue/50 transition-colors"
                 />
               ) : (
-              <select
-                value={source}
-                onChange={(e) => setSource(e.target.value)}
-                disabled={!options || loadingOptions}
-                className="w-full appearance-none px-3 py-2.5 bg-forge-card border border-forge-border rounded-lg text-[13px] text-forge-text focus:outline-none focus:border-forge-blue/50 cursor-pointer transition-colors disabled:opacity-60"
-              >
-                {options?.repository.worktrees.map((worktree) => (
-                  <option key={worktree.id} value={`worktree:${worktree.id}`}>existing worktree · {worktree.branch ?? 'detached'} · {worktree.path}</option>
-                ))}
-                {options?.branches.map((branch) => (
-                  <option key={branch} value={`branch:${branch}`}>branch · {branch}</option>
-                ))}
-              </select>
+                <Select value={source} onValueChange={setSource} disabled={!options || loadingOptions}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select branch or worktree" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {options?.repository.worktrees.map((worktree) => (
+                      <SelectItem key={worktree.id} value={`worktree:${worktree.id}`}>
+                        existing worktree · {worktree.branch ?? 'detached'} · {worktree.path}
+                      </SelectItem>
+                    ))}
+                    {options?.branches.map((branch) => (
+                      <SelectItem key={branch} value={`branch:${branch}`}>
+                        branch · {branch}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               )}
             </div>
 
             <div>
               <label className="block text-[11px] font-semibold text-forge-muted uppercase tracking-wider mb-1.5">Base Branch (for new branch workspace)</label>
-              <input
+              <Input
                 value={baseBranch}
                 onChange={(e) => setBaseBranch(e.target.value)}
-                className="w-full px-3 py-2.5 bg-forge-card border border-forge-border rounded-lg text-[13px] text-forge-text focus:outline-none focus:border-forge-blue/50 transition-colors"
               />
             </div>
           </div>
@@ -259,28 +268,27 @@ export function NewWorkspaceModal({ onClose, onCreate, repositories, initialRepo
               <div className="flex items-center gap-1.5"><Bot className="w-3 h-3" />Agent</div>
             </label>
             <div className="grid grid-cols-3 gap-2">
-              {['Claude Code', 'Codex'].map((a) => (
-                <button
+              {(['Claude Code', 'Codex'] as const).map((a) => (
+                <Button
                   key={a}
-                  onClick={() => setAgent(a as AgentType)}
-                  className={`px-3 py-2.5 rounded-lg border text-[12px] font-semibold transition-all ${
-                    agent === a ? 'border-forge-orange/50 bg-forge-orange/10 text-forge-orange' : 'border-forge-border bg-forge-card text-forge-muted hover:border-forge-border-light hover:text-forge-text'
-                  }`}
+                  type="button"
+                  variant={agent === a ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setAgent(a)}
                 >
                   {a}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
 
           <div>
             <label className="block text-[11px] font-semibold text-forge-muted uppercase tracking-wider mb-1.5">Task Prompt</label>
-            <textarea
+            <Textarea
               value={taskPrompt}
               onChange={(e) => setTaskPrompt(e.target.value)}
               rows={4}
               placeholder="Describe what should be implemented in this branch workspace."
-              className="w-full px-3 py-2.5 bg-forge-card border border-forge-border rounded-lg text-[13px] text-forge-text placeholder:text-forge-muted/80 focus:outline-none focus:border-forge-blue/50 resize-none transition-colors leading-relaxed"
             />
           </div>
 
@@ -292,9 +300,11 @@ export function NewWorkspaceModal({ onClose, onCreate, repositories, initialRepo
               { id: 'tests', label: 'Run tests automatically', val: runTests, set: setRunTests },
             ].map(({ id, label, val, set }) => (
               <label key={id} className="flex items-center gap-3 cursor-pointer group">
-                <div onClick={() => set(!val)} className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${val ? 'bg-forge-orange border-forge-orange' : 'border-forge-border group-hover:border-forge-border-light'}`}>
-                  {val && <span className="text-white text-[9px] font-bold">✓</span>}
-                </div>
+                <Checkbox
+                  id={id}
+                  checked={val}
+                  onCheckedChange={(checked) => set(!!checked)}
+                />
                 <span className="text-[12px] text-forge-text/80 group-hover:text-forge-text transition-colors">{label}</span>
               </label>
             ))}
@@ -303,24 +313,27 @@ export function NewWorkspaceModal({ onClose, onCreate, repositories, initialRepo
           {/* Save as template */}
           <div className="pt-1">
             {!showSaveTemplate ? (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="xs"
                 onClick={() => setShowSaveTemplate(true)}
-                className="text-[11px] text-forge-muted hover:text-forge-orange transition-colors flex items-center gap-1"
+                className="text-forge-muted hover:text-forge-orange"
               >
                 <BookTemplate className="w-3 h-3" />
                 Save as template
-              </button>
+              </Button>
             ) : (
               <div className="flex items-center gap-2">
-                <input
+                <Input
                   value={saveTemplateName}
                   onChange={(e) => setSaveTemplateName(e.target.value)}
                   placeholder="Template name"
-                  className="flex-1 px-2 py-1.5 bg-forge-card border border-forge-border rounded-lg text-[12px] text-forge-text focus:outline-none focus:border-forge-orange/40"
+                  className="flex-1"
                 />
-                <button
+                <Button
                   type="button"
+                  size="sm"
                   disabled={savingTemplate || !saveTemplateName.trim()}
                   onClick={async () => {
                     if (!saveTemplateName.trim()) return;
@@ -334,37 +347,40 @@ export function NewWorkspaceModal({ onClose, onCreate, repositories, initialRepo
                       setSavingTemplate(false);
                     }
                   }}
-                  className="px-3 py-1.5 rounded-lg bg-forge-orange hover:bg-orange-500 disabled:opacity-60 text-[11px] font-semibold text-white transition-colors"
                 >
                   {savingTemplate ? 'Saving…' : 'Save'}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="xs"
                   onClick={() => setShowSaveTemplate(false)}
-                  className="text-[11px] text-forge-muted hover:text-forge-text"
                 >
                   Cancel
-                </button>
+                </Button>
               </div>
             )}
           </div>
-        </div>
+        </DialogBody>
 
-        <div className="px-6 py-4 border-t border-forge-border flex items-center justify-between gap-3">
-          {error ? <p className="text-[12px] text-forge-red">{error}</p> : <span className="text-[12px] text-forge-muted">{loadingOptions ? 'Loading repo options…' : ''}</span>}
-          <div className="flex items-center justify-end gap-3">
-            <button onClick={onClose} className="px-4 py-2 rounded-lg text-[13px] font-medium text-forge-muted hover:text-forge-text hover:bg-white/5 transition-colors border border-forge-border">Cancel</button>
-            <button
-              onClick={handleSubmit}
-              disabled={submitting || !repositoryId}
-              className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-forge-orange hover:bg-orange-500 disabled:opacity-60 disabled:cursor-not-allowed text-[13px] font-semibold text-white transition-colors shadow-lg shadow-orange-900/25"
-            >
-              <Zap className="w-3.5 h-3.5" />
-              {submitting ? 'Creating…' : 'Create Branch Workspace'}
-            </button>
+        <DialogFooter>
+          <div className="flex-1">
+            {error ? (
+              <p className="text-[12px] text-forge-red">{error}</p>
+            ) : (
+              <span className="text-[12px] text-forge-muted">{loadingOptions ? 'Loading repo options…' : ''}</span>
+            )}
           </div>
-        </div>
-      </div>
-    </div>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button
+            onClick={() => void handleSubmit()}
+            disabled={submitting || !repositoryId}
+          >
+            <Zap className="w-3.5 h-3.5" />
+            {submitting ? 'Creating…' : 'Create Branch Workspace'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

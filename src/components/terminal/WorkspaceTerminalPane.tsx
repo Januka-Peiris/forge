@@ -5,12 +5,14 @@ import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import type { TerminalOutputChunk, TerminalProfile, TerminalSession } from '../../types';
 import { PROFILE_LABELS } from './workspace-terminal-constants';
+import { Button } from '../ui/button';
+import { Badge } from '../ui/badge';
 
-export function terminalStatusBadgeClass(session: TerminalSession) {
-  if (session.stale) return 'border-forge-yellow/25 bg-forge-yellow/10 text-forge-yellow';
-  if (session.status === 'running') return 'border-forge-green/25 bg-forge-green/10 text-forge-green';
-  if (session.status === 'failed' || session.status === 'interrupted') return 'border-forge-red/25 bg-forge-red/10 text-forge-red';
-  return 'border-forge-border bg-white/5 text-forge-muted';
+function sessionBadgeVariant(session: TerminalSession): 'warning' | 'success' | 'destructive' | 'muted' {
+  if (session.stale) return 'warning';
+  if (session.status === 'running') return 'success';
+  if (session.status === 'failed' || session.status === 'interrupted') return 'destructive';
+  return 'muted';
 }
 
 export function TerminalPane({
@@ -118,43 +120,47 @@ export function TerminalPane({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="truncate text-[12px] font-bold text-forge-text">{title}</span>
-            <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase ${terminalStatusBadgeClass(session)}`}>
+            <Badge variant={sessionBadgeVariant(session)}>
               {session.stale ? 'stale' : session.status}
-            </span>
-            <span className="rounded-full border border-forge-border bg-white/5 px-1.5 py-0.5 text-[9px] uppercase text-forge-muted">{session.backend}</span>
+            </Badge>
+            <Badge variant="muted">{session.backend}</Badge>
           </div>
           <p className="mt-0.5 truncate font-mono text-[10px] text-forge-text/82">{session.cwd}</p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <button
+          <Button
+            variant="ghost"
+            size="xs"
             onClick={(event) => {
               event.stopPropagation();
               onAttach();
             }}
-            className="rounded px-2 py-1 text-[10px] text-forge-muted hover:bg-white/10"
           >
-            <RefreshCw className="inline h-3 w-3" /> Attach
-          </button>
+            <RefreshCw className="h-3 w-3" /> Attach
+          </Button>
           {running && (
-            <button
+            <Button
+              variant="ghost"
+              size="xs"
               onClick={(event) => {
                 event.stopPropagation();
                 onStop();
               }}
-              className="rounded px-2 py-1 text-[10px] text-forge-red hover:bg-forge-red/10"
+              className="text-forge-red hover:bg-forge-red/10"
             >
-              <Square className="inline h-3 w-3" /> Stop
-            </button>
+              <Square className="h-3 w-3" /> Stop
+            </Button>
           )}
-          <button
+          <Button
+            variant="ghost"
+            size="xs"
             onClick={(event) => {
               event.stopPropagation();
               onClose();
             }}
-            className="rounded px-2 py-1 text-[10px] text-forge-muted hover:bg-white/10"
           >
-            <X className="inline h-3 w-3" /> Close
-          </button>
+            <X className="h-3 w-3" /> Close
+          </Button>
         </div>
       </div>
       <div ref={containerRef} className="min-h-[180px] flex-1 overflow-hidden p-2" />

@@ -1,5 +1,12 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Copy, FolderOpen, GitBranch, Save } from 'lucide-react';
+import { Button } from './components/ui/button';
+import { Input } from './components/ui/input';
+import { Textarea } from './components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './components/ui/select';
+import { Switch } from './components/ui/switch';
+import { Badge } from './components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogTitle, DialogDescription } from './components/ui/dialog';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
 import { DetailPanel } from './components/detail/DetailPanel';
@@ -90,13 +97,13 @@ function EnvironmentSetupModal({ items, busy, onContinue, onRerun }: Environment
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-2xl">
-        <div className="mb-3">
-          <h2 className="text-[16px] font-bold text-forge-text">Environment Setup</h2>
-          <p className="mt-1 text-[12px] text-forge-muted">Forge checked your local tools. Missing tools will not block app usage.</p>
-        </div>
-        <div className="space-y-2">
+    <Dialog open>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Environment Setup</DialogTitle>
+          <DialogDescription>Forge checked your local tools. Missing tools will not block app usage.</DialogDescription>
+        </DialogHeader>
+        <DialogBody className="space-y-2">
           {items.map((item) => (
             <div key={item.binary} className="rounded-xl border border-forge-border bg-forge-bg/80 px-3 py-2">
               <div className="flex items-center justify-between gap-3">
@@ -105,7 +112,7 @@ function EnvironmentSetupModal({ items, busy, onContinue, onRerun }: Environment
                     {item.status === 'ok' ? '✓' : item.status === 'missing' ? '✗' : '?'}
                   </span>
                   <span className="text-[13px] font-semibold text-forge-text">{item.name}</span>
-                  {item.optional && <span className="rounded-full border border-forge-border px-1.5 py-0.5 text-[9px] text-forge-muted">optional</span>}
+                  {item.optional && <Badge variant="muted">optional</Badge>}
                 </div>
                 <span className="text-[10px] uppercase tracking-widest text-forge-muted">{item.status}</span>
               </div>
@@ -113,26 +120,27 @@ function EnvironmentSetupModal({ items, busy, onContinue, onRerun }: Environment
                 <div className="mt-2 flex items-center gap-2 rounded-lg border border-forge-border bg-black/20 px-2 py-1.5">
                   <span className="text-[11px] text-forge-muted">Run:</span>
                   <code className="flex-1 truncate text-[11px] text-forge-text">{item.fix}</code>
-                  <button
+                  <Button
                     type="button"
+                    variant="secondary"
+                    size="xs"
                     onClick={() => void copyCommand(item.fix)}
-                    className="rounded-md border border-forge-border bg-white/5 px-2 py-1 text-[10px] font-semibold text-forge-muted hover:bg-white/10"
                   >
-                    <Copy className="inline h-3 w-3" /> Copy
-                  </button>
+                    <Copy className="h-3 w-3" /> Copy
+                  </Button>
                 </div>
               )}
             </div>
           ))}
-        </div>
-        <div className="mt-4 flex justify-end gap-2">
-          <button type="button" onClick={onContinue} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-[12px] font-semibold text-forge-muted hover:bg-white/10">Continue anyway</button>
-          <button type="button" disabled={busy} onClick={onRerun} className="rounded-lg border border-forge-orange/30 bg-forge-orange/10 px-3 py-2 text-[12px] font-semibold text-forge-orange hover:bg-forge-orange/20 disabled:opacity-50">
+        </DialogBody>
+        <DialogFooter>
+          <Button type="button" variant="secondary" onClick={onContinue}>Continue anyway</Button>
+          <Button type="button" variant="default" disabled={busy} onClick={onRerun}>
             {busy ? 'Checking…' : 'Re-run checks'}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -142,12 +150,9 @@ function ErrorView({ message, onRetry }: { message: string; onRetry: () => void 
       <div className="max-w-md rounded-2xl border border-forge-red/25 bg-forge-red/5 p-5">
         <p className="text-[13px] font-semibold text-forge-red">Could not load Tauri backend data</p>
         <p className="mt-2 text-[12px] leading-relaxed text-forge-muted">{message}</p>
-        <button
-          onClick={onRetry}
-          className="mt-4 rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-[12px] font-semibold text-forge-text hover:bg-white/10"
-        >
+        <Button variant="secondary" size="sm" onClick={onRetry} className="mt-4">
           Retry
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -211,43 +216,46 @@ function AiModelsCard() {
         <div>
           <label className="text-[12px] font-semibold text-forge-text block mb-1">Coding Agent model</label>
           <p className="text-[11px] text-forge-muted mb-2">Used for all workspace terminal sessions (the agent that writes code).</p>
-          <select
-            value={modelSettings.agentModel}
-            onChange={(e) => setModelSettings({ ...modelSettings, agentModel: e.target.value })}
-            className="w-full bg-forge-surface border border-forge-border rounded-lg px-3 py-2 text-[12px] text-forge-text focus:outline-none focus:border-forge-blue/50"
-          >
-            {AGENT_MODELS.map((m) => (
-              <option key={m.value} value={m.value}>{m.label}</option>
-            ))}
-          </select>
+          <Select value={modelSettings.agentModel} onValueChange={(v) => setModelSettings({ ...modelSettings, agentModel: v })}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {AGENT_MODELS.map((m) => (
+                <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div>
           <label className="text-[12px] font-semibold text-forge-text block mb-1">Orchestrator brain model</label>
           <p className="text-[11px] text-forge-muted mb-2">Used by the Orchestrator to analyse workspaces and dispatch agent prompts. Supports Claude and OpenAI models.</p>
-          <select
-            value={modelSettings.orchestratorModel}
-            onChange={(e) => setModelSettings({ ...modelSettings, orchestratorModel: e.target.value })}
-            className="w-full bg-forge-surface border border-forge-border rounded-lg px-3 py-2 text-[12px] text-forge-text focus:outline-none focus:border-forge-blue/50"
-          >
-            {ORCHESTRATOR_MODELS.map((m) => (
-              <option key={m.value} value={m.value}>{m.label}</option>
-            ))}
-          </select>
+          <Select value={modelSettings.orchestratorModel} onValueChange={(v) => setModelSettings({ ...modelSettings, orchestratorModel: v })}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ORCHESTRATOR_MODELS.map((m) => (
+                <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
       {message && <p className="mt-3 text-[12px] text-forge-muted">{message}</p>}
 
-      <button
+      <Button
         type="button"
+        size="sm"
         onClick={() => void handleSave()}
         disabled={saving}
-        className="mt-4 flex items-center gap-1.5 px-3 py-2 rounded-lg bg-forge-orange hover:bg-orange-500 disabled:opacity-60 text-[12px] font-semibold text-white"
+        className="mt-4"
       >
         <Save className="w-3.5 h-3.5" />
         {saving ? 'Saving…' : 'Save model settings'}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -272,17 +280,13 @@ function RepoContextCard() {
           <p className="text-[12px] text-forge-text/70">Inject context into prompts</p>
           <p className="text-[11px] text-forge-muted mt-0.5">Sends repo map + diffs at session start</p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            const next = !contextEnabled;
-            setContextEnabled(next);
-            void setSetting('context_enabled', next ? 'true' : 'false').catch(console.error);
+        <Switch
+          checked={contextEnabled}
+          onCheckedChange={(checked) => {
+            setContextEnabled(checked);
+            void setSetting('context_enabled', checked ? 'true' : 'false').catch(console.error);
           }}
-          className={`relative w-10 h-5 rounded-full transition-colors ${contextEnabled ? 'bg-blue-500' : 'bg-white/20'}`}
-        >
-          <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${contextEnabled ? 'left-5' : 'left-0.5'}`} />
-        </button>
+        />
       </div>
     </div>
   );
@@ -356,15 +360,17 @@ function SettingsView({
               <h2 className="text-[14px] font-bold text-forge-text">Repositories</h2>
               <p className="text-[11px] text-forge-muted mt-0.5">Right-click a repo to remove it.</p>
             </div>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => void handleAddRepository()}
               disabled={busy}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forge-blue/15 hover:bg-forge-blue/25 disabled:opacity-60 text-[12px] font-semibold text-forge-blue border border-forge-blue/30"
+              className="text-forge-blue hover:bg-forge-blue/15 border border-forge-blue/30"
             >
               <FolderOpen className="w-3.5 h-3.5" />
               Add repository…
-            </button>
+            </Button>
           </div>
 
           {message && <p className="mb-3 text-[12px] text-forge-muted">{message}</p>}
@@ -426,16 +432,18 @@ function SettingsView({
           style={{ top: contextMenu.y, left: contextMenu.x }}
           onClick={(e) => e.stopPropagation()}
         >
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => {
               onRemoveRepository(contextMenu.repoId);
               setContextMenu(null);
             }}
-            className="w-full text-left px-3 py-1.5 text-[12px] text-forge-red hover:bg-forge-red/10"
+            className="w-full justify-start text-forge-red hover:bg-forge-red/10"
           >
             Remove from Forge
-          </button>
+          </Button>
         </div>
       )}
     </div>
@@ -503,37 +511,37 @@ function MemoryView() {
         <div className="rounded-xl border border-forge-border bg-forge-card p-4">
           <h2 className="text-[14px] font-bold text-forge-text mb-3">Add Global Memory</h2>
           <div className="flex gap-2 mb-2">
-            <input
+            <Input
               value={editKey}
               onChange={(e) => setEditKey(e.target.value)}
               placeholder="Key (e.g. auth-pattern)"
-              className="flex-1 bg-forge-surface border border-forge-border rounded-lg px-3 py-2 text-[12px] font-mono text-forge-text placeholder:text-forge-muted/80 focus:outline-none focus:border-forge-blue/50"
+              className="flex-1 font-mono"
             />
           </div>
-          <textarea
+          <Textarea
             value={editValue}
             onChange={(e) => setEditValue(e.target.value)}
             placeholder="Value (e.g. JWT tokens stored in env.AUTH_SECRET)"
             rows={3}
-            className="w-full bg-forge-surface border border-forge-border rounded-lg px-3 py-2 text-[12px] text-forge-text placeholder:text-forge-muted/80 focus:outline-none focus:border-forge-blue/50 resize-none mb-2"
+            className="mb-2"
           />
           {error && <p className="text-[11px] text-forge-red mb-2">{error}</p>}
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             disabled={saving || !editKey.trim() || !editValue.trim()}
             onClick={() => void handleSave()}
-            className="px-4 py-2 rounded-lg bg-forge-blue/15 hover:bg-forge-blue/25 disabled:opacity-50 text-[12px] font-semibold text-forge-blue border border-forge-blue/20"
+            className="text-forge-blue hover:bg-forge-blue/15 border border-forge-blue/20"
           >
             {saving ? 'Saving…' : 'Save Entry'}
-          </button>
+          </Button>
         </div>
 
         {/* Memory list */}
         <div className="rounded-xl border border-forge-border bg-forge-card p-4">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-[14px] font-bold text-forge-text">Stored Memories</h2>
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-forge-blue/15 text-forge-blue border border-forge-blue/20">
-              {memories.length} entries
-            </span>
+            <Badge variant="info">{memories.length} entries</Badge>
           </div>
           {loading ? (
             <p className="text-[12px] text-forge-muted">Loading…</p>
@@ -556,12 +564,14 @@ function MemoryView() {
                       </div>
                       <p className="text-[11px] text-forge-muted leading-relaxed whitespace-pre-wrap">{m.value}</p>
                     </div>
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
                       onClick={() => void handleDelete(m.key, m.workspaceId)}
-                      className="shrink-0 p-1.5 rounded text-forge-muted hover:bg-forge-red/15 hover:text-forge-red"
+                      className="shrink-0 text-forge-muted hover:bg-forge-red/15 hover:text-forge-red"
                     >
                       ✕
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -1215,14 +1225,16 @@ export default function App() {
               className="shrink-0 h-full flex flex-col items-center justify-start bg-forge-surface"
               style={{ width: `${COLLAPSED_RAIL_WIDTH}px` }}
             >
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="icon-sm"
                 onClick={() => setSidebarCollapsed(false)}
-                className="mt-2.5 rounded-lg border border-forge-border bg-forge-surface p-1.5 text-forge-text shadow-md ring-1 ring-black/20 hover:bg-forge-card hover:border-forge-orange/35"
                 title="Expand sidebar"
+                className="mt-2.5 shadow-md ring-1 ring-black/20"
               >
                 <ChevronRight className="h-4 w-4" strokeWidth={2.25} />
-              </button>
+              </Button>
             </div>
           ) : (
             <>
@@ -1327,14 +1339,16 @@ export default function App() {
                   className="shrink-0 h-full flex items-start justify-center bg-forge-surface"
                   style={{ width: `${COLLAPSED_RAIL_WIDTH}px` }}
                 >
-                  <button
+                  <Button
                     type="button"
+                    variant="outline"
+                    size="icon-xs"
                     onClick={() => setDetailPanelCollapsed(false)}
-                    className="mt-2.5 rounded-md border border-forge-border bg-white/5 p-1 text-forge-muted hover:bg-white/10"
                     title="Expand detail panel"
+                    className="mt-2.5"
                   >
                     <ChevronLeft className="h-3.5 w-3.5" />
-                  </button>
+                  </Button>
                 </div>
               )}
             </>

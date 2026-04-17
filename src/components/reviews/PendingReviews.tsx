@@ -1,22 +1,15 @@
 import { GitBranch, FileCode, AlertTriangle, CheckCircle2, MessageSquare } from 'lucide-react';
 import type { ReviewItem, RiskLevel } from '../../types';
+import { Button } from '../ui/button';
+import { Badge } from '../ui/badge';
 
 interface PendingReviewsProps {
   reviews: ReviewItem[];
 }
 
 function RiskBadge({ risk }: { risk: RiskLevel }) {
-  const config = {
-    Low: 'bg-forge-green/10 text-forge-green border-forge-green/20',
-    Medium: 'bg-forge-yellow/10 text-forge-yellow border-forge-yellow/20',
-    High: 'bg-forge-red/10 text-forge-red border-forge-red/20',
-  }[risk];
-
-  return (
-    <span className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border ${config}`}>
-      {risk} Risk
-    </span>
-  );
+  const variant = risk === 'Low' ? 'success' : risk === 'Medium' ? 'warning' : 'destructive';
+  return <Badge variant={variant}>{risk} Risk</Badge>;
 }
 
 function ReviewCard({ review }: { review: ReviewItem }) {
@@ -55,14 +48,14 @@ function ReviewCard({ review }: { review: ReviewItem }) {
       </div>
 
       <div className="flex gap-2">
-        <button className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-forge-green/10 hover:bg-forge-green/20 text-[11px] font-semibold text-forge-green transition-colors border border-forge-green/20">
+        <Button variant="success" size="sm" className="flex-1">
           <CheckCircle2 className="w-3 h-3" />
           Approve
-        </button>
-        <button className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/8 text-[11px] font-medium text-forge-muted hover:text-forge-text transition-colors border border-forge-border">
+        </Button>
+        <Button variant="secondary" size="sm" className="flex-1">
           <MessageSquare className="w-3 h-3" />
           Request Changes
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -76,9 +69,7 @@ export function PendingReviews({ reviews }: PendingReviewsProps) {
           <h2 className="text-[14px] font-bold text-forge-text">Pending Reviews</h2>
           <p className="text-[11px] text-forge-muted mt-0.5">AI-summarized changes awaiting approval</p>
         </div>
-        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-forge-blue/15 text-forge-blue border border-forge-blue/20">
-          {reviews.length} pending
-        </span>
+        <Badge variant="info">{reviews.length} pending</Badge>
       </div>
 
       <div className="grid grid-cols-3 gap-3">

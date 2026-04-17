@@ -1,7 +1,10 @@
 import { useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { buildWorkspaceRepoContext } from '../../lib/tauri-api/context';
 import { useContextPreview } from '../../hooks/useContextPreview';
 import type { ContextSegment } from '../../types/context';
+import { Button } from '../ui/button';
+import { Badge } from '../ui/badge';
 
 interface Props {
   workspaceId: string;
@@ -42,7 +45,7 @@ export function ContextPreviewPanel({ workspaceId }: Props) {
           {preview && (
             <StatusChip stale={preview.staleMap} lowSignal={preview.lowSignal} signalScore={preview.signalScore} />
           )}
-          <ChevronIcon expanded={expanded} />
+          <ChevronDown className={`w-4 h-4 text-white/40 transition-transform ${expanded ? 'rotate-180' : ''}`} />
         </div>
       </button>
 
@@ -94,20 +97,24 @@ export function ContextPreviewPanel({ workspaceId }: Props) {
 
           {/* Actions */}
           <div className="flex items-center gap-3 mt-3 pt-2 border-t border-white/5">
-            <button
+            <Button
+              variant="ghost"
+              size="xs"
               onClick={refresh}
               disabled={loading || building}
-              className="text-xs text-white/40 hover:text-white/70 transition-colors disabled:opacity-50"
+              className="text-white/40 hover:text-white/70"
             >
               {loading ? 'Loading…' : 'Refresh'}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
               onClick={handleBuild}
               disabled={loading || building}
-              className="text-xs text-white/40 hover:text-white/70 transition-colors disabled:opacity-50"
+              className="text-white/40 hover:text-white/70"
             >
               {building ? 'Building…' : 'Rebuild map'}
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -142,18 +149,7 @@ function SegmentRow({ seg }: { seg: ContextSegment }) {
 }
 
 function StatusChip({ stale, lowSignal, signalScore }: { stale: boolean; lowSignal: boolean; signalScore: number }) {
-  if (lowSignal) return <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">low signal</span>;
-  if (stale) return <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">stale</span>;
-  return <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">fresh {Math.round(signalScore * 100)}%</span>;
-}
-
-function ChevronIcon({ expanded }: { expanded: boolean }) {
-  return (
-    <svg
-      className={`w-4 h-4 text-white/40 transition-transform ${expanded ? 'rotate-180' : ''}`}
-      fill="none" viewBox="0 0 24 24" stroke="currentColor"
-    >
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-    </svg>
-  );
+  if (lowSignal) return <Badge variant="destructive">low signal</Badge>;
+  if (stale) return <Badge variant="warning">stale</Badge>;
+  return <Badge variant="success">fresh {Math.round(signalScore * 100)}%</Badge>;
 }

@@ -1,8 +1,11 @@
-import { Search, SlidersHorizontal, ChevronsUpDown, Plus } from 'lucide-react';
+import { Search, Plus } from 'lucide-react';
 import { useState } from 'react';
 import type { ReviewItem, Workspace } from '../../types';
 import { PendingReviews } from '../reviews/PendingReviews';
 import { WorkspaceCard } from './WorkspaceCard';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 interface WorkspacesViewProps {
   workspaces: Workspace[];
@@ -51,55 +54,48 @@ export function WorkspacesView({
             <h1 className="text-[22px] font-bold text-forge-text tracking-tight leading-none">Workspaces</h1>
             <p className="text-sm text-forge-muted mt-1.5">Parallel AI coding workspaces tied to repos, branches, and worktrees</p>
           </div>
-          <button
-            onClick={onNewWorkspace}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-forge-orange hover:bg-orange-500 text-sm font-semibold text-white transition-colors shadow-lg shadow-orange-900/30"
-          >
+          <Button onClick={onNewWorkspace} size="sm">
             <Plus className="w-4 h-4" />
             New Workspace
-          </button>
+          </Button>
         </div>
 
         <div className="flex items-center gap-3">
           <div className="flex-1 relative max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-forge-muted" />
-            <input
+            <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search workspaces..."
-              className="w-full pl-8 pr-3 py-2 bg-forge-card border border-forge-border rounded-lg text-sm text-forge-text placeholder:text-forge-muted/80 focus:outline-none focus:border-forge-blue/50 transition-colors"
+              className="pl-8 bg-forge-card"
             />
           </div>
 
-          <div className="relative">
-            <select
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              className="appearance-none pl-3 pr-7 py-2 bg-forge-card border border-forge-border rounded-lg text-sm text-forge-text focus:outline-none focus:border-forge-blue/50 cursor-pointer transition-colors"
-            >
-              <option>All</option>
-              <option>Active</option>
-              <option>Running</option>
-              <option>Review Ready</option>
-              <option>Blocked</option>
-              <option>Merged</option>
-            </select>
-            <SlidersHorizontal className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-forge-muted pointer-events-none" />
-          </div>
+          <Select value={filter} onValueChange={setFilter}>
+            <SelectTrigger compact className="w-auto min-w-[110px] bg-forge-card">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">All</SelectItem>
+              <SelectItem value="Active">Active</SelectItem>
+              <SelectItem value="Running">Running</SelectItem>
+              <SelectItem value="Review Ready">Review Ready</SelectItem>
+              <SelectItem value="Blocked">Blocked</SelectItem>
+              <SelectItem value="Merged">Merged</SelectItem>
+            </SelectContent>
+          </Select>
 
-          <div className="relative">
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value)}
-              className="appearance-none pl-3 pr-7 py-2 bg-forge-card border border-forge-border rounded-lg text-sm text-forge-text focus:outline-none focus:border-forge-blue/50 cursor-pointer transition-colors"
-            >
-              <option>Recent</option>
-              <option>Status</option>
-              <option>Repo</option>
-              <option>Agent</option>
-            </select>
-            <ChevronsUpDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-forge-muted pointer-events-none" />
-          </div>
+          <Select value={sort} onValueChange={setSort}>
+            <SelectTrigger compact className="w-auto min-w-[100px] bg-forge-card">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Recent">Recent</SelectItem>
+              <SelectItem value="Status">Status</SelectItem>
+              <SelectItem value="Repo">Repo</SelectItem>
+              <SelectItem value="Agent">Agent</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="flex items-center gap-2 mt-3">
