@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Copy, Square, Terminal as TerminalIcon, X } from 'lucide-react';
+import { Copy, Plus, Square, Terminal as TerminalIcon, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
