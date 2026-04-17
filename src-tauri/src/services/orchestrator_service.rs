@@ -167,17 +167,19 @@ Rules:
 - Do NOT include "idle" actions — just omit workspaces that need nothing"#
     );
 
-    let output = std::process::Command::new("claude")
-        .args(["--model", &model, "-p", &prompt])
-        .output()
-        .map_err(|e| format!("Failed to run claude CLI: {e}"))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("claude CLI failed: {stderr}"));
-    }
-
-    let response = String::from_utf8_lossy(&output.stdout);
+    let response = if is_openai_model(&model) {
+        call_openai_api(&model, &prompt)?
+    } else {
+        let output = std::process::Command::new("claude")
+            .args(["--model", &model, "-p", &prompt])
+            .output()
+            .map_err(|e| format!("Failed to run claude CLI: {e}"))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("claude CLI failed: {stderr}"));
+        }
+        String::from_utf8_lossy(&output.stdout).into_owned()
+    };
     let actions = parse_actions(&response);
 
     log::info!(
@@ -248,6 +250,42 @@ Rules:
     }
 
     Ok(())
+}
+
+fn is_openai_model(model: &str) -> bool {
+    model.starts_with("gpt-") || model.starts_with("o1") || model.starts_with("o3") || model.starts_with("o4")
+}
+
+fn call_openai_api(model: &str, prompt: &str) -> Result<String, String> {
+    let api_key = std::env::var("OPENAI_API_KEY")
+        .map_err(|_| "OPENAI_API_KEY environment variable not set".to_string())?;
+
+    let body = serde_json::json!({
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}]
+    });
+
+    let client = reqwest::blocking::Client::new();
+    let resp = client
+        .post("https://api.openai.com/v1/chat/completions")
+        .bearer_auth(&api_key)
+        .json(&body)
+        .send()
+        .map_err(|e| format!("OpenAI request failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().unwrap_or_default();
+        return Err(format!("OpenAI API error {status}: {text}"));
+    }
+
+    let json: serde_json::Value = resp.json().map_err(|e| format!("OpenAI response parse error: {e}"))?;
+    let content = json["choices"][0]["message"]["content"]
+        .as_str()
+        .ok_or_else(|| "OpenAI response missing content".to_string())?
+        .to_string();
+
+    Ok(content)
 }
 
 /// Extract a JSON array of actions from the model response.

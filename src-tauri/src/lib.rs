@@ -96,6 +96,8 @@ pub fn run() {
             environment::check_environment,
             repository_commands::scan_repositories,
             repository_commands::remove_repository,
+            repository_commands::add_repository,
+            repository_commands::list_repositories,
             agent_runs::start_workspace_run,
             agent_runs::stop_workspace_run,
             agent_runs::get_workspace_runs,
