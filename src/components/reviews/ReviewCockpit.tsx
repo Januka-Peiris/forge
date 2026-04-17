@@ -33,6 +33,7 @@ import {
   defaultWorkspaceAgentProfileId,
   listWorkspaceAgentProfiles,
 } from '../../lib/tauri-api/agent-profiles';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { UnifiedDiffView } from './UnifiedDiffView';
 import { useAgentProfile } from '../../lib/hooks/useAgentProfile';
 
@@ -395,35 +396,30 @@ export function ReviewCockpit({
 
           {/* Sub-row 2: agent selects + action buttons */}
           <div className="shrink-0 flex flex-wrap items-center gap-1.5 border-b border-forge-border px-3 py-2 bg-forge-surface/40">
-            <select
-              value={selectedProfileId}
-              onChange={(e) => setSelectedProfileId(e.target.value)}
-              className="rounded border border-forge-border bg-forge-bg px-2 py-1 text-[10px] font-semibold text-forge-text focus:outline-none"
-            >
-              {agentProfilesForPromptPicker(agentProfiles).map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.label}
-                </option>
-              ))}
-            </select>
-            <select
-              value={selectedTaskMode}
-              onChange={(e) => setSelectedTaskMode(e.target.value)}
-              className="rounded border border-forge-border bg-forge-bg px-2 py-1 text-[10px] font-semibold text-forge-text focus:outline-none"
-            >
-              {['Review', 'Fix', 'Plan', 'Act'].map((mode) => (
-                <option key={mode}>{mode}</option>
-              ))}
-            </select>
-            <select
-              value={selectedReasoning}
-              onChange={(e) => setSelectedReasoning(e.target.value)}
-              className="rounded border border-forge-border bg-forge-bg px-2 py-1 text-[10px] font-semibold text-forge-text focus:outline-none"
-            >
-              {['Default', 'Low', 'Medium', 'High'].map((level) => (
-                <option key={level}>{level}</option>
-              ))}
-            </select>
+            <Select value={selectedProfileId} onValueChange={setSelectedProfileId}>
+              <SelectTrigger compact><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {agentProfilesForPromptPicker(agentProfiles).map((profile) => (
+                  <SelectItem key={profile.id} value={profile.id}>{profile.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={selectedTaskMode} onValueChange={setSelectedTaskMode}>
+              <SelectTrigger compact><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {['Review', 'Fix', 'Plan', 'Act'].map((mode) => (
+                  <SelectItem key={mode} value={mode}>{mode}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={selectedReasoning} onValueChange={setSelectedReasoning}>
+              <SelectTrigger compact><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {['Default', 'Low', 'Medium', 'High'].map((level) => (
+                  <SelectItem key={level} value={level}>{level}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <span className="mx-1 h-4 w-px bg-forge-border/60 shrink-0" />
             <button
               disabled={busy || !selectedFile}
