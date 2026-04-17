@@ -50,9 +50,11 @@ interface SidebarProps {
   onFilteredWorkspacesChange?: (workspaces: Workspace[]) => void;
 }
 
-const navItems: { id: NavView; label: string; icon: ElementType }[] = [
+const primaryNav: { id: NavView; label: string; icon: ElementType }[] = [
   { id: 'workspaces', label: 'Workspaces', icon: LayoutGrid },
   { id: 'reviews', label: 'Reviews', icon: ClipboardCheck },
+];
+const secondaryNav: { id: NavView; label: string; icon: ElementType }[] = [
   { id: 'memory', label: 'Memory', icon: Brain },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
@@ -205,47 +207,48 @@ export function Sidebar({
     return cents > 0 ? `$${(cents / 100).toFixed(2)}` : null;
   }, [workspaces]);
 
+  const renderNavBtn = ({ id, label, icon: Icon }: { id: NavView; label: string; icon: ElementType }) => {
+    const isActive = activeView === id;
+    return (
+      <Button
+        key={id}
+        variant="ghost"
+        size="icon-sm"
+        onClick={() => onNavigate(id)}
+        title={label}
+        className={isActive ? 'bg-white/10 text-forge-text' : 'text-forge-muted/60 hover:text-forge-text hover:bg-white/5'}
+      >
+        <Icon className="w-4 h-4" />
+      </Button>
+    );
+  };
+
   return (
     <aside className="w-full shrink-0 flex flex-col h-full bg-forge-surface">
-      <div className="px-4 py-3 sm:px-5">
-        <div className="flex min-w-0 items-center gap-2">
+      {/* Top: primary nav + collapse */}
+      <div className="shrink-0 flex items-center justify-between px-3 py-2 border-b border-forge-border/40">
+        <div className="flex items-center gap-0.5">
+          {primaryNav.map(renderNavBtn)}
+        </div>
+        <div className="flex items-center gap-1">
           {totalSpend && (
-            <span className="text-xs font-mono text-forge-muted/70 shrink-0" title="Total estimated agent spend across all workspaces">
+            <span className="text-[10px] font-mono text-forge-muted/50 shrink-0" title="Total estimated agent spend">
               {totalSpend}
             </span>
           )}
-          <div className="flex-1" />
           {onCollapse && (
             <Button
               type="button"
               variant="ghost"
               size="icon-xs"
               onClick={onCollapse}
-              className="shrink-0 border border-forge-border bg-forge-surface hover:border-forge-orange/35"
+              className="shrink-0 text-forge-muted/50 hover:text-forge-text hover:bg-white/5"
               title="Collapse sidebar"
             >
               <ChevronLeft className="h-3.5 w-3.5" strokeWidth={2.25} />
             </Button>
           )}
         </div>
-      </div>
-
-      <div className="px-3 py-2 flex items-center gap-1">
-        {navItems.map(({ id, label, icon: Icon }) => {
-          const isActive = activeView === id;
-          return (
-            <Button
-              key={id}
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => onNavigate(id)}
-              title={label}
-              className={isActive ? 'bg-white/10 text-forge-text' : 'text-forge-muted hover:text-forge-text hover:bg-white/5'}
-            >
-              <Icon className="w-4 h-4" />
-            </Button>
-          );
-        })}
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3">
@@ -298,8 +301,8 @@ export function Sidebar({
             <Input
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Filter workspaces…"
-              className="pl-7 pr-3 py-1 text-xs h-auto bg-forge-card border-forge-border placeholder:text-forge-muted/70"
+              placeholder="Filter workspaces… ⌘K"
+              className="pl-7 pr-3 py-1 text-xs h-auto bg-forge-card border-forge-border placeholder:text-forge-muted/50"
             />
           </div>
         </div>
@@ -322,8 +325,8 @@ export function Sidebar({
                   repoHoverTimeoutRef.current = setTimeout(() => setHoveredRepoId(null), 150);
                 }}
               >
-                <p className="text-xs font-semibold uppercase tracking-widest text-forge-muted truncate">{repo.name}</p>
-                <span className="text-xs text-forge-muted/60">({repo.workspaces.length})</span>
+                <p className="text-xs font-semibold uppercase tracking-widest text-forge-muted/50 truncate">{repo.name}</p>
+                <span className="text-[10px] text-forge-muted/35">({repo.workspaces.length})</span>
                 {hoveredRepoId === repo.id && !repo.id.startsWith('name:') && (
                   <Button
                     variant="ghost"
@@ -564,6 +567,11 @@ export function Sidebar({
           </Button>
         </div>
       )}
+
+      {/* Bottom: secondary nav */}
+      <div className="shrink-0 flex items-center gap-0.5 px-3 py-2 border-t border-forge-border/40">
+        {secondaryNav.map(renderNavBtn)}
+      </div>
     </aside>
   );
 }

@@ -748,7 +748,9 @@ export default function App() {
                 role="separator"
                 aria-label="Resize sidebar"
                 onMouseDown={(event) => startResize(event, 'left')}
+                onDoubleClick={() => setSidebarWidth(300)}
                 className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-forge-border/70 active:bg-forge-orange/60"
+                title="Double-click to reset width"
               />
             </>
           )
@@ -769,7 +771,9 @@ export default function App() {
                     role="separator"
                     aria-label="Resize detail panel"
                     onMouseDown={(event) => startResize(event, 'right')}
+                    onDoubleClick={() => setDetailPanelWidth(280)}
                     className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-forge-border/70 active:bg-forge-orange/60"
+                    title="Double-click to reset width"
                   />
                   <div
                     className="relative z-[2] shrink-0 h-full shadow-forge-panel"

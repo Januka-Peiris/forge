@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
+
 @layer base {
   :root {
     --background: 222 14% 4%;
@@ -35,8 +38,13 @@
     margin: 0;
     background-color: #0a0b0e;
     color: #e8eaf2;
+    font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  code, pre, kbd, samp, .font-mono {
+    font-family: 'Geist Mono Variable', ui-monospace, 'Cascadia Code', monospace;
   }
 
   * {
