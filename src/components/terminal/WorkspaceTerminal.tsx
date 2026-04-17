@@ -1463,51 +1463,22 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                     </option>
                   ))}
                 </select>
-              </div>
-            )}
-
-            {focusedChatSession && (
-              <div className="flex flex-wrap items-center gap-1 rounded-lg border border-forge-blue/20 bg-forge-blue/5 px-2 py-1 text-xs text-forge-muted">
-                <span className="font-bold uppercase tracking-widest text-forge-blue">Context</span>
-                <span className="font-semibold text-forge-text">{modelContextLabel(selectedModel)}</span>
                 <span>·</span>
-                <span>{promptMeter ? `${promptMeter.sessionEstTokens.toLocaleString()} tok est.` : '0 tok est.'}</span>
-                <span>·</span>
-                <span className={contextPreview?.status === 'fresh' ? 'text-forge-green' : contextPreview ? 'text-forge-yellow' : ''}>
-                  {contextPreview ? `repo ${contextPreview.status}` : 'repo ctx not loaded'}
-                </span>
-                <span>·</span>
-                <span>{agentContext?.linkedWorktrees.length ?? 0} linked</span>
-              </div>
-            )}
-
-            {focusedChatSession && (
-              <div className="flex flex-wrap items-center gap-1 rounded-lg border border-forge-border bg-forge-bg px-1.5 py-1 text-xs text-forge-muted">
-                <span className="px-1 font-bold uppercase tracking-widest text-forge-muted">Workflow</span>
-                <button
-                  type="button"
-                  onClick={() => void applyWorkflowPreset('plan-act')}
-                  className="rounded-md border border-forge-border bg-white/5 px-2 py-0.5 font-semibold text-forge-text hover:bg-white/10"
-                  title="Set up a planner-first run, then accept and continue in Act mode."
-                >
-                  Plan → Act
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void applyWorkflowPreset('plan-codex-review')}
-                  className="rounded-md border border-forge-border bg-white/5 px-2 py-0.5 font-semibold text-forge-text hover:bg-white/10"
-                  title="Set up a plan that can be handed to an implementer and reviewer."
-                >
-                  Plan → Codex → Review
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void applyWorkflowPreset('implement-review-pr')}
-                  className="rounded-md border border-forge-border bg-white/5 px-2 py-0.5 font-semibold text-forge-text hover:bg-white/10"
-                  title="Set up an implementation run that ends with review and PR readiness."
-                >
-                  Implement → Review → PR
-                </button>
+                <span className="text-forge-muted">{modelContextLabel(selectedModel)}</span>
+                {promptMeter && (
+                  <>
+                    <span>·</span>
+                    <span className="text-forge-dim">{promptMeter.sessionEstTokens.toLocaleString()} tok</span>
+                  </>
+                )}
+                {contextPreview && (
+                  <>
+                    <span>·</span>
+                    <span className={contextPreview.status === 'fresh' ? 'text-forge-green' : 'text-forge-yellow'}>
+                      repo {contextPreview.status}
+                    </span>
+                  </>
+                )}
               </div>
             )}
 
@@ -1573,6 +1544,35 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                       <p className="mt-1.5 text-xs leading-snug text-forge-muted">
                         Stop the focused tab any time: header <span className="font-mono text-forge-text/70">⋯</span> menu → Interrupt terminal.
                       </p>
+                    </div>
+                    <div className="border-t border-forge-border/60 pt-2">
+                      <p className="mb-1.5 text-xs font-bold uppercase tracking-widest text-forge-muted">Workflow presets</p>
+                      <div className="flex flex-col gap-1">
+                        <button
+                          type="button"
+                          onClick={() => { void applyWorkflowPreset('plan-act'); setShowComposerSettings(false); }}
+                          className="rounded-md border border-forge-border bg-white/5 px-2 py-1.5 text-left text-xs font-semibold text-forge-text hover:bg-white/10"
+                          title="Set up a planner-first run, then accept and continue in Act mode."
+                        >
+                          Plan → Act
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { void applyWorkflowPreset('plan-codex-review'); setShowComposerSettings(false); }}
+                          className="rounded-md border border-forge-border bg-white/5 px-2 py-1.5 text-left text-xs font-semibold text-forge-text hover:bg-white/10"
+                          title="Set up a plan that can be handed to an implementer and reviewer."
+                        >
+                          Plan → Codex → Review
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { void applyWorkflowPreset('implement-review-pr'); setShowComposerSettings(false); }}
+                          className="rounded-md border border-forge-border bg-white/5 px-2 py-1.5 text-left text-xs font-semibold text-forge-text hover:bg-white/10"
+                          title="Set up an implementation run that ends with review and PR readiness."
+                        >
+                          Implement → Review → PR
+                        </button>
+                      </div>
                     </div>
                     <div className="border-t border-forge-border/60 pt-2">
                       <p className="mb-1.5 text-xs font-bold uppercase tracking-widest text-forge-muted">Repo context</p>
@@ -1702,24 +1702,6 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
             </div>
           </div>
 
-          {(promptMeter !== null || (workspace.agentSession?.tokenCount ?? 0) > 0) && (
-            <p className="mt-1 text-xs leading-snug text-forge-muted">
-              {promptMeter !== null && (
-                <>
-                  Last prompt: {promptMeter.lastChars.toLocaleString()} chars (~{promptMeter.lastEstTokens.toLocaleString()}{' '}
-                  tok est.) · Session sends (Forge est.): {promptMeter.sessionChars.toLocaleString()} chars (~
-                  {promptMeter.sessionEstTokens.toLocaleString()} tok est.)
-                </>
-              )}
-              {(workspace.agentSession?.tokenCount ?? 0) > 0 && workspace.agentSession && (
-                <>
-                  {promptMeter !== null ? ' · ' : null}
-                  Workspace record: {workspace.agentSession.tokenCount.toLocaleString()} tok
-                  {workspace.agentSession.estimatedCost ? ` · ${workspace.agentSession.estimatedCost}` : ''}
-                </>
-              )}
-            </p>
-          )}
           </div>
         </div>
       )}
