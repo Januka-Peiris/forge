@@ -241,39 +241,6 @@ pub fn mark_closed(db: &Database, session_id: &str, closed_at: &str) -> Result<(
     })
 }
 
-#[allow(dead_code)]
-pub fn mark_attached(db: &Database, session_id: &str, attached_at: &str) -> Result<(), String> {
-    db.with_connection(|connection| {
-        connection.execute(
-            r#"
-            UPDATE terminal_sessions
-            SET last_attached_at = ?2,
-                stale = 0,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?1
-            "#,
-            params![session_id, attached_at],
-        )?;
-        Ok(())
-    })
-}
-
-#[allow(dead_code)]
-pub fn mark_captured(db: &Database, session_id: &str, seq: i64) -> Result<(), String> {
-    db.with_connection(|connection| {
-        connection.execute(
-            r#"
-            UPDATE terminal_sessions
-            SET last_captured_seq = ?2,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?1
-            "#,
-            params![session_id, seq],
-        )?;
-        Ok(())
-    })
-}
-
 pub fn mark_stale_running_sessions(db: &Database, timestamp: &str) -> Result<(), String> {
     db.with_connection(|connection| {
         connection.execute(
