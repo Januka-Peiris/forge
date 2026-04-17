@@ -974,7 +974,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                 {visibleSessions.map((session) => {
                   const title = session.title || PROFILE_LABELS[session.profile as TerminalProfile] || session.profile;
                   const isActive = !focusedChatSession && focusedSession?.id === session.id;
-                  const statusColor = session.stale ? 'text-forge-yellow' : session.status === 'running' ? 'text-forge-green' : session.status === 'failed' || session.status === 'interrupted' ? 'text-forge-red' : 'text-forge-muted/50';
+                  const statusColor = session.status === 'running' ? 'text-forge-green' : session.status === 'failed' || session.status === 'interrupted' ? 'text-forge-red' : 'text-forge-muted/50';
                   return (
                     <div key={session.id} className="group relative">
                       <button
@@ -987,7 +987,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                           <TerminalIcon className={`h-3 w-3 shrink-0 ${isActive ? 'text-forge-orange' : 'text-forge-muted/50'}`} />
                           <span className="min-w-0 flex-1 truncate text-xs font-medium">{title}</span>
                           <span className={`shrink-0 text-[10px] ${statusColor}`}>
-                            {session.stale ? 'stale' : session.status === 'running' ? '●' : session.status === 'failed' ? '✕' : '○'}
+                            {session.status === 'running' ? '●' : session.status === 'failed' ? '✕' : '○'}
                           </span>
                         </div>
                       </button>
@@ -1014,12 +1014,12 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
               </button>
               {visibleSessions.map((session) => {
                 const isActive = !focusedChatSession && focusedSession?.id === session.id;
-                const statusColor = session.status === 'running' ? 'text-forge-green' : session.status === 'failed' || session.status === 'interrupted' ? 'text-forge-red' : 'text-forge-muted/40';
+                const iconColor = session.status === 'running' ? 'text-forge-green' : session.status === 'failed' || session.status === 'interrupted' ? 'text-forge-red' : 'text-forge-muted/40';
                 return (
                   <button
                     key={session.id}
                     onClick={() => void attachTerminal(session)}
-                    className={`rounded p-1 ${isActive ? 'text-forge-orange' : `${statusColor} hover:text-forge-text`}`}
+                    className={`rounded p-1 ${isActive ? 'text-forge-orange' : `${iconColor} hover:text-forge-text`}`}
                     title={session.title || PROFILE_LABELS[session.profile as TerminalProfile] || session.profile}
                   >
                     <TerminalIcon className="h-3 w-3" />

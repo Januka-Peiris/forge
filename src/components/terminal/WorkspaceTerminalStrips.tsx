@@ -51,7 +51,6 @@ export function WorkspaceHealthStrip({
   onStartShell: () => void;
 }) {
   const running = health.terminals.filter((terminal) => terminal.status === 'running').length;
-  const stale = health.terminals.filter((terminal) => terminal.stale || terminal.recommendedAction.includes('fresh')).length;
   const unattached = health.terminals.filter((terminal) => terminal.recommendedAction === 'reattach');
   const failed = health.terminals.filter((terminal) => terminal.status === 'failed' || terminal.status === 'interrupted');
   const statusBadgeVariant =
@@ -70,7 +69,7 @@ export function WorkspaceHealthStrip({
           {health.status === 'needs_attention' ? 'Needs attention' : health.status === 'healthy' ? 'Healthy' : 'Idle'}
         </Badge>
         <span className="text-forge-muted" title="Port count updates when you use Testing → Refresh ports">
-          {running} running · {displayPortCount} port{displayPortCount === 1 ? '' : 's'} · {stale} stale
+          {running} running · {displayPortCount} port{displayPortCount === 1 ? '' : 's'}
         </span>
         {health.warnings.slice(0, 1).map((warning) => (
           <span key={warning} className="min-w-0 flex-1 truncate text-forge-yellow" title={warning}>

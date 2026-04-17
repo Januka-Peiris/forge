@@ -9,7 +9,6 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 
 function sessionBadgeVariant(session: TerminalSession): 'warning' | 'success' | 'destructive' | 'muted' {
-  if (session.stale) return 'warning';
   if (session.status === 'running') return 'success';
   if (session.status === 'failed' || session.status === 'interrupted') return 'destructive';
   return 'muted';
@@ -121,7 +120,7 @@ export function TerminalPane({
           <div className="flex items-center gap-2">
             <span className="truncate text-[12px] font-bold text-forge-text">{title}</span>
             <Badge variant={sessionBadgeVariant(session)}>
-              {session.stale ? 'stale' : session.status}
+              {session.status}
             </Badge>
             <Badge variant="muted">{session.backend}</Badge>
           </div>
