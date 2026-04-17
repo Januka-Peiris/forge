@@ -473,6 +473,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       });
       if (chatEvent.eventType === 'status' && (chatEvent.status === 'succeeded' || chatEvent.status === 'failed')) {
         window.setTimeout(() => {
+          void refreshChatSessions();
           void refreshReadiness();
           void refreshWorkbenchState();
         }, 600);
@@ -486,7 +487,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       if (unlistenApproval) unlistenApproval();
       if (unlistenAgentChat) unlistenAgentChat();
     };
-  }, [enqueueOutput, refreshReadiness, refreshWorkbenchState, workspaceId]);
+  }, [enqueueOutput, refreshChatSessions, refreshReadiness, refreshWorkbenchState, workspaceId]);
 
   const createTerminal = async (kind: 'agent' | 'shell', profile: TerminalProfile, title?: string, profileId?: string) => {
     if (!workspaceId) return;
