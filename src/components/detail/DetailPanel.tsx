@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ElementType } from 'react';
 import {
   GitBranch, ArrowUp, ArrowDown, AlertTriangle,
   Clock, ExternalLink, Activity, CheckCircle2,
-  Circle, AlertCircle, Link2, Plus, GitPullRequest, Loader2, GitMerge, ChevronDown
+  Circle, AlertCircle, Link2, Plus, GitPullRequest, Loader2, GitMerge, ChevronDown, ChevronRight
 } from 'lucide-react';
 import type {
   ActivityItem as ForgeActivityItem,
@@ -18,6 +18,7 @@ import { ContextPreviewPanel } from '../context/ContextPreviewPanel';
 interface DetailPanelProps {
   workspace: Workspace | null;
   isArchived?: boolean;
+  onCollapse?: () => void;
   onRefreshWorkspaceState?: () => void;
   onOpenInCursor?: () => void;
   onArchiveWorkspace?: () => void;
@@ -49,6 +50,7 @@ function TimelineRow({ icon: Icon, color, label, time }: { icon: ElementType; co
 export function DetailPanel({
   workspace,
   isArchived = false,
+  onCollapse,
   onOpenInCursor,
   onArchiveWorkspace,
   onDeleteWorkspace,
@@ -61,6 +63,7 @@ export function DetailPanel({
   onOpenLinkedWorktreeInCursor,
   onCreateChildWorkspace,
 }: DetailPanelProps) {
+  const [activeTab, setActiveTab] = useState<'status' | 'config'>('status');
   const [selectedLinkedWorktreeId, setSelectedLinkedWorktreeId] = useState('');
   const [prCreating, setPrCreating] = useState(false);
   const [prError, setPrError] = useState<string | null>(null);
@@ -147,9 +150,19 @@ export function DetailPanel({
     <aside className="w-full shrink-0 h-full bg-forge-surface flex flex-col overflow-hidden">
       {/* Header — always visible */}
       <div className="px-4 py-4 shrink-0">
-        <div className="flex items-center justify-between mb-1">
-          <h2 className="text-sm font-bold text-forge-text truncate">{workspace.name}</h2>
+        <div className="flex items-center gap-2 mb-1">
+          <h2 className="text-sm font-bold text-forge-text truncate flex-1">{workspace.name}</h2>
           <StatusBadge status={workspace.status} />
+          {onCollapse && (
+            <button
+              type="button"
+              onClick={onCollapse}
+              className="shrink-0 rounded-md border border-forge-border bg-white/5 p-1 text-forge-muted hover:bg-white/10"
+              title="Collapse detail panel"
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-1.5 text-sm text-forge-muted mt-1">
           <span className="text-forge-text/90 font-medium">{workspace.repo}</span>
@@ -163,92 +176,151 @@ export function DetailPanel({
         </div>
       </div>
 
+      {/* Tab bar */}
+      <div className="flex shrink-0 px-4 gap-5">
+        {(['status', 'config'] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`py-2.5 text-xs font-semibold border-b-2 capitalize transition-colors ${
+              activeTab === tab
+                ? 'border-forge-orange text-forge-text'
+                : 'border-transparent text-forge-muted hover:text-forge-text'
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto">
-        <>
+        {activeTab === 'status' && (
+          <>
             {/* Current Task */}
             <div className="px-4 py-4">
               <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest mb-1.5">Current Task</p>
-              <p className="text-sm text-forge-text/92 leading-relaxed">{workspace.currentTask}</p>
+              <p className="text-sm text-forge-text/90 leading-relaxed">{workspace.currentTask || <span className="text-forge-muted italic">No task set</span>}</p>
             </div>
 
-            {/* Branch Health */}
-            <div className="px-4 py-4">
-              <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest mb-2">Branch Health</p>
-              <p className="text-xs leading-snug text-forge-muted/90 mb-2">
-                Saved workspace row (not live git). For current ahead/behind vs base, use Readiness in the workspace view.
-              </p>
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                <div className="bg-forge-card rounded-lg p-2.5 border border-forge-border">
-                  <div className="flex items-center gap-1 text-forge-green mb-0.5">
-                    <ArrowUp className="w-3 h-3" />
-                    <span className="text-xs font-semibold">Ahead</span>
-                  </div>
-                  <p className="text-[18px] font-bold text-forge-text">{workspace.aheadBy}</p>
-                </div>
-                <div className="bg-forge-card rounded-lg p-2.5 border border-forge-border">
-                  <div className="flex items-center gap-1 text-forge-yellow mb-0.5">
-                    <ArrowDown className="w-3 h-3" />
-                    <span className="text-xs font-semibold">Behind</span>
-                  </div>
-                  <p className="text-[18px] font-bold text-forge-text">{workspace.behindBy}</p>
-                </div>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-1 text-forge-muted">
-                  <AlertTriangle className="w-3 h-3" />
-                  Merge risk:
-                  <span className={`font-semibold ${riskColor}`}>{workspace.mergeRisk}</span>
-                </span>
-                <span className="flex items-center gap-1 text-forge-text/85">
-                  <Clock className="w-3 h-3 text-forge-muted shrink-0" />
-                  {workspace.lastRebase}
-                </span>
-              </div>
-            </div>
-
-            {/* Pull Request */}
-            <div className="px-4 py-4">
-              <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest mb-2">Pull Request</p>
+            {/* Pull Request — prominent, dev-flow first */}
+            <div className="px-4 pb-4">
               {workspace.prStatus && workspace.prNumber ? (
-                <div className="flex items-center gap-2 mb-2">
-                  <GitPullRequest className="w-3.5 h-3.5 text-forge-green shrink-0" />
-                  <span className="text-sm text-forge-text font-medium">PR #{workspace.prNumber}</span>
-                  <span className="text-xs text-forge-muted capitalize">{workspace.prStatus}</span>
+                <div className="flex items-center gap-2.5 rounded-lg bg-forge-green/10 border border-forge-green/20 px-3 py-2.5">
+                  <GitPullRequest className="w-4 h-4 text-forge-green shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-forge-green">PR #{workspace.prNumber}</p>
+                    <p className="text-xs text-forge-muted capitalize">{workspace.prStatus}</p>
+                  </div>
                 </div>
               ) : (
-                <p className="text-xs text-forge-muted mb-2">No PR open yet.</p>
+                <>
+                  {prError && <p className="text-xs text-forge-red mb-2">{prError}</p>}
+                  <button
+                    disabled={prCreating || !onCreatePr}
+                    onClick={async () => {
+                      if (!onCreatePr) return;
+                      setPrCreating(true);
+                      setPrError(null);
+                      try { await onCreatePr(); }
+                      catch (err) { setPrError(String(err)); }
+                      finally { setPrCreating(false); }
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-forge-green/15 hover:bg-forge-green/25 disabled:opacity-50 text-sm font-semibold text-forge-green border border-forge-green/20 transition-colors"
+                  >
+                    {prCreating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <GitPullRequest className="w-3.5 h-3.5" />}
+                    {prCreating ? 'Creating PR…' : 'Create Pull Request'}
+                  </button>
+                </>
               )}
-              {prError && <p className="text-xs text-forge-red mb-1">{prError}</p>}
-              {!workspace.prStatus && (
-                <button
-                  disabled={prCreating}
-                  onClick={async () => {
-                    if (!onCreatePr) return;
-                    setPrCreating(true);
-                    setPrError(null);
-                    try {
-                      await onCreatePr();
-                    } catch (err) {
-                      setPrError(String(err));
-                    } finally {
-                      setPrCreating(false);
-                    }
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forge-green/15 hover:bg-forge-green/25 disabled:opacity-50 text-sm font-semibold text-forge-green border border-forge-green/20 transition-colors"
-                >
-                  {prCreating ? <Loader2 className="w-3 h-3 animate-spin" /> : <GitPullRequest className="w-3 h-3" />}
-                  {prCreating ? 'Creating PR…' : 'Create PR'}
-                </button>
-              )}
+            </div>
+
+            {/* Timeline */}
+            <div className="px-4 pb-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest">Activity</p>
+                {timelineLoading && <Loader2 className="w-3 h-3 animate-spin text-forge-muted" />}
+              </div>
+              {(() => {
+                const allItems = timelineItems.length > 0 ? timelineItems : activityRows.map((r, i) => ({
+                  id: String(i), event: r.label, level: 'info' as const, timestamp: r.time,
+                  repo: '', workspaceId: workspace.id,
+                }));
+                const visibleItems = timelineExpanded ? allItems : allItems.slice(0, 5);
+                const eventIcon = (event: string, level: string) => {
+                  if (event.toLowerCase().includes('pr') || event.toLowerCase().includes('pull')) return { icon: GitPullRequest, color: level === 'success' ? 'bg-forge-green/70' : 'bg-forge-blue/70' };
+                  if (event.toLowerCase().includes('rebase') || event.toLowerCase().includes('merge')) return { icon: GitMerge, color: level === 'warning' ? 'bg-forge-yellow/70' : 'bg-forge-green/70' };
+                  if (level === 'error') return { icon: AlertCircle, color: 'bg-forge-red/70' };
+                  if (level === 'warning') return { icon: AlertTriangle, color: 'bg-forge-yellow/70' };
+                  if (level === 'success') return { icon: CheckCircle2, color: 'bg-forge-green/70' };
+                  return { icon: Circle, color: 'bg-forge-muted/60' };
+                };
+                return (
+                  <div className="relative">
+                    <div className="absolute left-2.5 top-2 bottom-2 w-px bg-forge-border/50" />
+                    <div className="pl-1">
+                      {visibleItems.length === 0 ? (
+                        <p className="text-xs text-forge-muted">No activity yet.</p>
+                      ) : visibleItems.map((item, i) => {
+                        const { icon, color } = eventIcon(item.event, item.level ?? 'info');
+                        const label = 'details' in item && item.details ? `${item.event} · ${item.details}` : item.event;
+                        const time = 'timestamp' in item ? String(item.timestamp) : '';
+                        return <TimelineRow key={i} icon={icon} color={color} label={label} time={time} />;
+                      })}
+                    </div>
+                    {allItems.length > 5 && (
+                      <button
+                        onClick={() => setTimelineExpanded((e) => !e)}
+                        className="mt-1 flex items-center gap-1 text-xs text-forge-muted hover:text-forge-text"
+                      >
+                        <ChevronDown className={`w-3 h-3 transition-transform ${timelineExpanded ? 'rotate-180' : ''}`} />
+                        {timelineExpanded ? 'Show less' : `${allItems.length - 5} more`}
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          </>
+        )}
+
+        {activeTab === 'config' && (
+          <>
+            {/* Branch Health */}
+            <div className="px-4 py-4">
+              <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest mb-3">Branch Health</p>
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                <div className="bg-forge-card rounded-lg p-2.5 border border-forge-border/60 text-center">
+                  <div className="flex items-center justify-center gap-1 text-forge-green mb-1">
+                    <ArrowUp className="w-3 h-3" />
+                    <span className="text-xs text-forge-muted">Ahead</span>
+                  </div>
+                  <p className="text-lg font-bold text-forge-text">{workspace.aheadBy}</p>
+                </div>
+                <div className="bg-forge-card rounded-lg p-2.5 border border-forge-border/60 text-center">
+                  <div className="flex items-center justify-center gap-1 text-forge-yellow mb-1">
+                    <ArrowDown className="w-3 h-3" />
+                    <span className="text-xs text-forge-muted">Behind</span>
+                  </div>
+                  <p className="text-lg font-bold text-forge-text">{workspace.behindBy}</p>
+                </div>
+                <div className="bg-forge-card rounded-lg p-2.5 border border-forge-border/60 text-center">
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    <AlertTriangle className="w-3 h-3 text-forge-muted" />
+                    <span className="text-xs text-forge-muted">Risk</span>
+                  </div>
+                  <p className={`text-sm font-bold ${riskColor}`}>{workspace.mergeRisk}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1 text-xs text-forge-muted">
+                <Clock className="w-3 h-3 shrink-0" />
+                <span>Last rebase: {workspace.lastRebase}</span>
+              </div>
             </div>
 
             {/* Budget Cap */}
-            <div className="px-4 py-4">
+            <div className="px-4 pb-4">
               <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest mb-2">Budget Cap</p>
-              <p className="text-xs text-forge-muted mb-2">
-                {workspace.costLimitUsd ? `Current cap: $${workspace.costLimitUsd.toFixed(2)}` : 'No cap set'}
-              </p>
               <div className="flex items-center gap-2">
                 <input
                   type="number"
@@ -266,67 +338,20 @@ export function DetailPanel({
                       void setWorkspaceCostLimit(workspace.id, isNaN(val) || val <= 0 ? null : val).catch(() => undefined);
                     }
                   }}
-                  placeholder="e.g. 5.00"
-                  className="flex-1 bg-forge-card border border-forge-border rounded px-2 py-1 text-sm text-forge-text placeholder:text-forge-muted/70 focus:outline-none focus:border-forge-orange/40"
+                  placeholder={workspace.costLimitUsd ? `$${workspace.costLimitUsd.toFixed(2)}` : 'No cap'}
+                  className="flex-1 bg-forge-card border border-forge-border rounded px-2 py-1.5 text-sm text-forge-text placeholder:text-forge-muted/70 focus:outline-none focus:border-forge-orange/40"
                 />
-                <span className="text-xs text-forge-muted">USD</span>
+                <span className="text-xs text-forge-muted shrink-0">USD</span>
               </div>
             </div>
 
             {/* Context Preview */}
-            <div className="mx-4 my-3">
+            <div className="mx-4 pb-4">
               <ContextPreviewPanel workspaceId={workspace.id} />
             </div>
 
-            {/* Timeline */}
-            <div className="px-4 py-4">
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest">Timeline</p>
-                {timelineLoading && <Loader2 className="w-3 h-3 animate-spin text-forge-muted" />}
-              </div>
-              {(() => {
-                const allItems = timelineItems.length > 0 ? timelineItems : activityRows.map((r, i) => ({
-                  id: String(i), event: r.label, level: 'info' as const, timestamp: r.time,
-                  repo: '', workspaceId: workspace.id,
-                }));
-                const visibleItems = timelineExpanded ? allItems : allItems.slice(0, 8);
-                const eventIcon = (event: string, level: string) => {
-                  if (event.toLowerCase().includes('pr') || event.toLowerCase().includes('pull')) return { icon: GitPullRequest, color: level === 'success' ? 'bg-forge-green/70' : 'bg-forge-blue/70' };
-                  if (event.toLowerCase().includes('rebase') || event.toLowerCase().includes('merge')) return { icon: GitMerge, color: level === 'warning' ? 'bg-forge-yellow/70' : 'bg-forge-green/70' };
-                  if (level === 'error') return { icon: AlertCircle, color: 'bg-forge-red/70' };
-                  if (level === 'warning') return { icon: AlertTriangle, color: 'bg-forge-yellow/70' };
-                  if (level === 'success') return { icon: CheckCircle2, color: 'bg-forge-green/70' };
-                  return { icon: Circle, color: 'bg-forge-muted/60' };
-                };
-                return (
-                  <div className="relative">
-                    <div className="absolute left-2.5 top-2 bottom-2 w-px bg-forge-border" />
-                    <div className="pl-1">
-                      {visibleItems.length === 0 ? (
-                        <p className="text-xs text-forge-muted">No activity recorded yet.</p>
-                      ) : visibleItems.map((item, i) => {
-                        const { icon, color } = eventIcon(item.event, item.level ?? 'info');
-                        const label = 'details' in item && item.details ? `${item.event} · ${item.details}` : item.event;
-                        const time = 'timestamp' in item ? String(item.timestamp) : '';
-                        return <TimelineRow key={i} icon={icon} color={color} label={label} time={time} />;
-                      })}
-                    </div>
-                    {allItems.length > 8 && (
-                      <button
-                        onClick={() => setTimelineExpanded((e) => !e)}
-                        className="mt-1 flex items-center gap-1 text-xs text-forge-muted hover:text-forge-text"
-                      >
-                        <ChevronDown className={`w-3 h-3 transition-transform ${timelineExpanded ? 'rotate-180' : ''}`} />
-                        {timelineExpanded ? 'Show less' : `Show all ${allItems.length}`}
-                      </button>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-
             {/* Linked Worktrees */}
-            <div className="px-4 py-4">
+            <div className="px-4 pb-4">
               <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest mb-2">Linked Worktrees</p>
               <input
                 value={linkedSearch}
@@ -359,7 +384,7 @@ export function DetailPanel({
                 </button>
               </div>
               {linkedWorktrees.length === 0 ? (
-                <p className="text-xs text-forge-muted leading-relaxed">No linked worktrees yet. Attach a worktree from another repo for supporting context.</p>
+                <p className="text-xs text-forge-muted leading-relaxed">No linked worktrees. Attach a worktree from another repo for supporting context.</p>
               ) : (
                 <div className="space-y-1.5">
                   {linkedWorktrees.map((linked) => (
@@ -371,12 +396,8 @@ export function DetailPanel({
                       </div>
                       <p className="mt-1 text-xs font-mono text-forge-muted truncate">{linked.path}</p>
                       <div className="mt-1 flex gap-2">
-                        <button onClick={() => onOpenLinkedWorktreeInCursor?.(linked.path)} className="text-xs text-forge-blue hover:underline">
-                          Open in Cursor
-                        </button>
-                        <button onClick={() => onDetachLinkedWorktree?.(linked.worktreeId)} className="text-xs text-forge-red hover:underline">
-                          Detach
-                        </button>
+                        <button onClick={() => onOpenLinkedWorktreeInCursor?.(linked.path)} className="text-xs text-forge-blue hover:underline">Open in Cursor</button>
+                        <button onClick={() => onDetachLinkedWorktree?.(linked.worktreeId)} className="text-xs text-forge-red hover:underline">Detach</button>
                       </div>
                     </div>
                   ))}
@@ -385,47 +406,43 @@ export function DetailPanel({
             </div>
 
             {/* Lineage */}
-            <div className="px-4 py-4">
+            <div className="px-4 pb-4">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest">Lineage</p>
                 <button onClick={onCreateChildWorkspace} className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs bg-white/5 hover:bg-white/10 text-forge-text/80">
                   <Plus className="w-3 h-3" /> Branch From Here
                 </button>
               </div>
-              <p className="text-xs text-forge-muted">
-                Parent: <span className="font-mono text-forge-text">{workspace.parentWorkspaceId ?? 'none'}</span>
-              </p>
-              <p className="text-xs text-forge-muted mt-1">
-                Source: <span className="font-mono text-forge-text">{workspace.sourceWorkspaceId ?? 'self'}</span>
-              </p>
-              <p className="text-xs text-forge-muted mt-1">
-                Derived:{' '}
-                <span className="font-mono text-forge-text">{workspace.derivedFromBranch ?? workspace.branch}</span>
-              </p>
+              <div className="space-y-1">
+                <p className="text-xs text-forge-muted">Parent: <span className="font-mono text-forge-text">{workspace.parentWorkspaceId ?? 'none'}</span></p>
+                <p className="text-xs text-forge-muted">Source: <span className="font-mono text-forge-text">{workspace.sourceWorkspaceId ?? 'self'}</span></p>
+                <p className="text-xs text-forge-muted">Derived: <span className="font-mono text-forge-text">{workspace.derivedFromBranch ?? workspace.branch}</span></p>
+              </div>
             </div>
           </>
+        )}
       </div>
 
       {/* Footer — always visible */}
-      <div className="px-4 py-3 border-t border-forge-border shrink-0 space-y-2">
+      <div className="px-4 py-3 shrink-0 space-y-2">
+        <button onClick={onOpenInCursor} className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-forge-blue/15 hover:bg-forge-blue/25 text-sm font-semibold text-forge-blue transition-colors border border-forge-blue/20">
+          <ExternalLink className="w-3.5 h-3.5" />
+          Open in Cursor
+        </button>
         <div className="flex gap-2">
           <button
             onClick={onArchiveWorkspace}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-white/5 hover:bg-white/8 text-sm font-medium text-forge-text/85 transition-colors border border-forge-border"
+            className="flex-1 flex items-center justify-center py-1.5 rounded-md text-xs text-forge-muted hover:text-forge-text hover:bg-white/5 transition-colors"
           >
             {isArchived ? 'Unarchive' : 'Archive'}
           </button>
           <button
             onClick={onDeleteWorkspace}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-forge-red/10 hover:bg-forge-red/20 text-sm font-semibold text-forge-red transition-colors border border-forge-red/20"
+            className="flex-1 flex items-center justify-center py-1.5 rounded-md text-xs text-forge-red/70 hover:text-forge-red hover:bg-forge-red/10 transition-colors"
           >
             Delete
           </button>
         </div>
-        <button onClick={onOpenInCursor} className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-forge-blue/15 hover:bg-forge-blue/25 text-sm font-semibold text-forge-blue transition-colors border border-forge-blue/20">
-          <ExternalLink className="w-3.5 h-3.5" />
-          Open in Cursor
-        </button>
       </div>
     </aside>
   );

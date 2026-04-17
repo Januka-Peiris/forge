@@ -1279,16 +1279,9 @@ export default function App() {
                     className="relative z-[2] shrink-0 h-full shadow-forge-panel"
                     style={{ width: `${detailPanelWidth}px` }}
                   >
-                    <button
-                      type="button"
-                      onClick={() => setDetailPanelCollapsed(true)}
-                      className="absolute top-2.5 left-2 z-[5] rounded-md border border-forge-border bg-white/5 p-1 text-forge-muted hover:bg-white/10"
-                      title="Collapse detail panel"
-                    >
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    </button>
                     <DetailPanel
                       workspace={selected}
+                      onCollapse={() => setDetailPanelCollapsed(true)}
                       onOpenInCursor={() => void handleOpenInCursor()}
                       isArchived={selected ? archivedWorkspaceIds.includes(selected.id) : false}
                       onArchiveWorkspace={handleArchiveWorkspace}
