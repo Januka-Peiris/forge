@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import {
   Bot,
   CheckCircle2,
@@ -353,11 +354,33 @@ function RunningCard() {
 }
 
 function MarkdownishText({ text }: { text: string }) {
-  const blocks = useMemo(() => text.split(/\n{2,}/), [text]);
   return (
-    <div className="space-y-2 text-sm leading-relaxed text-forge-text">
-      {blocks.map((block, index) => <p key={index} className="whitespace-pre-wrap break-words">{block}</p>)}
-    </div>
+    <ReactMarkdown
+      className="prose-forge text-sm leading-relaxed text-forge-text"
+      components={{
+        p: ({ children }) => <p className="mb-2 last:mb-0 whitespace-pre-wrap break-words">{children}</p>,
+        h1: ({ children }) => <h1 className="mb-2 text-base font-bold text-forge-text">{children}</h1>,
+        h2: ({ children }) => <h2 className="mb-1.5 text-sm font-bold text-forge-text">{children}</h2>,
+        h3: ({ children }) => <h3 className="mb-1 text-sm font-semibold text-forge-text">{children}</h3>,
+        ul: ({ children }) => <ul className="mb-2 list-disc space-y-0.5 pl-4">{children}</ul>,
+        ol: ({ children }) => <ol className="mb-2 list-decimal space-y-0.5 pl-4">{children}</ol>,
+        li: ({ children }) => <li className="text-forge-text/90">{children}</li>,
+        code: ({ children, className }) => {
+          const isBlock = className?.startsWith('language-');
+          return isBlock
+            ? <code className="block overflow-x-auto rounded bg-forge-bg px-3 py-2 font-mono text-xs text-forge-text/90">{children}</code>
+            : <code className="rounded bg-forge-bg px-1 py-0.5 font-mono text-xs text-forge-orange">{children}</code>;
+        },
+        pre: ({ children }) => <pre className="mb-2 overflow-x-auto rounded border border-forge-border bg-forge-bg">{children}</pre>,
+        blockquote: ({ children }) => <blockquote className="mb-2 border-l-2 border-forge-border pl-3 text-forge-muted">{children}</blockquote>,
+        strong: ({ children }) => <strong className="font-semibold text-forge-text">{children}</strong>,
+        em: ({ children }) => <em className="italic text-forge-text/90">{children}</em>,
+        hr: () => <hr className="my-2 border-forge-border/50" />,
+        a: ({ href, children }) => <a href={href} className="text-forge-blue underline hover:text-forge-blue/80">{children}</a>,
+      }}
+    >
+      {text}
+    </ReactMarkdown>
   );
 }
 
