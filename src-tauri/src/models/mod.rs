@@ -24,6 +24,7 @@ pub mod workspace_health;
 pub mod workspace_port;
 pub mod workspace_readiness;
 pub mod workspace_script;
+pub mod workspace_template;
 
 pub use activity::ActivityItem;
 pub use agent_context::{
@@ -66,3 +67,4 @@ pub use workspace_health::{WorkspaceHealth, WorkspaceTerminalHealth};
 pub use workspace_port::WorkspacePort;
 pub use workspace_readiness::WorkspaceReadiness;
 pub use workspace_script::ForgeWorkspaceConfig;
+pub use workspace_template::WorkspaceTemplate;

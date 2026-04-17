@@ -426,6 +426,23 @@ pub fn run(connection: &Connection) -> Result<(), String> {
         "last_captured_seq",
         "INTEGER NOT NULL DEFAULT 0",
     )?;
+    add_column_if_missing(connection, "workspaces", "cost_limit_usd", "REAL")?;
+
+    // Workspace templates table
+    connection
+        .execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS workspace_templates (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                task_prompt TEXT NOT NULL DEFAULT '',
+                agent TEXT NOT NULL DEFAULT 'Claude Code',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            "#,
+        )
+        .map_err(|err| format!("Failed to create workspace_templates table: {err}"))?;
 
     Ok(())
 }

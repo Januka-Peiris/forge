@@ -12,7 +12,7 @@ use commands::{
     git_review, merge_readiness, orchestrator as orchestrator_commands, pr_draft, prompt_templates,
     repositories as repository_commands, review_cockpit, review_summary, reviews, settings,
     terminal, workspace_attention, workspace_cleanup, workspace_health, workspace_ports,
-    workspace_readiness, workspace_scripts, workspaces,
+    workspace_readiness, workspace_scripts, workspace_templates, workspaces,
 };
 use services::{orchestrator_service, rebase_service};
 use state::AppState;
@@ -28,6 +28,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let state =
                 AppState::initialize(app.handle()).map_err(Box::<dyn std::error::Error>::from)?;
@@ -154,6 +155,11 @@ pub fn run() {
             orchestrator_commands::get_orchestrator_status,
             orchestrator_commands::set_orchestrator_enabled,
             orchestrator_commands::set_orchestrator_model,
+            workspaces::set_workspace_cost_limit,
+            terminal::search_terminal_output,
+            workspace_templates::list_workspace_templates,
+            workspace_templates::create_workspace_template,
+            workspace_templates::delete_workspace_template,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Forge Tauri application");

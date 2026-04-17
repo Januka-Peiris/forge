@@ -37,6 +37,7 @@ interface SidebarProps {
   onRemoveRepository: (repositoryId: string) => void;
   onNewWorkspace: (repositoryId?: string) => void;
   onCollapse?: () => void;
+  onFilteredWorkspacesChange?: (workspaces: Workspace[]) => void;
 }
 
 const navItems: { id: NavView; label: string; icon: ElementType }[] = [
@@ -60,6 +61,7 @@ export function Sidebar({
   onRemoveRepository,
   onNewWorkspace,
   onCollapse,
+  onFilteredWorkspacesChange,
 }: SidebarProps) {
   const [filter, setFilter] = useState<'all' | 'active' | 'archived'>('all');
   const [sort, setSort] = useState<'recent' | 'name' | 'status'>('recent');
@@ -175,6 +177,12 @@ export function Sidebar({
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [repositories, sort, workspacesByRepoId]);
+
+  useEffect(() => {
+    if (!onFilteredWorkspacesChange) return;
+    const flat = repoGroups.flatMap((group) => group.workspaces);
+    onFilteredWorkspacesChange(flat);
+  }, [repoGroups, onFilteredWorkspacesChange]);
 
   const totalSpend = useMemo(() => {
     let cents = 0;

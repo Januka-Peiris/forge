@@ -1,9 +1,11 @@
-import { Bot, FolderGit2, GitBranch, Sparkles, X, Zap } from 'lucide-react';
+import { Bot, FolderGit2, GitBranch, Sparkles, X, Zap, BookTemplate } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getRepositoryWorkspaceOptions } from '../../lib/tauri-api/workspaces';
+import { listWorkspaceTemplates, createWorkspaceTemplate } from '../../lib/tauri-api/workspace-templates';
 import { formatWorkspaceCreationError } from '../../lib/ui-errors';
 import { defaultBranchForWorkspaceLabel, suggestForgeWorkspaceLabel } from '../../lib/workspace-name-generator';
 import type { AgentType, CreateWorkspaceInput, DiscoveredRepository, RepositoryWorkspaceOptions } from '../../types';
+import type { WorkspaceTemplate } from '../../types/workspace-template';
 
 interface NewWorkspaceModalProps {
   onClose: () => void;
@@ -32,11 +34,21 @@ export function NewWorkspaceModal({ onClose, onCreate, repositories, initialRepo
   const [createPR, setCreatePR] = useState(true);
   const [openCursor, setOpenCursor] = useState(false);
   const [runTests, setRunTests] = useState(true);
+  const [templates, setTemplates] = useState<WorkspaceTemplate[]>([]);
+  const [saveTemplateName, setSaveTemplateName] = useState('');
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [savingTemplate, setSavingTemplate] = useState(false);
 
   useEffect(() => {
     if (!initialRepositoryId) return;
     setRepositoryId(initialRepositoryId);
   }, [initialRepositoryId]);
+
+  useEffect(() => {
+    listWorkspaceTemplates()
+      .then(setTemplates)
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (!repositoryId) {
@@ -125,6 +137,27 @@ export function NewWorkspaceModal({ onClose, onCreate, repositories, initialRepo
         </div>
 
         <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+          {templates.length > 0 && (
+            <div>
+              <p className="text-[11px] font-semibold text-forge-muted uppercase tracking-wider mb-2">Quick Start Templates</p>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {templates.map((tmpl) => (
+                  <button
+                    key={tmpl.id}
+                    type="button"
+                    onClick={() => {
+                      setTaskPrompt(tmpl.taskPrompt);
+                      setAgent(tmpl.agent as AgentType);
+                    }}
+                    className="shrink-0 flex flex-col gap-1 px-3 py-2 rounded-lg border border-forge-border bg-forge-card hover:border-forge-orange/40 hover:bg-forge-orange/5 text-left min-w-[120px] max-w-[160px] transition-colors"
+                  >
+                    <span className="text-[11px] font-semibold text-forge-text truncate">{tmpl.name}</span>
+                    <span className="text-[10px] text-forge-muted px-1.5 py-0.5 rounded bg-forge-orange/10 text-forge-orange self-start">{tmpl.agent}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
               <div className="mb-1.5 flex items-center justify-between gap-2">
@@ -265,6 +298,55 @@ export function NewWorkspaceModal({ onClose, onCreate, repositories, initialRepo
                 <span className="text-[12px] text-forge-text/80 group-hover:text-forge-text transition-colors">{label}</span>
               </label>
             ))}
+          </div>
+
+          {/* Save as template */}
+          <div className="pt-1">
+            {!showSaveTemplate ? (
+              <button
+                type="button"
+                onClick={() => setShowSaveTemplate(true)}
+                className="text-[11px] text-forge-muted hover:text-forge-orange transition-colors flex items-center gap-1"
+              >
+                <BookTemplate className="w-3 h-3" />
+                Save as template
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <input
+                  value={saveTemplateName}
+                  onChange={(e) => setSaveTemplateName(e.target.value)}
+                  placeholder="Template name"
+                  className="flex-1 px-2 py-1.5 bg-forge-card border border-forge-border rounded-lg text-[12px] text-forge-text focus:outline-none focus:border-forge-orange/40"
+                />
+                <button
+                  type="button"
+                  disabled={savingTemplate || !saveTemplateName.trim()}
+                  onClick={async () => {
+                    if (!saveTemplateName.trim()) return;
+                    setSavingTemplate(true);
+                    try {
+                      const tmpl = await createWorkspaceTemplate(saveTemplateName.trim(), '', taskPrompt, agent);
+                      setTemplates((prev) => [tmpl, ...prev]);
+                      setSaveTemplateName('');
+                      setShowSaveTemplate(false);
+                    } catch { /* non-fatal */ } finally {
+                      setSavingTemplate(false);
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-forge-orange hover:bg-orange-500 disabled:opacity-60 text-[11px] font-semibold text-white transition-colors"
+                >
+                  {savingTemplate ? 'Saving…' : 'Save'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowSaveTemplate(false)}
+                  className="text-[11px] text-forge-muted hover:text-forge-text"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

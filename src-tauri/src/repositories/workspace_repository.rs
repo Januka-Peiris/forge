@@ -45,6 +45,27 @@ pub fn get_detail(db: &Database, id: &str) -> Result<Option<WorkspaceDetail>, St
     })
 }
 
+pub fn get(db: &Database, id: &str) -> Result<WorkspaceSummary, String> {
+    db.with_connection(|connection| {
+        connection
+            .query_row(
+                "SELECT * FROM workspaces WHERE id = ?1",
+                params![id],
+                |row| workspace_summary_from_row(row, connection),
+            )
+    })
+}
+
+pub fn set_cost_limit(db: &Database, workspace_id: &str, limit_usd: Option<f64>) -> Result<(), String> {
+    db.with_connection_mut(|connection| {
+        connection.execute(
+            "UPDATE workspaces SET cost_limit_usd = ?1 WHERE id = ?2",
+            params![limit_usd, workspace_id],
+        )?;
+        Ok(())
+    })
+}
+
 pub fn delete(db: &Database, id: &str) -> Result<(), String> {
     db.with_connection(|connection| {
         connection.execute("DELETE FROM workspaces WHERE id = ?1", params![id])?;
@@ -281,6 +302,7 @@ fn workspace_summary_from_row(
         source_workspace_id: row.get("source_workspace_id")?,
         derived_from_branch: row.get("derived_from_branch")?,
         linked_worktrees: list_linked_worktrees(connection, &id)?,
+        cost_limit_usd: row.get("cost_limit_usd")?,
     })
 }
 

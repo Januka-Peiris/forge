@@ -1086,6 +1086,20 @@ fn spawn_terminal_reader(
                             tokens,
                             &cost,
                         );
+                        // Check budget cap
+                        if let Ok(ws) = workspace_repository::get(&db, &workspace_id) {
+                            if let Some(limit) = ws.cost_limit_usd {
+                                if let Ok(cost_float) = cost.trim_start_matches('$').parse::<f64>() {
+                                    if cost_float >= limit {
+                                        let _ = app_handle.emit("forge://workspace-budget-exceeded", serde_json::json!({
+                                            "workspaceId": workspace_id,
+                                            "cost": cost,
+                                            "limit": limit,
+                                        }));
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     pending.extend_from_slice(&bytes);

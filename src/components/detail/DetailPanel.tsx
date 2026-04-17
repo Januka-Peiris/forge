@@ -11,6 +11,7 @@ import type {
   Workspace,
 } from '../../types';
 import { listWorkspaceActivity } from '../../lib/tauri-api/activity';
+import { setWorkspaceCostLimit } from '../../lib/tauri-api/workspaces';
 import { StatusBadge, AgentBadge } from '../workspaces/StatusBadge';
 
 interface DetailPanelProps {
@@ -66,6 +67,7 @@ export function DetailPanel({
   const [timelineExpanded, setTimelineExpanded] = useState(false);
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [linkedSearch, setLinkedSearch] = useState('');
+  const [budgetInput, setBudgetInput] = useState('');
 
   useEffect(() => {
     if (!workspace) return;
@@ -239,6 +241,36 @@ export function DetailPanel({
                   {prCreating ? 'Creating PR…' : 'Create PR'}
                 </button>
               )}
+            </div>
+
+            {/* Budget Cap */}
+            <div className="px-4 py-3 border-b border-forge-border/60">
+              <p className="text-[10px] font-semibold text-forge-muted uppercase tracking-widest mb-2">Budget Cap</p>
+              <p className="text-[10px] text-forge-muted mb-2">
+                {workspace.costLimitUsd ? `Current cap: $${workspace.costLimitUsd.toFixed(2)}` : 'No cap set'}
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={budgetInput}
+                  onChange={(e) => setBudgetInput(e.target.value)}
+                  onBlur={() => {
+                    const val = parseFloat(budgetInput);
+                    void setWorkspaceCostLimit(workspace.id, isNaN(val) || val <= 0 ? null : val).catch(() => undefined);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const val = parseFloat(budgetInput);
+                      void setWorkspaceCostLimit(workspace.id, isNaN(val) || val <= 0 ? null : val).catch(() => undefined);
+                    }
+                  }}
+                  placeholder="e.g. 5.00"
+                  className="flex-1 bg-forge-card border border-forge-border rounded px-2 py-1 text-[11px] text-forge-text placeholder:text-forge-muted/70 focus:outline-none focus:border-forge-orange/40"
+                />
+                <span className="text-[10px] text-forge-muted">USD</span>
+              </div>
             </div>
 
             {/* Timeline */}

@@ -64,3 +64,7 @@ export function listRepositoriesForWorkspaceCreation(): Promise<DiscoveredReposi
 export function getRepositoryWorkspaceOptions(repositoryId: string): Promise<RepositoryWorkspaceOptions> {
   return invokeCommand<RepositoryWorkspaceOptions>('get_repository_workspace_options', { repositoryId });
 }
+
+export function setWorkspaceCostLimit(workspaceId: string, limitUsd: number | null): Promise<void> {
+  return invokeCommand<void>('set_workspace_cost_limit', { workspaceId, limitUsd });
+}

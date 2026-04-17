@@ -13,3 +13,4 @@ pub mod review_summary_repository;
 pub mod settings_repository;
 
 pub mod terminal_repository;
+pub mod workspace_template_repository;
