@@ -1,0 +1,371 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Bot,
+  CheckCircle2,
+  ClipboardCheck,
+  FileCode2,
+  GitPullRequest,
+  Hammer,
+  ListChecks,
+  MessageSquare,
+  Search,
+  Terminal,
+  XCircle,
+} from 'lucide-react';
+import type { AgentChatEvent, AgentChatNextAction, AgentChatSession } from '../../types/agent-chat';
+import type { AgentRunSection, AgentWorkbenchSummary } from '../../lib/agent-workbench';
+
+const TIMELINE_EVENT_TYPES = new Set(['file_change', 'file_read', 'command', 'test_run', 'tool_call', 'tool_result']);
+
+export function AgentChatPanel({
+  session,
+  events,
+  sections,
+  summary,
+  nextActions,
+  acceptedPlanId,
+  onInterrupt,
+  onAction,
+}: {
+  session: AgentChatSession;
+  events: AgentChatEvent[];
+  sections: AgentRunSection[];
+  summary?: AgentWorkbenchSummary | null;
+  nextActions?: AgentChatNextAction[];
+  acceptedPlanId?: string | null;
+  onInterrupt: () => void;
+  onAction?: (action: AgentChatNextAction, event?: AgentChatEvent) => void;
+}) {
+  const [tab, setTab] = useState<'chat' | 'raw'>('chat');
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const running = session.status === 'running';
+  const handleAction = (action: AgentChatNextAction, event?: AgentChatEvent) => {
+    if (action.kind === 'open_diagnostics') setTab('raw');
+    onAction?.(action, event);
+  };
+
+  useEffect(() => {
+    if (tab === 'chat') bottomRef.current?.scrollIntoView({ block: 'end' });
+  }, [events.length, tab]);
+
+  return (
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-forge-border bg-forge-bg">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-forge-border bg-forge-surface px-3 py-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Bot className="h-4 w-4 text-forge-orange" />
+            <h2 className="truncate text-sm font-bold text-forge-text">{session.title}</h2>
+            <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase ${statusClass(session.status)}`}>
+              {session.status}
+            </span>
+          </div>
+          <p className="mt-0.5 truncate font-mono text-[10px] text-forge-muted">{session.cwd}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <button type="button" onClick={() => setTab('chat')} className={`rounded-md px-2 py-1 text-xs font-semibold ${tab === 'chat' ? 'bg-forge-orange/10 text-forge-orange' : 'text-forge-muted hover:bg-white/5'}`}>Chat</button>
+          <button type="button" onClick={() => setTab('raw')} className={`rounded-md px-2 py-1 text-xs font-semibold ${tab === 'raw' ? 'bg-white/10 text-forge-text' : 'text-forge-muted hover:bg-white/5'}`}>Raw / Diagnostics</button>
+          {running && <button type="button" onClick={onInterrupt} className="rounded-md px-2 py-1 text-xs font-semibold text-forge-red hover:bg-forge-red/10">Interrupt</button>}
+        </div>
+      </div>
+
+      {tab === 'raw' ? (
+        <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap bg-[#08090c] p-3 font-mono text-xs leading-relaxed text-forge-text/85">
+          {session.rawOutput || 'No raw diagnostic output yet.'}
+        </pre>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
+          <div className="mx-auto flex max-w-5xl flex-col gap-4">
+            {events.length === 0 && <EmptyChat provider={session.provider} />}
+            {sections.map((section) => (
+              <AgentRunSectionView
+                key={section.kind}
+                section={section}
+                acceptedPlanId={acceptedPlanId}
+                onAction={handleAction}
+              />
+            ))}
+            <WorkbenchFooter summary={summary ?? null} nextActions={nextActions ?? []} onAction={handleAction} />
+            {running && <RunningCard />}
+            <div ref={bottomRef} />
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AgentRunSectionView({
+  section,
+  acceptedPlanId,
+  onAction,
+}: {
+  section: AgentRunSection;
+  acceptedPlanId?: string | null;
+  onAction?: (action: AgentChatNextAction, event?: AgentChatEvent) => void;
+}) {
+  const visibleEvents = section.events.filter((event) => !shouldOmitEvent(event));
+  if (visibleEvents.length === 0) return null;
+
+  if (section.kind === 'conversation') {
+    return (
+      <div className="space-y-3">
+        {visibleEvents.map((event) => (
+          <AgentEventCard key={event.id} event={event} accepted={acceptedPlanId === event.id} onAction={onAction} />
+        ))}
+      </div>
+    );
+  }
+
+  const icon = section.kind === 'planning'
+    ? <ListChecks className="h-3.5 w-3.5 text-forge-blue" />
+    : section.kind === 'actions'
+      ? <Hammer className="h-3.5 w-3.5 text-forge-yellow" />
+      : section.kind === 'results'
+        ? <CheckCircle2 className="h-3.5 w-3.5 text-forge-green" />
+        : <Terminal className="h-3.5 w-3.5 text-forge-red" />;
+
+  const hasOnlyTimelineEvents = visibleEvents.every((event) => TIMELINE_EVENT_TYPES.has(event.eventType) || isCompactStatusEvent(event));
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-2 px-1 text-[10px] font-bold uppercase tracking-widest text-forge-muted">
+        {icon}
+        {section.title}
+      </div>
+      <div className={hasOnlyTimelineEvents ? 'rounded-lg border border-forge-border/50 bg-forge-surface/40 px-2.5 py-1.5' : 'space-y-3'}>
+        {visibleEvents.map((event) => (
+          <AgentEventCard key={event.id} event={event} accepted={acceptedPlanId === event.id} onAction={onAction} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function shouldOmitEvent(event: AgentChatEvent): boolean {
+  if (event.eventType === 'thinking') return true;
+  if (event.eventType === 'tool_result') return true;
+  if (event.eventType === 'status' && event.status === 'running') return true;
+  return false;
+}
+
+function isCompactStatusEvent(event: AgentChatEvent): boolean {
+  return event.eventType === 'status' && (event.status === 'succeeded' || event.status === 'failed');
+}
+
+function EmptyChat({ provider }: { provider: string }) {
+  return (
+    <div className="flex min-h-[260px] items-center justify-center text-center">
+      <div className="max-w-sm">
+        <MessageSquare className="mx-auto mb-3 h-9 w-9 text-forge-muted" />
+        <h3 className="text-base font-bold text-forge-text">Start a clean agent chat</h3>
+        <p className="mt-1 text-sm leading-relaxed text-forge-muted">
+          Send a prompt to {provider === 'codex' ? 'Codex' : 'Claude'} and Forge will render structured workbench events here instead of raw terminal output.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function AgentEventCard({
+  event,
+  accepted,
+  onAction,
+}: {
+  event: AgentChatEvent;
+  accepted?: boolean;
+  onAction?: (action: AgentChatNextAction, event?: AgentChatEvent) => void;
+}) {
+  if (event.eventType === 'user_message') {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[78%] rounded-2xl rounded-br-md bg-forge-orange px-3 py-2 text-sm leading-relaxed text-white shadow-lg shadow-orange-950/20">
+          {event.body}
+        </div>
+      </div>
+    );
+  }
+
+  if (event.eventType === 'assistant_message') {
+    return (
+      <div className="flex justify-start">
+        <div className="max-w-[86%] rounded-2xl rounded-bl-md border border-forge-border bg-forge-surface px-3 py-2 text-sm leading-relaxed text-forge-text">
+          <MarkdownishText text={event.body} />
+        </div>
+      </div>
+    );
+  }
+
+  // Compact single-line status events
+  if (event.eventType === 'status' && event.status === 'succeeded') {
+    return (
+      <div className="flex items-center gap-1.5 py-0.5 text-xs text-forge-muted">
+        <CheckCircle2 className="h-3 w-3 shrink-0 text-forge-green" />
+        <span>{event.body || 'Done'}</span>
+      </div>
+    );
+  }
+  if (event.eventType === 'status' && event.status === 'failed') {
+    return (
+      <div className="flex items-center gap-1.5 py-0.5 text-xs text-forge-muted">
+        <XCircle className="h-3 w-3 shrink-0 text-forge-red" />
+        <span className="text-forge-red">{event.body || 'Failed'}</span>
+      </div>
+    );
+  }
+
+  // Compact timeline rows for tool/action events
+  if (TIMELINE_EVENT_TYPES.has(event.eventType)) {
+    return (
+      <div className="flex items-center gap-2 py-0.5 text-xs text-forge-muted">
+        {timelineIconForEvent(event)}
+        <span className="min-w-0 flex-1 truncate">{event.title || labelForEvent(event.eventType)}</span>
+        {event.status && (
+          <span className={`shrink-0 text-[10px] ${event.status === 'succeeded' || event.status === 'done' ? 'text-forge-green/70' : event.status === 'failed' ? 'text-forge-red/70' : 'text-forge-dim'}`}>
+            {event.status}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  // Full card for plan, todo, result, error, next_action, and anything else
+  const isPlan = event.eventType === 'plan' || event.eventType === 'todo';
+  const isResult = event.eventType === 'result';
+  const isError = event.eventType === 'error';
+  const eventActions: AgentChatNextAction[] = isPlan
+    ? [
+      { id: 'accept-plan', label: accepted ? 'Plan accepted' : 'Accept Plan', kind: 'accept_plan', tone: 'primary' },
+      { id: 'ask-followup', label: 'Ask follow-up', kind: 'ask_followup' },
+      { id: 'switch-to-act', label: 'Switch to Act', kind: 'switch_to_act' },
+      { id: 'copy-plan', label: 'Copy Plan', kind: 'copy_plan' },
+    ]
+    : event.metadata?.nextActions ?? [];
+
+  const cardClass = isPlan
+    ? 'border-forge-blue/25 bg-forge-blue/5'
+    : isResult
+      ? 'border-forge-green/20 bg-forge-green/5'
+      : isError
+        ? 'border-forge-red/20 bg-forge-red/5'
+        : 'border-forge-border bg-forge-surface/70';
+
+  return (
+    <div className={`rounded-xl border px-3 py-2 ${cardClass}`}>
+      <div className="mb-1 flex items-center gap-2">
+        {iconForEvent(event)}
+        <span className="text-xs font-bold uppercase tracking-widest text-forge-muted">{event.title || labelForEvent(event.eventType)}</span>
+        {accepted && <span className="rounded-full border border-forge-green/25 bg-forge-green/10 px-1.5 py-0.5 text-[9px] uppercase text-forge-green">accepted</span>}
+      </div>
+      {event.body && (isPlan ? <MarkdownishText text={event.body} /> : <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-forge-text/85">{event.body}</pre>)}
+      {!!eventActions.length && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {eventActions.map((action) => (
+            <ActionButton key={action.id} action={action} disabled={accepted && action.kind === 'accept_plan'} onClick={() => onAction?.(action, event)} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WorkbenchFooter({
+  summary,
+  nextActions,
+  onAction,
+}: {
+  summary: AgentWorkbenchSummary | null;
+  nextActions: AgentChatNextAction[];
+  onAction?: (action: AgentChatNextAction) => void;
+}) {
+  if (!summary && nextActions.length === 0) return null;
+
+  if (!summary) {
+    return (
+      <div className="flex flex-wrap gap-1.5 px-1">
+        {nextActions.map((action) => <ActionButton key={action.id} action={action} onClick={() => onAction?.(action)} />)}
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-forge-green/20 bg-forge-green/5 px-3 py-2.5">
+      <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-forge-green">
+        <ClipboardCheck className="h-3.5 w-3.5" /> Workspace result
+      </div>
+      <div className="mb-2 flex flex-wrap gap-3 text-xs text-forge-muted">
+        <span><span className="font-semibold text-forge-text">{summary.changedFileCount}</span> changed</span>
+        <span><span className="font-semibold text-forge-text">{summary.reviewedFileCount}/{summary.changedFileCount}</span> reviewed</span>
+        <span>tests: <span className="font-semibold text-forge-text">{summary.testStatus}</span></span>
+        <span>risk: <span className="font-semibold text-forge-text">{summary.mergeRisk}</span></span>
+      </div>
+      {summary.prCommentCount > 0 && <p className="mb-1.5 text-xs text-forge-yellow">{summary.prCommentCount} unresolved PR comment{summary.prCommentCount === 1 ? '' : 's'}.</p>}
+      {summary.warnings.slice(0, 2).map((warning) => <p key={warning} className="mb-1.5 text-xs text-forge-yellow">{warning}</p>)}
+      {nextActions.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 border-t border-forge-green/15 pt-2">
+          {nextActions.map((action) => <ActionButton key={action.id} action={action} onClick={() => onAction?.(action)} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ActionButton({ action, disabled, onClick }: { action: AgentChatNextAction; disabled?: boolean; onClick?: () => void }) {
+  const tone = action.tone === 'primary'
+    ? 'border-forge-orange/30 bg-forge-orange/10 text-forge-orange hover:bg-forge-orange/20'
+    : action.tone === 'warning'
+      ? 'border-forge-yellow/30 bg-forge-yellow/10 text-forge-yellow hover:bg-forge-yellow/20'
+      : action.tone === 'danger'
+        ? 'border-forge-red/30 bg-forge-red/10 text-forge-red hover:bg-forge-red/20'
+        : 'border-forge-border bg-white/5 text-forge-muted hover:bg-white/10 hover:text-forge-text';
+  return <button type="button" disabled={disabled} onClick={onClick} className={`rounded-md border px-2 py-1 text-xs font-semibold disabled:opacity-50 ${tone}`}>{action.label}</button>;
+}
+
+function RunningCard() {
+  return (
+    <div className="flex justify-start">
+      <div className="flex items-center gap-2 rounded-full border border-forge-border bg-forge-surface px-3 py-2 text-xs font-semibold text-forge-muted">
+        <span className="h-2 w-2 animate-pulse rounded-full bg-forge-green" />
+        Agent is working…
+      </div>
+    </div>
+  );
+}
+
+function MarkdownishText({ text }: { text: string }) {
+  const blocks = useMemo(() => text.split(/\n{2,}/), [text]);
+  return (
+    <div className="space-y-2 text-sm leading-relaxed text-forge-text">
+      {blocks.map((block, index) => <p key={index} className="whitespace-pre-wrap break-words">{block}</p>)}
+    </div>
+  );
+}
+
+function timelineIconForEvent(event: AgentChatEvent) {
+  if (event.eventType === 'command' || event.eventType === 'test_run') return <Terminal className="h-3 w-3 shrink-0 text-forge-blue/70" />;
+  if (event.eventType === 'file_change') return <FileCode2 className="h-3 w-3 shrink-0 text-forge-green/70" />;
+  if (event.eventType === 'file_read') return <Search className="h-3 w-3 shrink-0 text-forge-blue/70" />;
+  return <Hammer className="h-3 w-3 shrink-0 text-forge-yellow/70" />;
+}
+
+function iconForEvent(event: AgentChatEvent) {
+  if (event.eventType === 'command' || event.eventType === 'test_run') return <Terminal className="h-4 w-4 text-forge-blue" />;
+  if (event.eventType === 'file_change') return <FileCode2 className="h-4 w-4 text-forge-green" />;
+  if (event.eventType === 'file_read') return <Search className="h-4 w-4 text-forge-blue" />;
+  if (event.eventType === 'thinking') return <Bot className="h-4 w-4 animate-pulse text-forge-violet" />;
+  if (event.eventType === 'plan' || event.eventType === 'todo') return <ListChecks className="h-4 w-4 text-forge-blue" />;
+  if (event.eventType === 'result' || (event.eventType === 'status' && event.status === 'succeeded')) return <CheckCircle2 className="h-4 w-4 text-forge-green" />;
+  if (event.eventType === 'error' || (event.eventType === 'status' && event.status === 'failed')) return <XCircle className="h-4 w-4 text-forge-red" />;
+  if (event.eventType === 'next_action') return <GitPullRequest className="h-4 w-4 text-forge-orange" />;
+  return <Hammer className="h-4 w-4 text-forge-yellow" />;
+}
+
+function labelForEvent(eventType: string) {
+  return eventType.replace(/_/g, ' ');
+}
+
+function statusClass(status: string) {
+  if (status === 'running') return 'border-forge-green/25 bg-forge-green/10 text-forge-green';
+  if (status === 'failed' || status === 'interrupted') return 'border-forge-red/25 bg-forge-red/10 text-forge-red';
+  if (status === 'succeeded') return 'border-forge-blue/25 bg-forge-blue/10 text-forge-blue';
+  return 'border-forge-border bg-white/5 text-forge-muted';
+}

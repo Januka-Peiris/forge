@@ -18,6 +18,7 @@ pub fn get_workspace_readiness(
         .iter()
         .find(|session| session.session_role == "agent" || session.terminal_kind == "agent")
         .map(|session| session.status.clone())
+        .or_else(|| crate::repositories::agent_chat_repository::latest_status_for_workspace(&state.db, workspace_id).ok().flatten())
         .unwrap_or_else(|| "idle".to_string());
     let terminal_health = health
         .as_ref()

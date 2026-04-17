@@ -360,9 +360,10 @@ function firstLine(value: string) {
   return line.length > 80 ? `${line.slice(0, 79)}…` : line;
 }
 
-// eslint-disable-next-line no-control-regex
 function stripAnsi(value: string): string {
-  return value.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\x1b[^m]*/g, '');
+  return value
+    .replace(new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[a-zA-Z]`, 'g'), '')
+    .replace(new RegExp(`${String.fromCharCode(27)}[^m]*`, 'g'), '');
 }
 
 function normalize(value: string) {

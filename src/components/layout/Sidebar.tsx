@@ -199,15 +199,6 @@ export function Sidebar({
     <aside className="w-full shrink-0 flex flex-col h-full bg-forge-surface">
       <div className="px-4 py-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-2">
-          <img
-            src="/brand/logo-word.png"
-            alt="Forge"
-            width={2048}
-            height={1048}
-            decoding="async"
-            draggable={false}
-            className="block h-[44px] w-auto max-w-full object-contain object-left"
-          />
           {totalSpend && (
             <span className="text-xs font-mono text-forge-muted/70 shrink-0" title="Total estimated agent spend across all workspaces">
               {totalSpend}

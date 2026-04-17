@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { buildWorkspaceRepoContext } from '../../lib/tauri-api/context';
 import { useContextPreview } from '../../hooks/useContextPreview';
 import type { ContextSegment } from '../../types/context';

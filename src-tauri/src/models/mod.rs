@@ -1,5 +1,6 @@
 pub mod activity;
 pub mod agent_context;
+pub mod agent_chat;
 pub mod agent_memory;
 pub mod agent_profile;
 pub mod orchestrator;
@@ -30,6 +31,10 @@ pub use activity::ActivityItem;
 pub use agent_context::{
     AgentContextWorktree, RepoMap, RepoMapEntry, RepoMapMeta, WorkspaceAgentContext,
     WorkspaceContextItem, WorkspaceContextPreview,
+};
+pub use agent_chat::{
+    AgentChatEvent, AgentChatEventEnvelope, AgentChatSession, CreateAgentChatSessionInput,
+    SendAgentChatMessageInput,
 };
 pub use agent_memory::{AgentMemory, SetAgentMemoryInput};
 pub use orchestrator::{OrchestratorAction, OrchestratorStatus};

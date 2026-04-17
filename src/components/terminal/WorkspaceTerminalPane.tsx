@@ -27,6 +27,7 @@ export function TerminalPane({
   session: TerminalSession;
   chunks: TerminalOutputChunk[];
   focused: boolean;
+  stuckSince?: string | null;
   onFocus: () => void;
   onAttach: () => void;
   onStop: () => void;

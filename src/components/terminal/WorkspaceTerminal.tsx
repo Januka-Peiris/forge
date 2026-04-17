@@ -1,7 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Copy, ExternalLink, FileText, Globe2, Link2, MoreHorizontal, PlugZap, RefreshCw, RotateCcw, Settings2, Square, Terminal as TerminalIcon, Wrench, X, Zap } from 'lucide-react';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { AgentProfile, ForgeWorkspaceConfig, PromptTemplate, TerminalOutputChunk, TerminalOutputEvent, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceContextPreview, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
+import type { ForgeWorkspaceConfig, PromptTemplate, TerminalOutputChunk, TerminalOutputEvent, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceContextPreview, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
+import type { AgentChatEvent, AgentChatEventEnvelope, AgentChatNextAction, AgentChatSession } from '../../types/agent-chat';
+import type { WorkspaceChangedFile } from '../../types/git-review';
+import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
 import {
   attachWorkspaceTerminalSession,
   closeWorkspaceTerminalSessionById,
@@ -32,8 +35,19 @@ import { listWorkspacePromptTemplates } from '../../lib/tauri-api/prompt-templat
 import { getWorkspaceAgentContext, getWorkspaceContextPreview, refreshWorkspaceRepoContext } from '../../lib/tauri-api/agent-context';
 import { getWorkspaceHealth } from '../../lib/tauri-api/workspace-health';
 import { getWorkspaceReadiness } from '../../lib/tauri-api/workspace-readiness';
+import { getWorkspaceChangedFiles } from '../../lib/tauri-api/git-review';
+import { getWorkspaceReviewCockpit, refreshWorkspacePrComments } from '../../lib/tauri-api/review-cockpit';
+import { createWorkspacePr } from '../../lib/tauri-api/pr-draft';
 import {
-  agentProfilesForPromptPicker,
+  createAgentChatSession,
+  closeAgentChatSession,
+  interruptAgentChatSession,
+  listAgentChatEvents,
+  listAgentChatSessions,
+  sendAgentChatMessage,
+} from '../../lib/tauri-api/agent-chat';
+import { getAiModelSettings } from '../../lib/tauri-api/settings';
+import {
   defaultWorkspaceAgentProfileId,
   listWorkspaceAgentProfiles,
 } from '../../lib/tauri-api/agent-profiles';
@@ -41,6 +55,13 @@ import { forgeWarn } from '../../lib/forge-log';
 import { useAgentProfile } from '../../lib/hooks/useAgentProfile';
 import { measureAsync } from '../../lib/perf';
 import { formatCursorOpenError, formatSessionError } from '../../lib/ui-errors';
+import {
+  deriveAgentRunSections,
+  deriveNextActions,
+  deriveWorkbenchSummary,
+  latestPlanEvent,
+  modelContextLabel,
+} from '../../lib/agent-workbench';
 import {
   AGENT_COMPOSER_DEFAULT_PX,
   AGENT_COMPOSER_HEIGHT_KEY,
@@ -58,15 +79,52 @@ import {
   WorkspaceReadinessStrip,
 } from './WorkspaceTerminalStrips';
 import { TerminalPane } from './WorkspaceTerminalPane';
+import { AgentChatPanel } from '../agent/AgentChatPanel';
 
 interface WorkspaceTerminalProps {
   workspace: Workspace | null;
   onOpenInCursor?: () => void;
 }
 
+const CLAUDE_AGENT_OPTIONS = [
+  { value: 'general-purpose', label: 'general-purpose', hint: 'default' },
+  { value: 'Plan', label: 'Plan', hint: 'planning' },
+  { value: 'Explore', label: 'Explore', hint: 'haiku' },
+  { value: 'superpowers:code-reviewer', label: 'code-reviewer', hint: 'review' },
+];
+
+const CLAUDE_THINKING_OPTIONS = [
+  { value: 'Default', label: 'Default', hint: 'Claude default' },
+  { value: 'Low', label: 'Low', hint: 'faster' },
+  { value: 'Medium', label: 'Medium', hint: 'balanced' },
+  { value: 'High', label: 'High', hint: 'deeper' },
+  { value: 'Extra High', label: 'Extra High', hint: 'xhigh' },
+  { value: 'Max', label: 'Max', hint: 'maximum' },
+];
+
+const CLAUDE_MODEL_OPTIONS = [
+  { value: 'claude-opus-4-7', label: 'Opus 4.7' },
+  { value: 'claude-opus-4-7[1m]', label: 'Opus 4.7 · 1M context' },
+  { value: 'claude-opus-4-6', label: 'Opus 4.6' },
+  { value: 'claude-opus-4-6[1m]', label: 'Opus 4.6 · 1M context' },
+  { value: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
+  { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
+];
+
+function compactClaudeModelLabel(model: string) {
+  return CLAUDE_MODEL_OPTIONS.find((option) => option.value === model)?.label
+    ?? model
+      .replace(/^claude-/, '')
+      .replace(/-/g, ' ')
+      .replace(/\b(opus|sonnet|haiku)\b/i, (match) => match[0].toUpperCase() + match.slice(1));
+}
+
 export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTerminalProps) {
   const [visibleSessions, setVisibleSessions] = useState<TerminalSession[]>([]);
   const [allSessions, setAllSessions] = useState<TerminalSession[]>([]);
+  const [chatSessions, setChatSessions] = useState<AgentChatSession[]>([]);
+  const [chatEvents, setChatEvents] = useState<Record<string, AgentChatEvent[]>>({});
+  const [focusedChatId, setFocusedChatId] = useState<string | null>(null);
   const [outputs, setOutputs] = useState<OutputMap>({});
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [promptInput, setPromptInput] = useState('');
@@ -82,8 +140,12 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   const [contextBusy, setContextBusy] = useState(false);
   const [workspaceHealth, setWorkspaceHealth] = useState<WorkspaceHealth | null>(null);
   const [workspaceReadiness, setWorkspaceReadiness] = useState<WorkspaceReadiness | null>(null);
-  const [agentProfiles, setAgentProfiles] = useState<AgentProfile[]>([]);
+  const [changedFiles, setChangedFiles] = useState<WorkspaceChangedFile[]>([]);
+  const [reviewCockpit, setReviewCockpit] = useState<WorkspaceReviewCockpit | null>(null);
+  const [acceptedPlans, setAcceptedPlans] = useState<Record<string, string>>({});
   const [selectedProfileId, setSelectedProfileId] = useAgentProfile();
+  const [selectedClaudeAgent, setSelectedClaudeAgent] = useState('general-purpose');
+  const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-6');
   const [selectedTaskMode, setSelectedTaskMode] = useState('Act');
   const [selectedReasoning, setSelectedReasoning] = useState('Default');
   const [sendBehavior, setSendBehavior] = useState<'send_now' | 'interrupt_send'>('send_now');
@@ -105,6 +167,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   const pendingOutputRef = useRef<Record<string, TerminalOutputChunk[]>>({});
   const outputFlushRafRef = useRef<number | null>(null);
   const focusedIdRef = useRef<string | null>(null);
+  const focusedChatIdRef = useRef<string | null>(null);
   const metadataPollTickRef = useRef(0);
   /** Serializes agent prompt writes so rapid Enter / Send do not race attach + PTY. */
   const promptSendChainRef = useRef(Promise.resolve());
@@ -128,7 +191,35 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     () => visibleSessions.find((session) => session.id === focusedId) ?? visibleSessions[0] ?? null,
     [focusedId, visibleSessions],
   );
-  const focusedIsAgent = focusedSession?.terminalKind === 'agent' || focusedSession?.sessionRole === 'agent';
+  const focusedChatSession = useMemo(
+    () => chatSessions.find((session) => session.id === focusedChatId) ?? null,
+    [chatSessions, focusedChatId],
+  );
+  const focusedIsAgent = !!focusedChatSession || focusedSession?.terminalKind === 'agent' || focusedSession?.sessionRole === 'agent';
+  const focusedChatEvents = useMemo(
+    () => focusedChatSession ? (chatEvents[focusedChatSession.id] ?? []) : [],
+    [chatEvents, focusedChatSession],
+  );
+  const focusedRunSections = useMemo(
+    () => deriveAgentRunSections(focusedChatEvents),
+    [focusedChatEvents],
+  );
+  const focusedWorkbenchSummary = useMemo(
+    () => deriveWorkbenchSummary(workspaceReadiness, changedFiles, reviewCockpit),
+    [changedFiles, reviewCockpit, workspaceReadiness],
+  );
+  const focusedNextActions = useMemo(
+    () => focusedChatSession ? deriveNextActions({
+      session: focusedChatSession,
+      events: focusedChatEvents,
+      readiness: workspaceReadiness,
+      changedFiles,
+      reviewCockpit,
+      hasRunCommands: (forgeConfig?.run.length ?? 0) > 0,
+      hasPr: !!workspace?.prNumber,
+    }) : [],
+    [changedFiles, focusedChatEvents, focusedChatSession, forgeConfig?.run.length, reviewCockpit, workspace?.prNumber, workspaceReadiness],
+  );
 
   /** Running sessions not shown in the main panes (for the attach overflow strip only). */
   const dockOverflowSessions = useMemo(() => {
@@ -165,6 +256,10 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   useEffect(() => {
     focusedIdRef.current = focusedId;
   }, [focusedId]);
+
+  useEffect(() => {
+    focusedChatIdRef.current = focusedChatId;
+  }, [focusedChatId]);
 
   const appendOutput = useCallback((sessionId: string, chunks: TerminalOutputChunk[], reset = false) => {
     if (chunks.length === 0 && !reset) return;
@@ -233,6 +328,25 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       setActionError(err);
     }
   }, [appendOutput, setActionError, workspaceId]);
+
+  const refreshChatSessions = useCallback(async (preferredFocusId?: string | null) => {
+    if (!workspaceId) return;
+    try {
+      const sessions = await listAgentChatSessions(workspaceId);
+      setChatSessions(sessions);
+      const nextFocusedChatId = preferredFocusId ?? focusedChatIdRef.current;
+      const focused = nextFocusedChatId && sessions.some((session) => session.id === nextFocusedChatId)
+        ? nextFocusedChatId
+        : sessions[0]?.id ?? null;
+      setFocusedChatId(focused);
+      const eventPairs = await Promise.all(
+        sessions.slice(0, 12).map(async (session) => [session.id, await listAgentChatEvents(session.id)] as const),
+      );
+      setChatEvents((current) => ({ ...current, ...Object.fromEntries(eventPairs) }));
+    } catch (err) {
+      setActionError(err);
+    }
+  }, [setActionError, workspaceId]);
 
   const refreshForgeConfig = useCallback(async () => {
     if (!workspaceId) return;
@@ -307,18 +421,41 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     }
   }, [workspaceId]);
 
+  const refreshWorkbenchState = useCallback(async () => {
+    if (!workspaceId) return;
+    try {
+      const [files, cockpit] = await Promise.all([
+        getWorkspaceChangedFiles(workspaceId).catch(() => []),
+        getWorkspaceReviewCockpit(workspaceId, null).catch(() => null),
+      ]);
+      setChangedFiles(files);
+      setReviewCockpit(cockpit);
+    } catch (err) {
+      forgeWarn('agent-workbench', 'load error', { err });
+      setChangedFiles([]);
+      setReviewCockpit(null);
+    }
+  }, [workspaceId]);
+
   const refreshAgentProfiles = useCallback(async () => {
     try {
       const profiles = await listWorkspaceAgentProfiles(workspaceId);
-      setAgentProfiles(profiles);
       setSelectedProfileId((current) =>
         profiles.some((profile) => profile.id === current) ? current : defaultWorkspaceAgentProfileId(profiles),
       );
     } catch (err) {
       forgeWarn('agent-profiles', 'load error', { err });
-      setAgentProfiles([]);
     }
   }, [setSelectedProfileId, workspaceId]);
+
+  const refreshModelSettings = useCallback(async () => {
+    try {
+      const settings = await getAiModelSettings();
+      setSelectedModel(settings.agentModel);
+    } catch (err) {
+      forgeWarn('agent-models', 'load error', { err });
+    }
+  }, []);
 
   const resetWorkspaceState = useCallback(() => {
     nextSeqRef.current = {};
@@ -331,9 +468,13 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     promptSessionCharsRef.current = 0;
     setPromptMeter(null);
     focusedIdRef.current = null;
+    focusedChatIdRef.current = null;
     setOutputs({});
     setVisibleSessions([]);
     setAllSessions([]);
+    setChatSessions([]);
+    setChatEvents({});
+    setFocusedChatId(null);
     setForgeConfig(null);
     setPorts([]);
     setPromptTemplates([]);
@@ -343,9 +484,13 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     setContextBusy(false);
     setWorkspaceHealth(null);
     setWorkspaceReadiness(null);
+    setChangedFiles([]);
+    setReviewCockpit(null);
+    setAcceptedPlans({});
     setFocusedId(null);
     setPromptInput('');
     setError(null);
+    setSelectedClaudeAgent('general-purpose');
   }, []);
 
   useEffect(() => {
@@ -355,7 +500,10 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       void refreshPromptTemplates();
       void refreshAgentContext();
       void refreshAgentProfiles();
+      void refreshModelSettings();
       void refreshSessions(false, true);
+      void refreshChatSessions();
+      void refreshWorkbenchState();
       const timer = window.setTimeout(() => {
         if (document.hidden) return;
         void refreshHealth();
@@ -363,7 +511,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       }, 1500);
       return () => window.clearTimeout(timer);
     }
-  }, [refreshAgentContext, refreshAgentProfiles, refreshForgeConfig, refreshHealth, refreshReadiness, refreshPromptTemplates, refreshSessions, resetWorkspaceState, workspaceId]);
+  }, [refreshAgentContext, refreshAgentProfiles, refreshChatSessions, refreshForgeConfig, refreshHealth, refreshModelSettings, refreshReadiness, refreshPromptTemplates, refreshSessions, refreshWorkbenchState, resetWorkspaceState, workspaceId]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -373,18 +521,21 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       const shouldBackfillOutput = metadataPollTickRef.current % 6 === 0;
       const shouldRefreshExpensiveState = metadataPollTickRef.current % 3 === 0;
       void refreshSessions(false, shouldBackfillOutput);
+      void refreshChatSessions();
       if (shouldRefreshExpensiveState) {
         void refreshHealth();
         void refreshReadiness();
+        void refreshWorkbenchState();
       }
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [refreshHealth, refreshReadiness, refreshSessions, workspaceId]);
+  }, [refreshChatSessions, refreshHealth, refreshReadiness, refreshSessions, refreshWorkbenchState, workspaceId]);
 
   useEffect(() => {
     if (!workspaceId) return;
     let unlisten: UnlistenFn | undefined;
     let unlistenApproval: UnlistenFn | undefined;
+    let unlistenAgentChat: UnlistenFn | undefined;
     let disposed = false;
 
     void listen<PendingCommand>('forge://command-approval-required', (event) => {
@@ -400,12 +551,38 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     }).then((fn) => {
       if (disposed) fn(); else unlisten = fn;
     }).catch(() => undefined);
+
+    void listen<AgentChatEventEnvelope>('forge://agent-chat-event', (event) => {
+      if (disposed || event.payload.workspaceId !== workspaceId) return;
+      const { session, event: chatEvent } = event.payload;
+      setChatSessions((current) => {
+        const without = current.filter((item) => item.id !== session.id);
+        return [session, ...without].sort((a, b) => Number(b.createdAt) - Number(a.createdAt));
+      });
+      setChatEvents((current) => {
+        const existing = current[chatEvent.sessionId] ?? [];
+        if (existing.some((item) => item.id === chatEvent.id)) return current;
+        return {
+          ...current,
+          [chatEvent.sessionId]: [...existing, chatEvent].sort((a, b) => a.seq - b.seq),
+        };
+      });
+      if (chatEvent.eventType === 'status' && (chatEvent.status === 'succeeded' || chatEvent.status === 'failed')) {
+        window.setTimeout(() => {
+          void refreshReadiness();
+          void refreshWorkbenchState();
+        }, 600);
+      }
+    }).then((fn) => {
+      if (disposed) fn(); else unlistenAgentChat = fn;
+    }).catch(() => undefined);
     return () => {
       disposed = true;
       if (unlisten) unlisten();
       if (unlistenApproval) unlistenApproval();
+      if (unlistenAgentChat) unlistenAgentChat();
     };
-  }, [enqueueOutput, workspaceId]);
+  }, [enqueueOutput, refreshReadiness, refreshWorkbenchState, workspaceId]);
 
   const createTerminal = async (kind: 'agent' | 'shell', profile: TerminalProfile, title?: string, profileId?: string) => {
     if (!workspaceId) return;
@@ -416,7 +593,55 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       nextSeqRef.current[session.id] = 0;
       focusedIdRef.current = session.id;
       setFocusedId(session.id);
+      focusedChatIdRef.current = null;
+      setFocusedChatId(null);
+      focusedChatIdRef.current = null;
+      setFocusedChatId(null);
       await refreshSessions(true, true, session.id);
+      await refreshHealth();
+      await refreshReadiness();
+    } catch (err) {
+      setActionError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const createChatSession = async (provider: 'claude_code' | 'codex', title?: string) => {
+    if (!workspaceId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const session = await createAgentChatSession({ workspaceId, provider, title });
+      focusedChatIdRef.current = session.id;
+      setFocusedChatId(session.id);
+      focusedIdRef.current = null;
+      setFocusedId(null);
+      await refreshChatSessions(session.id);
+      await refreshHealth();
+      await refreshReadiness();
+    } catch (err) {
+      setActionError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const closeChatSession = async (sessionId: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await closeAgentChatSession(sessionId);
+      setChatEvents((current) => {
+        const next = { ...current };
+        delete next[sessionId];
+        return next;
+      });
+      const remaining = chatSessions.filter((session) => session.id !== sessionId);
+      const nextFocus = remaining[0]?.id ?? null;
+      focusedChatIdRef.current = nextFocus;
+      setFocusedChatId(nextFocus);
+      await refreshChatSessions(nextFocus);
       await refreshHealth();
       await refreshReadiness();
     } catch (err) {
@@ -651,15 +876,175 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     }
   };
 
+  const togglePlanMode = () => {
+    setSelectedTaskMode((current) => {
+      const next = current === 'Plan' ? 'Act' : 'Plan';
+      setSelectedClaudeAgent(next === 'Plan' ? 'Plan' : 'general-purpose');
+      return next;
+    });
+  };
+
+  const sendChatInstruction = async (
+    text: string,
+    overrides?: Partial<{
+      claudeAgent: string;
+      taskMode: string;
+      reasoning: string;
+      model: string;
+    }>,
+  ) => {
+    if (!focusedChatSession || !text.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await sendAgentChatMessage({
+        sessionId: focusedChatSession.id,
+        prompt: text.trim(),
+        profileId: selectedProfileId,
+        taskMode: overrides?.taskMode ?? selectedTaskMode,
+        reasoning: overrides?.reasoning ?? selectedReasoning,
+        claudeAgent: overrides?.claudeAgent ?? selectedClaudeAgent,
+        model: overrides?.model ?? selectedModel,
+      });
+      await refreshChatSessions(focusedChatSession.id);
+    } catch (err) {
+      setActionError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleWorkbenchAction = async (action: AgentChatNextAction, event?: AgentChatEvent) => {
+    if (!focusedChatSession) return;
+    switch (action.kind) {
+      case 'accept_plan': {
+        const plan = event ?? latestPlanEvent(focusedChatEvents);
+        if (plan?.body) {
+          setAcceptedPlans((current) => ({ ...current, [focusedChatSession.id]: plan.body }));
+          setSelectedTaskMode('Act');
+          setSelectedClaudeAgent('general-purpose');
+        }
+        return;
+      }
+      case 'ask_followup':
+        setPromptInput((current) => current || 'Can you clarify the plan tradeoffs and risks before implementation?');
+        return;
+      case 'switch_to_act':
+        setSelectedTaskMode('Act');
+        setSelectedClaudeAgent('general-purpose');
+        return;
+      case 'copy_plan': {
+        const plan = event ?? latestPlanEvent(focusedChatEvents);
+        if (plan?.body) await navigator.clipboard.writeText(plan.body).catch(setActionError);
+        return;
+      }
+      case 'review_diff':
+        setActiveHeaderTab('readiness');
+        await refreshWorkbenchState();
+        return;
+      case 'run_tests':
+        if (forgeConfig?.run[0]) void startRunCommand(0);
+        return;
+      case 'ask_reviewer':
+        setSelectedTaskMode('Review');
+        setSelectedClaudeAgent('superpowers:code-reviewer');
+        await sendChatInstruction(
+          'Review the current workspace changes. Focus on correctness, tests, merge risk, and actionable issues. Do not make edits unless a fix is clearly necessary.',
+          { claudeAgent: 'superpowers:code-reviewer', taskMode: 'Review' },
+        );
+        return;
+      case 'create_pr':
+        if (workspaceId) {
+          setBusy(true);
+          setError(null);
+          try {
+            await createWorkspacePr(workspaceId);
+            await refreshWorkbenchState();
+            await refreshReadiness();
+          } catch (err) {
+            setActionError(err);
+          } finally {
+            setBusy(false);
+          }
+        }
+        return;
+      case 'open_diagnostics':
+        setPromptInput((current) => current || 'Review the raw diagnostics and explain what happened.');
+        return;
+      case 'send_failure':
+        await sendChatInstruction('The previous run failed. Inspect the diagnostics, explain the failure, and propose the smallest safe fix.');
+        return;
+      case 'refresh_comments':
+        if (workspaceId) {
+          const cockpit = await refreshWorkspacePrComments(workspaceId).catch((err) => {
+            setActionError(err);
+            return null;
+          });
+          if (cockpit) setReviewCockpit(cockpit);
+        }
+        return;
+      case 'archive_chat':
+        void closeChatSession(focusedChatSession.id);
+        return;
+      default:
+        return;
+    }
+  };
+
+  const applyWorkflowPreset = async (preset: 'plan-act' | 'plan-codex-review' | 'implement-review-pr') => {
+    if (preset === 'plan-act') {
+      setSelectedTaskMode('Plan');
+      setSelectedClaudeAgent('Plan');
+      setPromptInput((current) => current || 'Create a concise implementation plan for this workspace. Do not edit files yet.');
+    } else if (preset === 'plan-codex-review') {
+      setSelectedTaskMode('Plan');
+      setSelectedClaudeAgent('Plan');
+      setPromptInput((current) => current || 'Plan the implementation. After the plan is accepted, Forge will route implementation/review follow-up.');
+    } else {
+      setSelectedTaskMode('Act');
+      setSelectedClaudeAgent('general-purpose');
+      setPromptInput((current) => current || 'Implement the requested change, then summarize changed files, tests, and PR readiness.');
+    }
+  };
+
   const sendPrompt = (mode: 'send_now' | 'interrupt_send' = sendBehavior) => {
     if (!workspaceId || !promptInput.trim()) return;
-    const text = promptInput.trim();
+    let text = promptInput.trim();
     setPromptInput('');
 
     const work = async () => {
       setBusy(true);
       setError(null);
       try {
+        if (focusedChatSession) {
+          const acceptedPlan = acceptedPlans[focusedChatSession.id];
+          if (acceptedPlan && selectedTaskMode !== 'Plan' && !text.includes('Accepted implementation plan:')) {
+            text = `Accepted implementation plan:\n${acceptedPlan}\n\nNow continue with this user request:\n${text}`;
+          }
+          if (mode === 'interrupt_send' && focusedChatSession.status === 'running') {
+            await interruptAgentChatSession(focusedChatSession.id).catch(() => undefined);
+          }
+          await sendAgentChatMessage({
+            sessionId: focusedChatSession.id,
+            prompt: text,
+            profileId: selectedProfileId,
+            taskMode: selectedTaskMode,
+            reasoning: selectedReasoning,
+            claudeAgent: selectedClaudeAgent,
+            model: selectedModel,
+          });
+          const charCount = text.length;
+          promptSessionCharsRef.current += charCount;
+          const sessionChars = promptSessionCharsRef.current;
+          setPromptMeter({
+            lastChars: charCount,
+            lastEstTokens: roughTokenEstimateFromChars(charCount),
+            sessionChars,
+            sessionEstTokens: roughTokenEstimateFromChars(sessionChars),
+          });
+          await refreshChatSessions(focusedChatSession.id);
+          return;
+        }
         if (mode === 'interrupt_send' && focusedSession) {
           await interruptWorkspaceTerminalSessionById(focusedSession.id).catch(() => undefined);
         }
@@ -726,15 +1111,73 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
           onDismiss={() => setPendingCommand(null)}
         />
       )}
-      <div className="sticky top-0 z-10 shrink-0 border-b border-forge-border bg-forge-surface/95 px-4 py-2.5 backdrop-blur">
-        {/* Title + primary actions row */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
+      <div className="sticky top-0 z-10 shrink-0 border-b border-forge-border bg-forge-surface/95 px-4 py-2 backdrop-blur">
+        {/* Single compact header row */}
+        <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             <TerminalIcon className="h-4 w-4 shrink-0 text-forge-orange" />
-            <h1 className="truncate text-base font-bold text-forge-text">{workspace.name}</h1>
+            <h1 className="shrink-0 text-sm font-bold text-forge-text">{workspace.name}</h1>
+            <span className="text-forge-border/60">/</span>
+            <p className="min-w-0 truncate font-mono text-xs text-forge-muted">{workspace.repo} / {workspace.branch}</p>
           </div>
+          {/* Inline strip tab buttons */}
+          {(forgeConfig !== null || workspaceId !== null || workspaceReadiness !== null || workspaceHealth !== null) && (
+            <div className="flex shrink-0 items-center gap-0.5">
+              {forgeConfig !== null && (
+                <button
+                  onClick={() => setActiveHeaderTab((v) => v === 'commands' ? null : 'commands')}
+                  className={`flex items-center gap-1 rounded px-2.5 py-1 text-xs font-semibold transition-colors ${activeHeaderTab === 'commands' ? 'bg-white/8 text-forge-text' : 'text-forge-muted hover:bg-white/5 hover:text-forge-text/80'}`}
+                >
+                  <Wrench className="h-3 w-3" />
+                  Commands
+                  {forgeConfig.warning && <span className="rounded-full border border-forge-yellow/25 bg-forge-yellow/10 px-1 text-[10px] text-forge-yellow">!</span>}
+                  {forgeConfig.exists && !forgeConfig.warning && <span className="rounded-full border border-forge-green/25 bg-forge-green/10 px-1 text-[10px] text-forge-green">✓</span>}
+                  {visibleSessions.filter((s) => s.terminalKind === 'run' && s.status === 'running').length > 0 && (
+                    <span className="rounded-full border border-forge-blue/25 bg-forge-blue/10 px-1.5 text-[10px] text-forge-blue">
+                      {visibleSessions.filter((s) => s.terminalKind === 'run' && s.status === 'running').length}
+                    </span>
+                  )}
+                  <ChevronDown className={`h-3 w-3 transition-transform ${activeHeaderTab === 'commands' ? 'rotate-180' : ''}`} />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setActiveHeaderTab((v) => v === 'ports' ? null : 'ports')}
+                className={`flex items-center gap-1 rounded px-2.5 py-1 text-xs font-semibold transition-colors ${activeHeaderTab === 'ports' ? 'bg-white/8 text-forge-text' : 'text-forge-muted hover:bg-white/5 hover:text-forge-text/80'}`}
+              >
+                <Globe2 className="h-3 w-3" />
+                Testing
+                {ports.length > 0 && (
+                  <span className="rounded-full border border-forge-blue/25 bg-forge-blue/10 px-1.5 text-[10px] text-forge-blue">
+                    {ports.length}
+                  </span>
+                )}
+                <ChevronDown className={`h-3 w-3 transition-transform ${activeHeaderTab === 'ports' ? 'rotate-180' : ''}`} />
+              </button>
+              {workspaceReadiness !== null && (
+                <button
+                  onClick={() => setActiveHeaderTab((v) => v === 'readiness' ? null : 'readiness')}
+                  className={`flex items-center gap-1 rounded px-2.5 py-1 text-xs font-semibold transition-colors ${activeHeaderTab === 'readiness' ? 'bg-white/8 text-forge-text' : 'text-forge-muted hover:bg-white/5 hover:text-forge-text/80'}`}
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  Readiness
+                  <ChevronDown className={`h-3 w-3 transition-transform ${activeHeaderTab === 'readiness' ? 'rotate-180' : ''}`} />
+                </button>
+              )}
+              {workspaceHealth !== null && (
+                <button
+                  onClick={() => setActiveHeaderTab((v) => v === 'health' ? null : 'health')}
+                  className={`flex items-center gap-1 rounded px-2.5 py-1 text-xs font-semibold transition-colors ${activeHeaderTab === 'health' ? 'bg-white/8 text-forge-text' : 'text-forge-muted hover:bg-white/5 hover:text-forge-text/80'}`}
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  Health
+                  <ChevronDown className={`h-3 w-3 transition-transform ${activeHeaderTab === 'health' ? 'rotate-180' : ''}`} />
+                </button>
+              )}
+            </div>
+          )}
           <div className="flex shrink-0 items-center gap-1.5">
-            <button disabled={busy} onClick={() => void createTerminal('agent', 'claude_code', 'Claude')} className="rounded-lg border border-forge-orange/30 bg-forge-orange/10 px-2.5 py-1.5 text-sm font-semibold text-forge-orange hover:bg-forge-orange/20 disabled:opacity-50">
+            <button disabled={busy} onClick={() => void createChatSession('claude_code', 'Claude Chat')} className="rounded-lg border border-forge-orange/30 bg-forge-orange/10 px-2.5 py-1.5 text-sm font-semibold text-forge-orange hover:bg-forge-orange/20 disabled:opacity-50">
               New Claude
             </button>
             {/* Overflow menu */}
@@ -756,14 +1199,14 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                   </button>
                   <button
                     disabled={busy}
-                    onClick={() => { void createTerminal('agent', 'codex', 'Codex'); setShowOverflow(false); }}
+                    onClick={() => { void createChatSession('codex', 'Codex Chat'); setShowOverflow(false); }}
                     className="flex w-full items-center gap-2 px-3 py-2 text-sm text-forge-text/85 hover:bg-white/5 disabled:opacity-50"
                   >
                     New Codex tab
                   </button>
                   <button
                     disabled={busy}
-                    onClick={() => { void createTerminal('agent', 'claude_code', 'Claude'); setShowOverflow(false); }}
+                    onClick={() => { void createChatSession('claude_code', 'Claude Chat'); setShowOverflow(false); }}
                     className="flex w-full items-center gap-2 px-3 py-2 text-sm text-forge-text/85 hover:bg-white/5 disabled:opacity-50"
                   >
                     New Claude tab
@@ -799,70 +1242,6 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
             </div>
           </div>
         </div>
-
-        {/* Compact status line */}
-        <div className="mt-1 flex items-center gap-2 text-xs">
-          <p className="min-w-0 flex-1 truncate font-mono text-forge-muted">
-            {workspace.repo} / {workspace.branch}
-          </p>
-        </div>
-
-        {/* Header tab bar — only shown when there's at least one strip to show */}
-        {(forgeConfig !== null || workspaceId !== null || workspaceReadiness !== null || workspaceHealth !== null) && (
-          <div className="mt-2 flex items-center gap-0.5">
-            {forgeConfig !== null && (
-              <button
-                onClick={() => setActiveHeaderTab((v) => v === 'commands' ? null : 'commands')}
-                className={`flex items-center gap-1 rounded px-3 py-1 text-xs font-semibold transition-colors ${activeHeaderTab === 'commands' ? 'bg-white/8 text-forge-text' : 'text-forge-muted hover:bg-white/5 hover:text-forge-text/80'}`}
-              >
-                <Wrench className="h-3 w-3" />
-                Commands
-                {forgeConfig.warning && <span className="rounded-full border border-forge-yellow/25 bg-forge-yellow/10 px-1 text-xs text-forge-yellow">!</span>}
-                {forgeConfig.exists && !forgeConfig.warning && <span className="rounded-full border border-forge-green/25 bg-forge-green/10 px-1 text-xs text-forge-green">✓</span>}
-                {visibleSessions.filter((s) => s.terminalKind === 'run' && s.status === 'running').length > 0 && (
-                  <span className="rounded-full border border-forge-blue/25 bg-forge-blue/10 px-1.5 text-xs text-forge-blue">
-                    {visibleSessions.filter((s) => s.terminalKind === 'run' && s.status === 'running').length}
-                  </span>
-                )}
-                <ChevronDown className={`h-3 w-3 transition-transform ${activeHeaderTab === 'commands' ? 'rotate-180' : ''}`} />
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setActiveHeaderTab((v) => v === 'ports' ? null : 'ports')}
-              className={`flex items-center gap-1 rounded px-3 py-1 text-xs font-semibold transition-colors ${activeHeaderTab === 'ports' ? 'bg-white/8 text-forge-text' : 'text-forge-muted hover:bg-white/5 hover:text-forge-text/80'}`}
-            >
-              <Globe2 className="h-3 w-3" />
-              Testing
-              {ports.length > 0 && (
-                <span className="rounded-full border border-forge-blue/25 bg-forge-blue/10 px-1.5 text-xs text-forge-blue">
-                  {ports.length}
-                </span>
-              )}
-              <ChevronDown className={`h-3 w-3 transition-transform ${activeHeaderTab === 'ports' ? 'rotate-180' : ''}`} />
-            </button>
-            {workspaceReadiness !== null && (
-              <button
-                onClick={() => setActiveHeaderTab((v) => v === 'readiness' ? null : 'readiness')}
-                className={`flex items-center gap-1 rounded px-3 py-1 text-xs font-semibold transition-colors ${activeHeaderTab === 'readiness' ? 'bg-white/8 text-forge-text' : 'text-forge-muted hover:bg-white/5 hover:text-forge-text/80'}`}
-              >
-                <RotateCcw className="h-3 w-3" />
-                Readiness
-                <ChevronDown className={`h-3 w-3 transition-transform ${activeHeaderTab === 'readiness' ? 'rotate-180' : ''}`} />
-              </button>
-            )}
-            {workspaceHealth !== null && (
-              <button
-                onClick={() => setActiveHeaderTab((v) => v === 'health' ? null : 'health')}
-                className={`flex items-center gap-1 rounded px-3 py-1 text-xs font-semibold transition-colors ${activeHeaderTab === 'health' ? 'bg-white/8 text-forge-text' : 'text-forge-muted hover:bg-white/5 hover:text-forge-text/80'}`}
-              >
-                <RefreshCw className="h-3 w-3" />
-                Health
-                <ChevronDown className={`h-3 w-3 transition-transform ${activeHeaderTab === 'health' ? 'rotate-180' : ''}`} />
-              </button>
-            )}
-          </div>
-        )}
 
         {/* Active strip content */}
         {activeHeaderTab === 'commands' && (
@@ -922,7 +1301,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
-        {visibleSessions.length === 0 ? (
+        {visibleSessions.length === 0 && chatSessions.length === 0 ? (
           <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-forge-border bg-forge-bg p-8 text-center">
             <div className="max-w-md">
               <TerminalIcon className="mx-auto mb-3 h-9 w-9 text-forge-muted" />
@@ -931,18 +1310,50 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                 Launch agents, shells, and dev servers for this workspace.
               </p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
-                <button disabled={busy} onClick={() => void createTerminal('agent', 'claude_code', 'Claude')} className="rounded-lg bg-forge-orange px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Start Claude</button>
-                <button disabled={busy} onClick={() => void createTerminal('agent', 'codex', 'Codex')} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">Start Codex</button>
+                <button disabled={busy} onClick={() => void createChatSession('claude_code', 'Claude Chat')} className="rounded-lg bg-forge-orange px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Start Claude</button>
+                <button disabled={busy} onClick={() => void createChatSession('codex', 'Codex Chat')} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">Start Codex</button>
                 <button disabled={busy} onClick={() => void createTerminal('shell', 'shell', 'Shell')} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">New Shell</button>
               </div>
             </div>
           </div>
-        ) : focusedSession ? (
+        ) : focusedChatSession || focusedSession ? (
           <>
             <div className="flex shrink-0 items-center gap-1 overflow-x-auto px-1 pb-1">
+              {chatSessions.map((session) => {
+                const active = focusedChatSession?.id === session.id;
+                return (
+                  <button
+                    key={session.id}
+                    type="button"
+                    onClick={() => {
+                      focusedChatIdRef.current = session.id;
+                      setFocusedChatId(session.id);
+                      focusedIdRef.current = null;
+                      setFocusedId(null);
+                      if (!chatEvents[session.id]) void listAgentChatEvents(session.id).then((events) => setChatEvents((current) => ({ ...current, [session.id]: events })));
+                    }}
+                    className={`group flex max-w-[220px] shrink-0 items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition-colors ${active ? 'border-forge-orange/40 bg-forge-orange/10 text-forge-text' : 'border-transparent bg-transparent text-forge-muted hover:bg-white/5 hover:text-forge-text/85'}`}
+                    title={`${session.title} · ${session.status} · ${session.cwd}`}
+                  >
+                    <span className="truncate text-sm font-semibold">{session.title}</span>
+                    <span className={`text-xs font-medium uppercase ${session.status === 'running' ? 'text-forge-green' : session.status === 'failed' || session.status === 'interrupted' ? 'text-forge-red' : 'text-forge-muted'} opacity-80`}>
+                      {session.status}
+                    </span>
+                    <span
+                      role="button"
+                      tabIndex={-1}
+                      onClick={(event) => { event.stopPropagation(); void closeChatSession(session.id); }}
+                      className="rounded p-0.5 text-forge-muted opacity-70 hover:bg-white/10 hover:text-forge-text group-hover:opacity-100"
+                      title={`Close ${session.title}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </span>
+                  </button>
+                );
+              })}
               {visibleSessions.map((session) => {
                 const title = session.title || PROFILE_LABELS[session.profile as TerminalProfile] || session.profile;
-                const active = focusedSession.id === session.id;
+                const active = !focusedChatSession && focusedSession.id === session.id;
                 return (
                   <button
                     key={session.id}
@@ -968,6 +1379,21 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                 );
               })}
             </div>
+            {focusedChatSession ? (
+              <AgentChatPanel
+                session={focusedChatSession}
+                events={focusedChatEvents}
+                sections={focusedRunSections}
+                summary={focusedWorkbenchSummary.changedFileCount > 0 || focusedChatSession.status === 'succeeded' ? focusedWorkbenchSummary : null}
+                nextActions={focusedNextActions}
+                acceptedPlanId={acceptedPlans[focusedChatSession.id] ? latestPlanEvent(focusedChatEvents)?.id ?? null : null}
+                onInterrupt={() => void interruptAgentChatSession(focusedChatSession.id).then((session) => {
+                  setChatSessions((current) => current.map((item) => item.id === session.id ? session : item));
+                  void refreshChatSessions(session.id);
+                }).catch(setActionError)}
+                onAction={(action, event) => void handleWorkbenchAction(action, event)}
+              />
+            ) : focusedSession ? (
             <TerminalPane
               key={focusedSession.id}
               session={focusedSession}
@@ -984,6 +1410,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
               onData={(data) => void writeWorkspaceTerminalSessionInput(focusedSession.id, data).catch(setActionError)}
               onResize={(cols, rows) => void resizeWorkspaceTerminalSession(focusedSession.id, cols, rows).catch(() => undefined)}
             />
+            ) : null}
           </>
         ) : (
           <div className="flex h-full items-center justify-center rounded-xl border border-forge-border bg-forge-bg p-8 text-center text-sm text-forge-muted">
@@ -1004,14 +1431,85 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
           />
           <div className="flex h-[calc(100%-4px)] min-h-0 flex-col gap-2 overflow-hidden p-2">
           <div className="shrink-0 flex flex-wrap items-center gap-2">
-            {/* Profile select — always visible */}
-            <select value={selectedProfileId} onChange={(event) => setSelectedProfileId(event.target.value)} className="rounded-md border border-forge-border bg-forge-bg px-2 py-1 text-xs font-semibold text-forge-text">
-              {agentProfilesForPromptPicker(agentProfiles).map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.label}
-                </option>
-              ))}
-            </select>
+            {focusedChatSession && (
+              <div className="flex flex-wrap items-center gap-1 rounded-lg border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-muted">
+                <span className="font-semibold text-forge-text">{selectedClaudeAgent}</span>
+                <span>·</span>
+                <select
+                  value={selectedModel}
+                  onChange={(event) => setSelectedModel(event.target.value)}
+                  className="rounded border border-transparent bg-white/5 px-1.5 py-0.5 text-[11px] font-bold uppercase text-forge-text outline-none hover:bg-white/10"
+                  title="Claude model"
+                >
+                  {CLAUDE_MODEL_OPTIONS.map((model) => (
+                    <option key={model.value} value={model.value}>
+                      {compactClaudeModelLabel(model.value)}
+                    </option>
+                  ))}
+                  {!CLAUDE_MODEL_OPTIONS.some((model) => model.value === selectedModel) && (
+                    <option value={selectedModel}>{compactClaudeModelLabel(selectedModel)}</option>
+                  )}
+                </select>
+                <span>·</span>
+                <select
+                  value={selectedReasoning}
+                  onChange={(event) => setSelectedReasoning(event.target.value)}
+                  className={`rounded border border-transparent px-1.5 py-0.5 text-[11px] font-bold uppercase outline-none ${selectedReasoning === 'Default' ? 'bg-white/5 text-forge-muted hover:bg-white/10' : selectedReasoning === 'Max' || selectedReasoning === 'Extra High' ? 'bg-forge-violet/15 text-forge-violet' : 'bg-forge-blue/10 text-forge-blue'}`}
+                  title="Claude thinking / effort"
+                >
+                  {CLAUDE_THINKING_OPTIONS.map((level) => (
+                    <option key={level.value} value={level.value}>
+                      Thinking: {level.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {focusedChatSession && (
+              <div className="flex flex-wrap items-center gap-1 rounded-lg border border-forge-blue/20 bg-forge-blue/5 px-2 py-1 text-xs text-forge-muted">
+                <span className="font-bold uppercase tracking-widest text-forge-blue">Context</span>
+                <span className="font-semibold text-forge-text">{modelContextLabel(selectedModel)}</span>
+                <span>·</span>
+                <span>{promptMeter ? `${promptMeter.sessionEstTokens.toLocaleString()} tok est.` : '0 tok est.'}</span>
+                <span>·</span>
+                <span className={contextPreview?.status === 'fresh' ? 'text-forge-green' : contextPreview ? 'text-forge-yellow' : ''}>
+                  {contextPreview ? `repo ${contextPreview.status}` : 'repo ctx not loaded'}
+                </span>
+                <span>·</span>
+                <span>{agentContext?.linkedWorktrees.length ?? 0} linked</span>
+              </div>
+            )}
+
+            {focusedChatSession && (
+              <div className="flex flex-wrap items-center gap-1 rounded-lg border border-forge-border bg-forge-bg px-1.5 py-1 text-xs text-forge-muted">
+                <span className="px-1 font-bold uppercase tracking-widest text-forge-muted">Workflow</span>
+                <button
+                  type="button"
+                  onClick={() => void applyWorkflowPreset('plan-act')}
+                  className="rounded-md border border-forge-border bg-white/5 px-2 py-0.5 font-semibold text-forge-text hover:bg-white/10"
+                  title="Set up a planner-first run, then accept and continue in Act mode."
+                >
+                  Plan → Act
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void applyWorkflowPreset('plan-codex-review')}
+                  className="rounded-md border border-forge-border bg-white/5 px-2 py-0.5 font-semibold text-forge-text hover:bg-white/10"
+                  title="Set up a plan that can be handed to an implementer and reviewer."
+                >
+                  Plan → Codex → Review
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void applyWorkflowPreset('implement-review-pr')}
+                  className="rounded-md border border-forge-border bg-white/5 px-2 py-0.5 font-semibold text-forge-text hover:bg-white/10"
+                  title="Set up an implementation run that ends with review and PR readiness."
+                >
+                  Implement → Review → PR
+                </button>
+              </div>
+            )}
 
             {/* Gear popover for secondary settings */}
             <div ref={composerSettingsRef} className="relative">
@@ -1021,23 +1519,50 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                 className={`flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold transition-colors ${showComposerSettings ? 'border-forge-orange/30 bg-forge-orange/10 text-forge-orange' : 'border-forge-border bg-white/5 text-forge-muted hover:bg-white/10 hover:text-forge-text/80'}`}
               >
                 <Settings2 className="h-3 w-3" />
-                <span>{selectedTaskMode}</span>
               </button>
               {showComposerSettings && (
                 <div className="absolute left-0 top-full z-30 mt-1 min-w-[240px] rounded-lg border border-forge-border bg-forge-surface p-3 shadow-lg">
                   <p className="mb-2 text-xs font-bold uppercase tracking-widest text-forge-muted">Agent Settings</p>
                   <div className="space-y-2">
                     <div>
-                      <label className="mb-1 block text-xs text-forge-muted">Task mode</label>
-                      <select value={selectedTaskMode} onChange={(event) => setSelectedTaskMode(event.target.value)} className="w-full rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-text">
-                        {['Act', 'Plan', 'Review', 'Fix'].map((mode) => <option key={mode}>{mode}</option>)}
+                      <label className="mb-1 block text-xs text-forge-muted">Claude agent</label>
+                      <select value={selectedClaudeAgent} onChange={(event) => setSelectedClaudeAgent(event.target.value)} className="w-full rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-text">
+                        {CLAUDE_AGENT_OPTIONS.map((agent) => (
+                          <option key={agent.value} value={agent.value}>{agent.label} · {agent.hint}</option>
+                        ))}
                       </select>
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs text-forge-muted">Reasoning</label>
-                      <select value={selectedReasoning} onChange={(event) => setSelectedReasoning(event.target.value)} className="w-full rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-text">
-                        {['Default', 'Low', 'Medium', 'High'].map((level) => <option key={level}>{level}</option>)}
+                      <label className="mb-1 block text-xs text-forge-muted">Model</label>
+                      <select value={selectedModel} onChange={(event) => setSelectedModel(event.target.value)} className="w-full rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-text">
+                        {CLAUDE_MODEL_OPTIONS.map((model) => (
+                          <option key={model.value} value={model.value}>{model.label}</option>
+                        ))}
+                        {!CLAUDE_MODEL_OPTIONS.some((model) => model.value === selectedModel) && (
+                          <option value={selectedModel}>{compactClaudeModelLabel(selectedModel)}</option>
+                        )}
                       </select>
+                      <p className="mt-1 text-xs text-forge-muted">Passed to Claude as <span className="font-mono">--model</span>.</p>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-forge-muted">Task mode</label>
+                      <select value={selectedTaskMode} onChange={(event) => {
+                        const next = event.target.value;
+                        setSelectedTaskMode(next);
+                        if (next === 'Plan') setSelectedClaudeAgent('Plan');
+                        if (next === 'Review') setSelectedClaudeAgent('superpowers:code-reviewer');
+                        if (next === 'Act' && selectedClaudeAgent === 'Plan') setSelectedClaudeAgent('general-purpose');
+                      }} className="w-full rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-text">
+                        {['Act', 'Plan', 'Review', 'Fix'].map((mode) => <option key={mode}>{mode}</option>)}
+                      </select>
+                      <p className="mt-1 text-xs text-forge-muted">Shortcut: Shift+Tab toggles Plan mode.</p>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-forge-muted">Thinking / effort</label>
+                      <select value={selectedReasoning} onChange={(event) => setSelectedReasoning(event.target.value)} className="w-full rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-text">
+                        {CLAUDE_THINKING_OPTIONS.map((level) => <option key={level.value} value={level.value}>{level.label} · {level.hint}</option>)}
+                      </select>
+                      <p className="mt-1 text-xs text-forge-muted">Maps to Claude <span className="font-mono">--effort</span>: low, medium, high, xhigh, max.</p>
                     </div>
                     <div>
                       <label className="mb-1 block text-xs text-forge-muted">Send behavior</label>
@@ -1150,6 +1675,11 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
               }
               className="h-full min-h-0 w-0 flex-1 resize-none overflow-y-auto rounded-lg border border-forge-border bg-forge-bg px-3 py-2 text-sm leading-relaxed text-forge-text placeholder:text-forge-muted focus:border-forge-orange/40 focus:outline-none"
               onKeyDown={(event) => {
+                if (event.key === 'Tab' && event.shiftKey) {
+                  event.preventDefault();
+                  togglePlanMode();
+                  return;
+                }
                 if (event.key !== 'Enter' || event.shiftKey) return;
                 if ('isComposing' in event.nativeEvent && event.nativeEvent.isComposing) return;
                 event.preventDefault();

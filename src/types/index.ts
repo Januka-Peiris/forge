@@ -17,6 +17,7 @@ export type {
 export { toWorkspace } from './workspace';
 export type { AgentContextWorktree, RepoMap, RepoMapEntry, RepoMapMeta, WorkspaceAgentContext, WorkspaceContextItem, WorkspaceContextPreview } from './agent-context';
 export type { AgentProfile } from './agent-profile';
+export type { AgentChatEvent, AgentChatEventEnvelope, AgentChatSession } from './agent-chat';
 export type { ReviewItem } from './review';
 export type { MarkWorkspaceFileReviewedInput, QueueReviewAgentPromptInput, QueueReviewAgentPromptResult, ReviewCockpitFile, WorkspaceFileReviewState, WorkspacePrComment, WorkspaceReviewCockpit } from './review-cockpit';
 export type { FileReviewInsight, ReviewRiskLevel, WorkspaceReviewSummary } from './review-summary';

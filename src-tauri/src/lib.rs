@@ -9,10 +9,10 @@ mod state;
 use std::sync::atomic::Ordering;
 
 use commands::{
-    activity, agent_context, agent_memory, agent_profiles, agent_runs, deep_links, environment,
-    git_review, merge_readiness, orchestrator as orchestrator_commands, pr_draft, prompt_templates,
-    repositories as repository_commands, review_cockpit, review_summary, reviews, settings,
-    terminal, workspace_attention, workspace_cleanup, workspace_health, workspace_ports,
+    activity, agent_chat, agent_context, agent_memory, agent_profiles, agent_runs, deep_links,
+    environment, git_review, merge_readiness, orchestrator as orchestrator_commands, pr_draft,
+    prompt_templates, repositories as repository_commands, review_cockpit, review_summary, reviews,
+    settings, terminal, workspace_attention, workspace_cleanup, workspace_health, workspace_ports,
     workspace_readiness, workspace_scripts, workspace_templates, workspaces,
 };
 use services::{orchestrator_service, rebase_service};
@@ -91,6 +91,12 @@ pub fn run() {
             agent_context::build_workspace_repo_context,
             agent_context::get_context_status,
             agent_context::get_context_preview_with_hint,
+            agent_chat::create_agent_chat_session,
+            agent_chat::send_agent_chat_message,
+            agent_chat::list_agent_chat_sessions,
+            agent_chat::list_agent_chat_events,
+            agent_chat::interrupt_agent_chat_session,
+            agent_chat::close_agent_chat_session,
             agent_profiles::list_workspace_agent_profiles,
             deep_links::open_deep_link,
             environment::check_environment,
