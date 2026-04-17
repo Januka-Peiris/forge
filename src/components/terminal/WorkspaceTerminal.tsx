@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Copy, Plus, Square, Terminal as TerminalIcon, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, Plus, Square, Terminal as TerminalIcon, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
@@ -88,6 +88,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   const [outputs, setOutputs] = useState<OutputMap>({});
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [shellRailOpen, setShellRailOpen] = useState(true);
   const [commandBusy, setCommandBusy] = useState<string | null>(null);
   const [forgeConfig, setForgeConfig] = useState<ForgeWorkspaceConfig | null>(null);
   const [ports, setPorts] = useState<WorkspacePort[]>([]);
@@ -948,50 +949,85 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       <div className="flex min-h-0 flex-1 gap-2 p-2">
         {/* Shell / run session rail — left column, only when shells exist */}
         {visibleSessions.length > 0 && (
-          <div className="flex w-44 shrink-0 flex-col border-r border-forge-border/50 pr-2">
-            <div className="mb-1 flex shrink-0 items-center justify-between px-1">
-              <span className="text-[10px] font-semibold uppercase tracking-widest text-forge-muted/50">Shells</span>
-              <button
-                onClick={() => void createTerminal('shell', 'shell', 'Shell')}
-                className="rounded p-0.5 text-forge-muted/50 hover:bg-white/5 hover:text-forge-orange"
-                title="New shell"
-              >
-                <Plus className="h-3 w-3" />
-              </button>
+          shellRailOpen ? (
+            <div className="flex w-44 shrink-0 flex-col border-r border-forge-border/50 pr-2">
+              <div className="mb-1 flex shrink-0 items-center justify-between px-1">
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-forge-muted/50">Shells</span>
+                <div className="flex items-center gap-0.5">
+                  <button
+                    onClick={() => void createTerminal('shell', 'shell', 'Shell')}
+                    className="rounded p-0.5 text-forge-muted/50 hover:bg-white/5 hover:text-forge-orange"
+                    title="New shell"
+                  >
+                    <Plus className="h-3 w-3" />
+                  </button>
+                  <button
+                    onClick={() => setShellRailOpen(false)}
+                    className="rounded p-0.5 text-forge-muted/50 hover:bg-white/5 hover:text-forge-text"
+                    title="Collapse shell panel"
+                  >
+                    <ChevronLeft className="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-col gap-0.5 overflow-y-auto">
+                {visibleSessions.map((session) => {
+                  const title = session.title || PROFILE_LABELS[session.profile as TerminalProfile] || session.profile;
+                  const isActive = !focusedChatSession && focusedSession?.id === session.id;
+                  const statusColor = session.stale ? 'text-forge-yellow' : session.status === 'running' ? 'text-forge-green' : session.status === 'failed' || session.status === 'interrupted' ? 'text-forge-red' : 'text-forge-muted/50';
+                  return (
+                    <div key={session.id} className="group relative">
+                      <button
+                        type="button"
+                        onClick={() => void attachTerminal(session)}
+                        className={`w-full rounded px-2 py-1.5 text-left transition-colors ${isActive ? 'bg-white/8 text-forge-text' : 'text-forge-muted hover:bg-white/5 hover:text-forge-text/85'}`}
+                        title={`${title} · ${session.status}`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <TerminalIcon className={`h-3 w-3 shrink-0 ${isActive ? 'text-forge-orange' : 'text-forge-muted/50'}`} />
+                          <span className="min-w-0 flex-1 truncate text-xs font-medium">{title}</span>
+                          <span className={`shrink-0 text-[10px] ${statusColor}`}>
+                            {session.stale ? 'stale' : session.status === 'running' ? '●' : session.status === 'failed' ? '✕' : '○'}
+                          </span>
+                        </div>
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); void closeTerminal(session.id); }}
+                        className="absolute right-1 top-1/2 -translate-y-1/2 hidden rounded p-0.5 text-forge-muted hover:text-forge-red group-hover:block"
+                        title={`Close ${title}`}
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-            <div className="flex flex-col gap-0.5 overflow-y-auto">
+          ) : (
+            <div className="flex shrink-0 flex-col items-center gap-1 border-r border-forge-border/50 pr-2">
+              <button
+                onClick={() => setShellRailOpen(true)}
+                className="rounded p-1 text-forge-muted/50 hover:bg-white/5 hover:text-forge-text"
+                title="Expand shell panel"
+              >
+                <ChevronRight className="h-3 w-3" />
+              </button>
               {visibleSessions.map((session) => {
-                const title = session.title || PROFILE_LABELS[session.profile as TerminalProfile] || session.profile;
                 const isActive = !focusedChatSession && focusedSession?.id === session.id;
-                const statusColor = session.stale ? 'text-forge-yellow' : session.status === 'running' ? 'text-forge-green' : session.status === 'failed' || session.status === 'interrupted' ? 'text-forge-red' : 'text-forge-muted/50';
+                const statusColor = session.status === 'running' ? 'text-forge-green' : session.status === 'failed' || session.status === 'interrupted' ? 'text-forge-red' : 'text-forge-muted/40';
                 return (
-                  <div key={session.id} className="group relative">
-                    <button
-                      type="button"
-                      onClick={() => void attachTerminal(session)}
-                      className={`w-full rounded px-2 py-1.5 text-left transition-colors ${isActive ? 'bg-white/8 text-forge-text' : 'text-forge-muted hover:bg-white/5 hover:text-forge-text/85'}`}
-                      title={`${title} · ${session.status}`}
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <TerminalIcon className={`h-3 w-3 shrink-0 ${isActive ? 'text-forge-orange' : 'text-forge-muted/50'}`} />
-                        <span className="min-w-0 flex-1 truncate text-xs font-medium">{title}</span>
-                        <span className={`shrink-0 text-[10px] ${statusColor}`}>
-                          {session.stale ? 'stale' : session.status === 'running' ? '●' : session.status === 'failed' ? '✕' : '○'}
-                        </span>
-                      </div>
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); void closeTerminal(session.id); }}
-                      className="absolute right-1 top-1/2 -translate-y-1/2 hidden rounded p-0.5 text-forge-muted hover:text-forge-red group-hover:block"
-                      title={`Close ${title}`}
-                    >
-                      <X className="h-2.5 w-2.5" />
-                    </button>
-                  </div>
+                  <button
+                    key={session.id}
+                    onClick={() => void attachTerminal(session)}
+                    className={`rounded p-1 ${isActive ? 'text-forge-orange' : `${statusColor} hover:text-forge-text`}`}
+                    title={session.title || PROFILE_LABELS[session.profile as TerminalProfile] || session.profile}
+                  >
+                    <TerminalIcon className="h-3 w-3" />
+                  </button>
                 );
               })}
             </div>
-          </div>
+          )
         )}
 
         {/* Main content area */}
