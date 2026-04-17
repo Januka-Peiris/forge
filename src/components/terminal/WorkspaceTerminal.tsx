@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Copy, ExternalLink, FileText, Globe2, Link2, MoreHorizontal, PlugZap, RefreshCw, RotateCcw, Settings2, Square, Terminal as TerminalIcon, Wrench, X, Zap } from 'lucide-react';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { AgentProfile, ForgeWorkspaceConfig, PromptTemplate, TerminalOutputChunk, TerminalOutputEvent, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceContextPreview, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
@@ -1001,6 +1001,8 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         )}
       </div>
 
+      <ContextFooter workspaceId={workspace.id} />
+
       {focusedIsAgent && (
         <div className="shrink-0 border-t border-forge-border bg-forge-surface" style={{ height: `${composerHeight}px` }}>
           <div
@@ -1199,6 +1201,29 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
           )}
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+function ContextFooter({ workspaceId }: { workspaceId: string }) {
+  const [status, setStatus] = React.useState<{ stale: boolean; tokens: number; engine: string } | null>(null);
+
+  React.useEffect(() => {
+    import('../../lib/tauri-api/context').then(({ getContextStatus }) => {
+      getContextStatus(workspaceId).then(s => {
+        setStatus({ stale: s.stale, tokens: (s.symbolCount ?? 0) * 3, engine: s.engine });
+      }).catch(() => {});
+    });
+  }, [workspaceId]);
+
+  if (!status) return null;
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-1 border-t border-white/5 text-[11px] text-white/30">
+      <span>ctx {status.engine}</span>
+      {status.stale && (
+        <span className="text-amber-400/70">[stale]</span>
       )}
     </div>
   );

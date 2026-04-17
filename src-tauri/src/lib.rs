@@ -1,4 +1,5 @@
 mod commands;
+mod context;
 mod db;
 mod models;
 mod repositories;
@@ -87,6 +88,9 @@ pub fn run() {
             agent_context::get_workspace_agent_context,
             agent_context::get_workspace_context_preview,
             agent_context::refresh_workspace_repo_context,
+            agent_context::build_workspace_repo_context,
+            agent_context::get_context_status,
+            agent_context::get_context_preview_with_hint,
             agent_profiles::list_workspace_agent_profiles,
             deep_links::open_deep_link,
             environment::check_environment,
