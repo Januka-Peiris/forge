@@ -661,6 +661,8 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     setBusy(true);
     setError(null);
     try {
+      focusedChatIdRef.current = null;
+      setFocusedChatId(null);
       focusedIdRef.current = session.id;
       setFocusedId(session.id);
       if (session.status === 'running') {
@@ -943,123 +945,146 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         onSetError={setError}
       />
 
-      <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
-        {visibleSessions.length === 0 && chatSessions.length === 0 ? (
-          <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-forge-border bg-forge-bg p-8 text-center">
-            <div className="max-w-md">
-              <TerminalIcon className="mx-auto mb-3 h-9 w-9 text-forge-muted" />
-              <h2 className="text-base font-bold text-forge-text">Start a workspace terminal</h2>
-              <p className="mt-1 text-sm leading-relaxed text-forge-muted">
-                Launch agents, shells, and dev servers for this workspace.
-              </p>
-              <div className="mt-4 flex flex-wrap justify-center gap-2">
-                <button disabled={busy} onClick={() => void createChatSession('claude_code', 'Claude Chat')} className="rounded-lg bg-forge-orange px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Start Claude</button>
-                <button disabled={busy} onClick={() => void createChatSession('codex', 'Codex Chat')} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">Start Codex</button>
-                <button disabled={busy} onClick={() => void createTerminal('shell', 'shell', 'Shell')} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">New Shell</button>
-              </div>
+      <div className="flex min-h-0 flex-1 gap-2 p-2">
+        {/* Shell / run session rail — left column, only when shells exist */}
+        {visibleSessions.length > 0 && (
+          <div className="flex w-44 shrink-0 flex-col border-r border-forge-border/50 pr-2">
+            <div className="mb-1 flex shrink-0 items-center justify-between px-1">
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-forge-muted/50">Shells</span>
+              <button
+                onClick={() => void createTerminal('shell', 'shell', 'Shell')}
+                className="rounded p-0.5 text-forge-muted/50 hover:bg-white/5 hover:text-forge-orange"
+                title="New shell"
+              >
+                <Plus className="h-3 w-3" />
+              </button>
             </div>
-          </div>
-        ) : focusedChatSession || focusedSession ? (
-          <>
-            <div className="flex shrink-0 items-center gap-1 overflow-x-auto px-1 pb-1">
-              {chatSessions.map((session) => {
-                const active = focusedChatSession?.id === session.id;
-                return (
-                  <button
-                    key={session.id}
-                    type="button"
-                    onClick={() => {
-                      focusedChatIdRef.current = session.id;
-                      setFocusedChatId(session.id);
-                      focusedIdRef.current = null;
-                      setFocusedId(null);
-                      if (!chatEvents[session.id]) void listAgentChatEvents(session.id).then((events) => setChatEvents((current) => ({ ...current, [session.id]: events })));
-                    }}
-                    className={`group flex max-w-[220px] shrink-0 items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition-colors ${active ? 'border-forge-orange/40 bg-forge-orange/10 text-forge-text' : 'border-transparent bg-transparent text-forge-muted hover:bg-white/5 hover:text-forge-text/85'}`}
-                    title={`${session.title} · ${session.status} · ${session.cwd}`}
-                  >
-                    <span className="truncate text-sm font-semibold">{session.title}</span>
-                    <span className={`text-xs font-medium uppercase ${session.status === 'running' ? 'text-forge-green' : session.status === 'failed' || session.status === 'interrupted' ? 'text-forge-red' : 'text-forge-muted'} opacity-80`}>
-                      {session.status}
-                    </span>
-                    <span
-                      role="button"
-                      tabIndex={-1}
-                      onClick={(event) => { event.stopPropagation(); void closeChatSession(session.id); }}
-                      className="rounded p-0.5 text-forge-muted opacity-70 hover:bg-white/10 hover:text-forge-text group-hover:opacity-100"
-                      title={`Close ${session.title}`}
-                    >
-                      <X className="h-3 w-3" />
-                    </span>
-                  </button>
-                );
-              })}
+            <div className="flex flex-col gap-0.5 overflow-y-auto">
               {visibleSessions.map((session) => {
                 const title = session.title || PROFILE_LABELS[session.profile as TerminalProfile] || session.profile;
-                const active = !focusedChatSession && focusedSession.id === session.id;
+                const isActive = !focusedChatSession && focusedSession?.id === session.id;
+                const statusColor = session.stale ? 'text-forge-yellow' : session.status === 'running' ? 'text-forge-green' : session.status === 'failed' || session.status === 'interrupted' ? 'text-forge-red' : 'text-forge-muted/50';
                 return (
-                  <button
-                    key={session.id}
-                    type="button"
-                    onClick={() => void attachTerminal(session)}
-                    className={`group flex max-w-[220px] shrink-0 items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition-colors ${active ? 'border-forge-orange/40 bg-forge-orange/10 text-forge-text' : 'border-transparent bg-transparent text-forge-muted hover:bg-white/5 hover:text-forge-text/85'}`}
-                    title={`${title} · ${session.status} · ${session.cwd}`}
-                  >
-                    <span className="truncate text-sm font-semibold">{title}</span>
-                    <span className={`text-xs font-medium uppercase ${session.stale ? 'text-forge-yellow' : session.status === 'running' ? 'text-forge-green' : session.status === 'failed' || session.status === 'interrupted' ? 'text-forge-red' : 'text-forge-muted'} opacity-80`}>
-                      {session.stale ? 'stale' : session.status}
-                    </span>
-                    <span
-                      role="button"
-                      tabIndex={-1}
-                      onClick={(event) => { event.stopPropagation(); void closeTerminal(session.id); }}
-                      className="rounded p-0.5 text-forge-muted opacity-70 hover:bg-white/10 hover:text-forge-text group-hover:opacity-100"
+                  <div key={session.id} className="group relative">
+                    <button
+                      type="button"
+                      onClick={() => void attachTerminal(session)}
+                      className={`w-full rounded px-2 py-1.5 text-left transition-colors ${isActive ? 'bg-white/8 text-forge-text' : 'text-forge-muted hover:bg-white/5 hover:text-forge-text/85'}`}
+                      title={`${title} · ${session.status}`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <TerminalIcon className={`h-3 w-3 shrink-0 ${isActive ? 'text-forge-orange' : 'text-forge-muted/50'}`} />
+                        <span className="min-w-0 flex-1 truncate text-xs font-medium">{title}</span>
+                        <span className={`shrink-0 text-[10px] ${statusColor}`}>
+                          {session.stale ? 'stale' : session.status === 'running' ? '●' : session.status === 'failed' ? '✕' : '○'}
+                        </span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); void closeTerminal(session.id); }}
+                      className="absolute right-1 top-1/2 -translate-y-1/2 hidden rounded p-0.5 text-forge-muted hover:text-forge-red group-hover:block"
                       title={`Close ${title}`}
                     >
-                      <X className="h-3 w-3" />
-                    </span>
-                  </button>
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </div>
                 );
               })}
             </div>
-            {focusedChatSession ? (
-              <AgentChatPanel
-                session={focusedChatSession}
-                events={focusedChatEvents}
-                sections={focusedRunSections}
-                summary={focusedWorkbenchSummary.changedFileCount > 0 || focusedChatSession.status === 'succeeded' ? focusedWorkbenchSummary : null}
-                nextActions={focusedNextActions}
-                acceptedPlanId={acceptedPlans[focusedChatSession.id] ? latestPlanEvent(focusedChatEvents)?.id ?? null : null}
-                onInterrupt={() => void interruptAgentChatSession(focusedChatSession.id).then((session) => {
-                  setChatSessions((current) => current.map((item) => item.id === session.id ? session : item));
-                  void refreshChatSessions(session.id);
-                }).catch(setActionError)}
-                onAction={(action, event) => void handleWorkbenchAction(action, event)}
-              />
-            ) : focusedSession ? (
-            <TerminalPane
-              key={focusedSession.id}
-              session={focusedSession}
-              chunks={outputs[focusedSession.id] ?? []}
-              focused
-              stuckSince={workspaceHealth?.terminals.find((t) => t.sessionId === focusedSession.id)?.stuckSince ?? null}
-              onFocus={() => {
-                focusedIdRef.current = focusedSession.id;
-                setFocusedId(focusedSession.id);
-              }}
-              onAttach={() => void attachTerminal(focusedSession)}
-              onStop={() => void stopTerminal(focusedSession.id)}
-              onClose={() => void closeTerminal(focusedSession.id)}
-              onData={(data) => void writeWorkspaceTerminalSessionInput(focusedSession.id, data).catch(setActionError)}
-              onResize={(cols, rows) => void resizeWorkspaceTerminalSession(focusedSession.id, cols, rows).catch(() => undefined)}
-            />
-            ) : null}
-          </>
-        ) : (
-          <div className="flex h-full items-center justify-center rounded-xl border border-forge-border bg-forge-bg p-8 text-center text-sm text-forge-muted">
-            No terminal tab selected.
           </div>
         )}
+
+        {/* Main content area */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+          {visibleSessions.length === 0 && chatSessions.length === 0 ? (
+            <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-forge-border bg-forge-bg p-8 text-center">
+              <div className="max-w-md">
+                <TerminalIcon className="mx-auto mb-3 h-9 w-9 text-forge-muted" />
+                <h2 className="text-base font-bold text-forge-text">Start a workspace terminal</h2>
+                <p className="mt-1 text-sm leading-relaxed text-forge-muted">Launch agents, shells, and dev servers for this workspace.</p>
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  <button disabled={busy} onClick={() => void createChatSession('claude_code', 'Claude Chat')} className="rounded-lg bg-forge-orange px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Start Claude</button>
+                  <button disabled={busy} onClick={() => void createChatSession('codex', 'Codex Chat')} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">Start Codex</button>
+                  <button disabled={busy} onClick={() => void createTerminal('shell', 'shell', 'Shell')} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">New Shell</button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* AI chat tab bar */}
+              {chatSessions.length > 0 && (
+                <div className="flex shrink-0 items-center gap-1 overflow-x-auto px-1 pb-1">
+                  {chatSessions.map((session) => {
+                    const active = focusedChatSession?.id === session.id;
+                    return (
+                      <button
+                        key={session.id}
+                        type="button"
+                        onClick={() => {
+                          focusedChatIdRef.current = session.id;
+                          setFocusedChatId(session.id);
+                          focusedIdRef.current = null;
+                          setFocusedId(null);
+                          if (!chatEvents[session.id]) void listAgentChatEvents(session.id).then((events) => setChatEvents((current) => ({ ...current, [session.id]: events })));
+                        }}
+                        className={`group flex max-w-[220px] shrink-0 items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition-colors ${active ? 'border-forge-orange/40 bg-forge-orange/10 text-forge-text' : 'border-transparent bg-transparent text-forge-muted hover:bg-white/5 hover:text-forge-text/85'}`}
+                        title={`${session.title} · ${session.status} · ${session.cwd}`}
+                      >
+                        <span className="truncate text-sm font-semibold">{session.title}</span>
+                        <span className={`text-xs font-medium uppercase ${session.status === 'running' ? 'text-forge-green' : session.status === 'failed' || session.status === 'interrupted' ? 'text-forge-red' : 'text-forge-muted'} opacity-80`}>
+                          {session.status}
+                        </span>
+                        <span
+                          role="button"
+                          tabIndex={-1}
+                          onClick={(event) => { event.stopPropagation(); void closeChatSession(session.id); }}
+                          className="rounded p-0.5 text-forge-muted opacity-70 hover:bg-white/10 hover:text-forge-text group-hover:opacity-100"
+                          title={`Close ${session.title}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {/* Content */}
+              {focusedChatSession ? (
+                <AgentChatPanel
+                  session={focusedChatSession}
+                  events={focusedChatEvents}
+                  sections={focusedRunSections}
+                  summary={focusedWorkbenchSummary.changedFileCount > 0 || focusedChatSession.status === 'succeeded' ? focusedWorkbenchSummary : null}
+                  nextActions={focusedNextActions}
+                  acceptedPlanId={acceptedPlans[focusedChatSession.id] ? latestPlanEvent(focusedChatEvents)?.id ?? null : null}
+                  onInterrupt={() => void interruptAgentChatSession(focusedChatSession.id).then((session) => {
+                    setChatSessions((current) => current.map((item) => item.id === session.id ? session : item));
+                    void refreshChatSessions(session.id);
+                  }).catch(setActionError)}
+                  onAction={(action, event) => void handleWorkbenchAction(action, event)}
+                />
+              ) : focusedSession ? (
+                <TerminalPane
+                  key={focusedSession.id}
+                  session={focusedSession}
+                  chunks={outputs[focusedSession.id] ?? []}
+                  focused
+                  stuckSince={workspaceHealth?.terminals.find((t) => t.sessionId === focusedSession.id)?.stuckSince ?? null}
+                  onFocus={() => { focusedIdRef.current = focusedSession.id; setFocusedId(focusedSession.id); }}
+                  onAttach={() => void attachTerminal(focusedSession)}
+                  onStop={() => void stopTerminal(focusedSession.id)}
+                  onClose={() => void closeTerminal(focusedSession.id)}
+                  onData={(data) => void writeWorkspaceTerminalSessionInput(focusedSession.id, data).catch(setActionError)}
+                  onResize={(cols, rows) => void resizeWorkspaceTerminalSession(focusedSession.id, cols, rows).catch(() => undefined)}
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center text-sm text-forge-muted">
+                  Select a session above or open a shell on the left.
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       <ContextFooter workspaceId={workspace.id} />
