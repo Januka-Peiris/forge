@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link2, RefreshCw, Settings2, Zap } from 'lucide-react';
+import { Link2, ListChecks, RefreshCw, Settings2, Zap } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -178,7 +178,14 @@ export function WorkspaceComposer({
         <div className="shrink-0 flex items-center gap-2 overflow-x-auto">
           {focusedChatSession && (
             <div className="flex shrink-0 items-center gap-1 rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-muted">
-              <span className="font-semibold text-forge-text">{settings.selectedClaudeAgent}</span>
+              <button
+                onClick={onTogglePlanMode}
+                title="Toggle Plan mode (Shift+Tab)"
+                className={`flex items-center gap-1 rounded px-1 py-0.5 transition-colors ${settings.selectedTaskMode === 'Plan' ? 'text-forge-blue' : 'text-forge-muted/40 hover:text-forge-muted'}`}
+              >
+                <ListChecks className="h-3 w-3" />
+                {settings.selectedTaskMode === 'Plan' && <span className="font-semibold">Plan</span>}
+              </button>
               <span>·</span>
               <Select value={settings.selectedModel} onValueChange={(v) => onSettingsChange({ selectedModel: v })}>
                 <SelectTrigger compact title="Claude model"><SelectValue /></SelectTrigger>

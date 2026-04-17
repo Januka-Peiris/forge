@@ -201,6 +201,8 @@ function shouldOmitEvent(event: AgentChatEvent): boolean {
   if (event.eventType === 'thinking') return true;
   if (event.eventType === 'tool_result') return true;
   if (event.eventType === 'status' && event.status === 'running') return true;
+  if (event.eventType === 'status' && event.status === 'succeeded') return true;
+  if (event.eventType === 'result') return true;
   return false;
 }
 
