@@ -28,7 +28,7 @@ function StepTracker({ current, completed }: { current: WorkspaceStep; completed
                     : 'bg-forge-dim'
                 }`}
               />
-              <span className={`text-[9px] font-medium whitespace-nowrap ${
+              <span className={`text-xs font-medium whitespace-nowrap ${
                 isDone ? 'text-forge-green' : isActive ? 'text-forge-orange' : 'text-forge-muted'
               }`}>
                 {step}
@@ -59,7 +59,7 @@ function FileStrip({ files }: { files: Workspace['changedFiles'] }) {
         return (
           <span
             key={f.path}
-            className={`text-[10px] font-mono px-1.5 py-0.5 rounded border truncate max-w-[120px] ${colorClass}`}
+            className={`text-xs font-mono px-1.5 py-0.5 rounded border truncate max-w-[120px] ${colorClass}`}
           >
             {name}
           </span>
@@ -89,10 +89,10 @@ export function WorkspaceCard({ workspace, isSelected, onSelect }: WorkspaceCard
       <div className="p-4">
         <div className="flex items-start justify-between gap-2 mb-3">
           <div className="flex-1 min-w-0">
-            <h3 className="text-[13px] font-semibold text-forge-text leading-tight truncate mb-1">
+            <h3 className="text-sm font-semibold text-forge-text leading-tight truncate mb-1">
               {workspace.name}
             </h3>
-            <div className="flex items-center gap-1.5 text-[11px] text-forge-muted">
+            <div className="flex items-center gap-1.5 text-sm text-forge-muted">
               <span className="font-medium text-forge-text/70">{workspace.repo}</span>
               <span className="text-forge-muted">/</span>
               <GitBranch className="w-3 h-3 shrink-0" />
@@ -118,7 +118,7 @@ export function WorkspaceCard({ workspace, isSelected, onSelect }: WorkspaceCard
         <FileStrip files={workspace.changedFiles} />
 
         <div className="mt-3 pt-3 border-t border-forge-border/60 flex items-center justify-between">
-          <div className="flex items-center gap-3 text-[11px] text-forge-muted">
+          <div className="flex items-center gap-3 text-sm text-forge-muted">
             <span className="flex items-center gap-1">
               <FileCode className="w-3 h-3" />
               {workspace.changedFiles.length} files
@@ -133,7 +133,7 @@ export function WorkspaceCard({ workspace, isSelected, onSelect }: WorkspaceCard
             </span>
           </div>
           {workspace.prStatus && workspace.prStatus !== 'Merged' && (
-            <span className="flex items-center gap-1 text-[11px] text-forge-blue">
+            <span className="flex items-center gap-1 text-sm text-forge-blue">
               <GitPullRequest className="w-3 h-3" />
               #{workspace.prNumber}
             </span>
@@ -144,14 +144,14 @@ export function WorkspaceCard({ workspace, isSelected, onSelect }: WorkspaceCard
       <div className="px-4 pb-3 flex items-center gap-1.5">
         <button
           onClick={(e) => { e.stopPropagation(); onSelect(); }}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-white/5 hover:bg-white/10 text-[11px] font-medium text-forge-text transition-colors border border-forge-border hover:border-forge-border-light"
+          className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-white/5 hover:bg-white/10 text-sm font-medium text-forge-text transition-colors border border-forge-border hover:border-forge-border-light"
         >
           <Eye className="w-3 h-3" />
           Open
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); }}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-white/5 hover:bg-white/10 text-[11px] font-medium text-forge-text transition-colors border border-forge-border hover:border-forge-border-light"
+          className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-white/5 hover:bg-white/10 text-sm font-medium text-forge-text transition-colors border border-forge-border hover:border-forge-border-light"
         >
           <FileCode className="w-3 h-3" />
           Review Diff
@@ -159,7 +159,7 @@ export function WorkspaceCard({ workspace, isSelected, onSelect }: WorkspaceCard
         {(workspace.status === 'Waiting' || workspace.status === 'Blocked') && (
           <button
             onClick={(e) => { e.stopPropagation(); }}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-forge-orange/15 hover:bg-forge-orange/25 text-[11px] font-medium text-forge-orange transition-colors border border-forge-orange/20"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-forge-orange/15 hover:bg-forge-orange/25 text-sm font-medium text-forge-orange transition-colors border border-forge-orange/20"
           >
             <Play className="w-3 h-3" />
             Resume

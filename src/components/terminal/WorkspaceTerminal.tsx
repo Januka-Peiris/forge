@@ -712,7 +712,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       <div className="flex flex-1 min-h-0 items-center justify-center p-8">
         <div className="text-center">
           <TerminalIcon className="mx-auto mb-3 h-8 w-8 text-forge-muted" />
-          <p className="text-[13px] text-forge-muted">Select a workspace to start a terminal</p>
+          <p className="text-sm text-forge-muted">Select a workspace to start a terminal</p>
         </div>
       </div>
     );
@@ -731,19 +731,19 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             <TerminalIcon className="h-4 w-4 shrink-0 text-forge-orange" />
-            <h1 className="truncate text-[15px] font-bold text-forge-text">{workspace.name}</h1>
-            <span className="shrink-0 rounded-full border border-forge-border bg-white/5 px-2 py-0.5 text-[10px] font-bold uppercase text-forge-muted">
+            <h1 className="truncate text-base font-bold text-forge-text">{workspace.name}</h1>
+            <span className="shrink-0 rounded-full border border-forge-border bg-white/5 px-2 py-0.5 text-xs font-bold uppercase text-forge-muted">
               {visibleSessions.filter((session) => session.status === 'running').length} running
             </span>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            <button disabled={busy} onClick={() => void createTerminal('shell', 'shell', 'Shell')} className="rounded-lg border border-forge-border bg-white/5 px-2.5 py-1.5 text-[11px] font-semibold text-forge-text/85 hover:bg-white/10 disabled:opacity-50">
+            <button disabled={busy} onClick={() => void createTerminal('shell', 'shell', 'Shell')} className="rounded-lg border border-forge-border bg-white/5 px-2.5 py-1.5 text-sm font-semibold text-forge-text/85 hover:bg-white/10 disabled:opacity-50">
               New Shell
             </button>
-            <button disabled={busy} onClick={() => void createTerminal('agent', 'codex', 'Codex')} className="rounded-lg border border-forge-blue/30 bg-forge-blue/10 px-2.5 py-1.5 text-[11px] font-semibold text-forge-blue hover:bg-forge-blue/20 disabled:opacity-50">
+            <button disabled={busy} onClick={() => void createTerminal('agent', 'codex', 'Codex')} className="rounded-lg border border-forge-blue/30 bg-forge-blue/10 px-2.5 py-1.5 text-sm font-semibold text-forge-blue hover:bg-forge-blue/20 disabled:opacity-50">
               New Codex
             </button>
-            <button disabled={busy} onClick={() => void createTerminal('agent', 'claude_code', 'Claude')} className="rounded-lg border border-forge-orange/30 bg-forge-orange/10 px-2.5 py-1.5 text-[11px] font-semibold text-forge-orange hover:bg-forge-orange/20 disabled:opacity-50">
+            <button disabled={busy} onClick={() => void createTerminal('agent', 'claude_code', 'Claude')} className="rounded-lg border border-forge-orange/30 bg-forge-orange/10 px-2.5 py-1.5 text-sm font-semibold text-forge-orange hover:bg-forge-orange/20 disabled:opacity-50">
               New Claude
             </button>
             {/* Overflow menu */}
@@ -759,28 +759,28 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                   <button
                     disabled={busy}
                     onClick={() => { void createTerminal('shell', 'shell', 'Shell'); setShowOverflow(false); }}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-[11px] text-forge-text/85 hover:bg-white/5 disabled:opacity-50"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-forge-text/85 hover:bg-white/5 disabled:opacity-50"
                   >
                     New shell tab
                   </button>
                   <button
                     disabled={busy}
                     onClick={() => { void createTerminal('agent', 'codex', 'Codex'); setShowOverflow(false); }}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-[11px] text-forge-text/85 hover:bg-white/5 disabled:opacity-50"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-forge-text/85 hover:bg-white/5 disabled:opacity-50"
                   >
                     New Codex tab
                   </button>
                   <button
                     disabled={busy}
                     onClick={() => { void createTerminal('agent', 'claude_code', 'Claude'); setShowOverflow(false); }}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-[11px] text-forge-text/85 hover:bg-white/5 disabled:opacity-50"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-forge-text/85 hover:bg-white/5 disabled:opacity-50"
                   >
                     New Claude tab
                   </button>
                   <button
                     disabled={!focusedSession}
                     onClick={() => { void copyFocusedOutput(); setShowOverflow(false); }}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-[11px] text-forge-text/85 hover:bg-white/5 disabled:opacity-50"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-forge-text/85 hover:bg-white/5 disabled:opacity-50"
                   >
                     <Copy className="h-3.5 w-3.5" /> Copy output
                   </button>
@@ -791,14 +791,14 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                       void interruptFocusedAgent();
                       setShowOverflow(false);
                     }}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-[11px] text-forge-text/85 hover:bg-white/5 disabled:opacity-50"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-forge-text/85 hover:bg-white/5 disabled:opacity-50"
                   >
                     <Square className="h-3.5 w-3.5 text-forge-yellow" /> Interrupt terminal
                   </button>
                   {onOpenInCursor && (
                     <button
                       onClick={() => { try { onOpenInCursor(); } catch (err) { setError(formatCursorOpenError(err)); } setShowOverflow(false); }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-[11px] text-forge-blue hover:bg-white/5"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-forge-blue hover:bg-white/5"
                     >
                       <ExternalLink className="h-3.5 w-3.5" /> Open in Cursor
                     </button>
@@ -810,7 +810,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         </div>
 
         {/* Compact status line */}
-        <div className="mt-1.5 flex items-center gap-2 text-[11px]">
+        <div className="mt-1.5 flex items-center gap-2 text-sm">
           <p className="min-w-0 flex-1 truncate font-mono text-forge-muted">
             {workspace.repo} / {workspace.branch} · {workspace.workspaceRootPath ?? workspace.selectedWorktreePath ?? 'no root'}
           </p>
@@ -822,14 +822,14 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
             {forgeConfig !== null && (
               <button
                 onClick={() => setActiveHeaderTab((v) => v === 'commands' ? null : 'commands')}
-                className={`flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold transition-colors ${activeHeaderTab === 'commands' ? 'bg-white/8 text-forge-text' : 'text-forge-muted hover:bg-white/5 hover:text-forge-text/80'}`}
+                className={`flex items-center gap-1 rounded px-3 py-1 text-xs font-semibold transition-colors ${activeHeaderTab === 'commands' ? 'bg-white/8 text-forge-text' : 'text-forge-muted hover:bg-white/5 hover:text-forge-text/80'}`}
               >
                 <Wrench className="h-3 w-3" />
                 Commands
-                {forgeConfig.warning && <span className="rounded-full border border-forge-yellow/25 bg-forge-yellow/10 px-1 text-[9px] text-forge-yellow">!</span>}
-                {forgeConfig.exists && !forgeConfig.warning && <span className="rounded-full border border-forge-green/25 bg-forge-green/10 px-1 text-[9px] text-forge-green">✓</span>}
+                {forgeConfig.warning && <span className="rounded-full border border-forge-yellow/25 bg-forge-yellow/10 px-1 text-xs text-forge-yellow">!</span>}
+                {forgeConfig.exists && !forgeConfig.warning && <span className="rounded-full border border-forge-green/25 bg-forge-green/10 px-1 text-xs text-forge-green">✓</span>}
                 {visibleSessions.filter((s) => s.terminalKind === 'run' && s.status === 'running').length > 0 && (
-                  <span className="rounded-full border border-forge-blue/25 bg-forge-blue/10 px-1.5 text-[9px] text-forge-blue">
+                  <span className="rounded-full border border-forge-blue/25 bg-forge-blue/10 px-1.5 text-xs text-forge-blue">
                     {visibleSessions.filter((s) => s.terminalKind === 'run' && s.status === 'running').length}
                   </span>
                 )}
@@ -839,12 +839,12 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
             <button
               type="button"
               onClick={() => setActiveHeaderTab((v) => v === 'ports' ? null : 'ports')}
-              className={`flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold transition-colors ${activeHeaderTab === 'ports' ? 'bg-white/8 text-forge-text' : 'text-forge-muted hover:bg-white/5 hover:text-forge-text/80'}`}
+              className={`flex items-center gap-1 rounded px-3 py-1 text-xs font-semibold transition-colors ${activeHeaderTab === 'ports' ? 'bg-white/8 text-forge-text' : 'text-forge-muted hover:bg-white/5 hover:text-forge-text/80'}`}
             >
               <Globe2 className="h-3 w-3" />
               Testing
               {ports.length > 0 && (
-                <span className="rounded-full border border-forge-blue/25 bg-forge-blue/10 px-1.5 text-[9px] text-forge-blue">
+                <span className="rounded-full border border-forge-blue/25 bg-forge-blue/10 px-1.5 text-xs text-forge-blue">
                   {ports.length}
                 </span>
               )}
@@ -853,7 +853,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
             {workspaceReadiness !== null && (
               <button
                 onClick={() => setActiveHeaderTab((v) => v === 'readiness' ? null : 'readiness')}
-                className={`flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold transition-colors ${activeHeaderTab === 'readiness' ? 'bg-white/8 text-forge-text' : 'text-forge-muted hover:bg-white/5 hover:text-forge-text/80'}`}
+                className={`flex items-center gap-1 rounded px-3 py-1 text-xs font-semibold transition-colors ${activeHeaderTab === 'readiness' ? 'bg-white/8 text-forge-text' : 'text-forge-muted hover:bg-white/5 hover:text-forge-text/80'}`}
               >
                 <RotateCcw className="h-3 w-3" />
                 Readiness
@@ -863,7 +863,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
             {workspaceHealth !== null && (
               <button
                 onClick={() => setActiveHeaderTab((v) => v === 'health' ? null : 'health')}
-                className={`flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold transition-colors ${activeHeaderTab === 'health' ? 'bg-white/8 text-forge-text' : 'text-forge-muted hover:bg-white/5 hover:text-forge-text/80'}`}
+                className={`flex items-center gap-1 rounded px-3 py-1 text-xs font-semibold transition-colors ${activeHeaderTab === 'health' ? 'bg-white/8 text-forge-text' : 'text-forge-muted hover:bg-white/5 hover:text-forge-text/80'}`}
               >
                 <RefreshCw className="h-3 w-3" />
                 Health
@@ -914,7 +914,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         )}
 
         {error && (
-          <div className="mt-2 flex items-start gap-2 rounded-lg border border-forge-red/20 bg-forge-red/10 px-3 py-2 text-[12px] text-forge-red">
+          <div className="mt-2 flex items-start gap-2 rounded-lg border border-forge-red/20 bg-forge-red/10 px-3 py-2 text-sm text-forge-red">
             <PlugZap className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>{error}</span>
           </div>
@@ -922,7 +922,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         {dockOverflowSessions.length > 0 && (
           <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
             {dockOverflowSessions.slice(0, 12).map((session) => (
-              <button key={session.id} onClick={() => void attachTerminal(session)} className="shrink-0 rounded border border-forge-border bg-white/5 px-2 py-1 text-[10px] text-forge-muted hover:bg-white/10">
+              <button key={session.id} onClick={() => void attachTerminal(session)} className="shrink-0 rounded border border-forge-border bg-white/5 px-2 py-1 text-xs text-forge-muted hover:bg-white/10">
                 {session.title || PROFILE_LABELS[session.profile as TerminalProfile] || session.profile} · {session.status}
               </button>
             ))}
@@ -935,14 +935,14 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
           <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-forge-border bg-forge-bg p-8 text-center">
             <div className="max-w-md">
               <TerminalIcon className="mx-auto mb-3 h-9 w-9 text-forge-muted" />
-              <h2 className="text-[15px] font-bold text-forge-text">Start a workspace terminal</h2>
-              <p className="mt-1 text-[12px] leading-relaxed text-forge-muted">
+              <h2 className="text-base font-bold text-forge-text">Start a workspace terminal</h2>
+              <p className="mt-1 text-sm leading-relaxed text-forge-muted">
                 Launch agents, shells, and dev servers for this workspace.
               </p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
-                <button disabled={busy} onClick={() => void createTerminal('agent', 'claude_code', 'Claude')} className="rounded-lg bg-forge-orange px-3 py-2 text-[12px] font-semibold text-white disabled:opacity-50">Start Claude</button>
-                <button disabled={busy} onClick={() => void createTerminal('agent', 'codex', 'Codex')} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-[12px] font-semibold text-forge-text disabled:opacity-50">Start Codex</button>
-                <button disabled={busy} onClick={() => void createTerminal('shell', 'shell', 'Shell')} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-[12px] font-semibold text-forge-text disabled:opacity-50">New Shell</button>
+                <button disabled={busy} onClick={() => void createTerminal('agent', 'claude_code', 'Claude')} className="rounded-lg bg-forge-orange px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Start Claude</button>
+                <button disabled={busy} onClick={() => void createTerminal('agent', 'codex', 'Codex')} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">Start Codex</button>
+                <button disabled={busy} onClick={() => void createTerminal('shell', 'shell', 'Shell')} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">New Shell</button>
               </div>
             </div>
           </div>
@@ -960,8 +960,8 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                     className={`group flex max-w-[220px] shrink-0 items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition-colors ${active ? 'border-forge-orange/40 bg-forge-orange/10 text-forge-text' : 'border-transparent bg-transparent text-forge-muted hover:bg-white/5 hover:text-forge-text/85'}`}
                     title={`${title} · ${session.status} · ${session.cwd}`}
                   >
-                    <span className="truncate text-[11px] font-semibold">{title}</span>
-                    <span className={`rounded-full border px-1.5 py-0.5 text-[8px] font-bold uppercase ${terminalStatusBadgeClass(session)}`}>
+                    <span className="truncate text-sm font-semibold">{title}</span>
+                    <span className={`rounded-full border px-1.5 py-0.5 text-xs font-bold uppercase ${terminalStatusBadgeClass(session)}`}>
                       {session.stale ? 'stale' : session.status}
                     </span>
                     <span
@@ -995,7 +995,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
             />
           </>
         ) : (
-          <div className="flex h-full items-center justify-center rounded-xl border border-forge-border bg-forge-bg p-8 text-center text-[12px] text-forge-muted">
+          <div className="flex h-full items-center justify-center rounded-xl border border-forge-border bg-forge-bg p-8 text-center text-sm text-forge-muted">
             No terminal tab selected.
           </div>
         )}
@@ -1014,7 +1014,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
           <div className="flex h-[calc(100%-4px)] min-h-0 flex-col gap-2 overflow-hidden p-2">
           <div className="shrink-0 flex flex-wrap items-center gap-2">
             {/* Profile select — always visible */}
-            <select value={selectedProfileId} onChange={(event) => setSelectedProfileId(event.target.value)} className="rounded-md border border-forge-border bg-forge-bg px-2 py-1 text-[10px] font-semibold text-forge-text">
+            <select value={selectedProfileId} onChange={(event) => setSelectedProfileId(event.target.value)} className="rounded-md border border-forge-border bg-forge-bg px-2 py-1 text-xs font-semibold text-forge-text">
               {agentProfilesForPromptPicker(agentProfiles).map((profile) => (
                 <option key={profile.id} value={profile.id}>
                   {profile.label}
@@ -1027,47 +1027,47 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
               <button
                 onClick={() => setShowComposerSettings((v) => !v)}
                 title="Agent settings"
-                className={`flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors ${showComposerSettings ? 'border-forge-orange/30 bg-forge-orange/10 text-forge-orange' : 'border-forge-border bg-white/5 text-forge-muted hover:bg-white/10 hover:text-forge-text/80'}`}
+                className={`flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold transition-colors ${showComposerSettings ? 'border-forge-orange/30 bg-forge-orange/10 text-forge-orange' : 'border-forge-border bg-white/5 text-forge-muted hover:bg-white/10 hover:text-forge-text/80'}`}
               >
                 <Settings2 className="h-3 w-3" />
                 <span>{selectedTaskMode}</span>
               </button>
               {showComposerSettings && (
                 <div className="absolute left-0 top-full z-30 mt-1 min-w-[240px] rounded-lg border border-forge-border bg-forge-surface p-3 shadow-lg">
-                  <p className="mb-2 text-[9px] font-bold uppercase tracking-widest text-forge-muted">Agent Settings</p>
+                  <p className="mb-2 text-xs font-bold uppercase tracking-widest text-forge-muted">Agent Settings</p>
                   <div className="space-y-2">
                     <div>
-                      <label className="mb-1 block text-[10px] text-forge-muted">Task mode</label>
-                      <select value={selectedTaskMode} onChange={(event) => setSelectedTaskMode(event.target.value)} className="w-full rounded border border-forge-border bg-forge-bg px-2 py-1 text-[10px] text-forge-text">
+                      <label className="mb-1 block text-xs text-forge-muted">Task mode</label>
+                      <select value={selectedTaskMode} onChange={(event) => setSelectedTaskMode(event.target.value)} className="w-full rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-text">
                         {['Act', 'Plan', 'Review', 'Fix'].map((mode) => <option key={mode}>{mode}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="mb-1 block text-[10px] text-forge-muted">Reasoning</label>
-                      <select value={selectedReasoning} onChange={(event) => setSelectedReasoning(event.target.value)} className="w-full rounded border border-forge-border bg-forge-bg px-2 py-1 text-[10px] text-forge-text">
+                      <label className="mb-1 block text-xs text-forge-muted">Reasoning</label>
+                      <select value={selectedReasoning} onChange={(event) => setSelectedReasoning(event.target.value)} className="w-full rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-text">
                         {['Default', 'Low', 'Medium', 'High'].map((level) => <option key={level}>{level}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="mb-1 block text-[10px] text-forge-muted">Send behavior</label>
-                      <select value={sendBehavior} onChange={(event) => setSendBehavior(event.target.value as typeof sendBehavior)} className="w-full rounded border border-forge-border bg-forge-bg px-2 py-1 text-[10px] text-forge-text">
+                      <label className="mb-1 block text-xs text-forge-muted">Send behavior</label>
+                      <select value={sendBehavior} onChange={(event) => setSendBehavior(event.target.value as typeof sendBehavior)} className="w-full rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-text">
                         <option value="send_now">Send now</option>
                         <option value="interrupt_send">Interrupt + send</option>
                       </select>
-                      <p className="mt-1.5 text-[9px] leading-snug text-forge-muted">
+                      <p className="mt-1.5 text-xs leading-snug text-forge-muted">
                         Stop the focused tab any time: header <span className="font-mono text-forge-text/70">⋯</span> menu → Interrupt terminal.
                       </p>
                     </div>
                     <div className="border-t border-forge-border/60 pt-2">
-                      <p className="mb-1.5 text-[9px] font-bold uppercase tracking-widest text-forge-muted">Repo context</p>
-                      <p className="mb-2 text-[9px] leading-snug text-forge-muted">
+                      <p className="mb-1.5 text-xs font-bold uppercase tracking-widest text-forge-muted">Repo context</p>
+                      <p className="mb-2 text-xs leading-snug text-forge-muted">
                         Git paths + changed-file diffs (not a full aider-style map). Forge does not cap size—large repos can produce very large context. Use after changing branches or large file moves.
                       </p>
                       <button
                         type="button"
                         disabled={contextBusy}
                         onClick={() => void addRepoContextToPrompt()}
-                        className="mb-1.5 w-full rounded-md border border-forge-green/30 bg-forge-green/10 px-2 py-1.5 text-[10px] font-semibold text-forge-green hover:bg-forge-green/15 disabled:opacity-50"
+                        className="mb-1.5 w-full rounded-md border border-forge-green/30 bg-forge-green/10 px-2 py-1.5 text-xs font-semibold text-forge-green hover:bg-forge-green/15 disabled:opacity-50"
                         title="Fetch context, show summary below, append to prompt if not already present"
                       >
                         {contextBusy ? 'Working…' : 'Add repo context to prompt'}
@@ -1076,7 +1076,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                         type="button"
                         disabled={contextBusy}
                         onClick={() => void refreshRepoPathMap()}
-                        className="flex w-full items-center justify-center gap-1 rounded-md border border-forge-border bg-white/5 px-2 py-1.5 text-[10px] font-semibold text-forge-muted hover:bg-white/10 disabled:opacity-50"
+                        className="flex w-full items-center justify-center gap-1 rounded-md border border-forge-border bg-white/5 px-2 py-1.5 text-xs font-semibold text-forge-muted hover:bg-white/10 disabled:opacity-50"
                         title="Regenerate .forge/context path list from git (then update preview only)"
                       >
                         <RefreshCw className={`h-3 w-3 ${contextBusy ? 'animate-spin' : ''}`} />
@@ -1089,22 +1089,22 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
             </div>
 
             {promptTemplates.slice(0, 5).map((template) => (
-              <button key={template.id} onClick={() => injectTemplate(template)} title={template.source} className="max-w-[180px] truncate rounded-md border border-forge-border bg-white/5 px-2 py-1 text-[10px] font-semibold text-forge-muted hover:bg-white/10">
+              <button key={template.id} onClick={() => injectTemplate(template)} title={template.source} className="max-w-[180px] truncate rounded-md border border-forge-border bg-white/5 px-2 py-1 text-xs font-semibold text-forge-muted hover:bg-white/10">
                 <FileText className="inline h-3 w-3" /> {template.title}
               </button>
             ))}
             {!!agentContext?.linkedWorktrees.length && (
-              <button onClick={injectLinkedContext} className="max-w-[220px] truncate rounded-md border border-forge-blue/25 bg-forge-blue/10 px-2 py-1 text-[10px] font-semibold text-forge-blue hover:bg-forge-blue/15" title={agentContext.linkedWorktrees.map((item) => item.path).join('\n')}>
+              <button onClick={injectLinkedContext} className="max-w-[220px] truncate rounded-md border border-forge-blue/25 bg-forge-blue/10 px-2 py-1 text-xs font-semibold text-forge-blue hover:bg-forge-blue/15" title={agentContext.linkedWorktrees.map((item) => item.path).join('\n')}>
                 <Link2 className="inline h-3 w-3" /> Insert linked context ({agentContext.linkedWorktrees.length})
               </button>
             )}
             {promptTemplateWarning && (
-              <span className="text-[10px] text-forge-yellow">{promptTemplateWarning}</span>
+              <span className="text-xs text-forge-yellow">{promptTemplateWarning}</span>
             )}
           </div>
 
           {contextPreview && (
-            <div className="shrink-0 rounded-lg border border-forge-border bg-forge-bg/80 p-2 text-[10px] text-forge-muted">
+            <div className="shrink-0 rounded-lg border border-forge-border bg-forge-bg/80 p-2 text-xs text-forge-muted">
               <div className="mb-1 flex flex-wrap items-center gap-2">
                 <span className="font-bold uppercase tracking-widest text-forge-text">Repo context preview</span>
                 <span className={`rounded-full border px-1.5 py-0.5 ${contextPreview.status === 'fresh' ? 'border-forge-green/25 bg-forge-green/10 text-forge-green' : 'border-forge-yellow/25 bg-forge-yellow/10 text-forge-yellow'}`}>
@@ -1157,7 +1157,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                   ? 'Send instruction to agent (Enter interrupts agent if needed then sends, Shift+Enter for newline)…'
                   : 'Send instruction to agent (Enter to send, Shift+Enter for newline)…'
               }
-              className="h-full min-h-0 w-0 flex-1 resize-none overflow-y-auto rounded-lg border border-forge-border bg-forge-bg px-3 py-2 text-[12px] leading-relaxed text-forge-text placeholder:text-forge-muted focus:border-forge-orange/40 focus:outline-none"
+              className="h-full min-h-0 w-0 flex-1 resize-none overflow-y-auto rounded-lg border border-forge-border bg-forge-bg px-3 py-2 text-sm leading-relaxed text-forge-text placeholder:text-forge-muted focus:border-forge-orange/40 focus:outline-none"
               onKeyDown={(event) => {
                 if (event.key !== 'Enter' || event.shiftKey) return;
                 if ('isComposing' in event.nativeEvent && event.nativeEvent.isComposing) return;
@@ -1169,7 +1169,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
               <button
                 disabled={busy || !promptInput.trim()}
                 onClick={() => sendPrompt(sendBehavior)}
-                className="rounded-lg border border-forge-orange/30 bg-forge-orange/10 px-3 py-2 text-[12px] font-semibold text-forge-orange hover:bg-forge-orange/20 disabled:opacity-50"
+                className="rounded-lg border border-forge-orange/30 bg-forge-orange/10 px-3 py-2 text-sm font-semibold text-forge-orange hover:bg-forge-orange/20 disabled:opacity-50"
                 title={
                   sendBehavior === 'interrupt_send'
                     ? 'Matches Agent settings: interrupt then send (same as Enter)'
@@ -1182,7 +1182,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
           </div>
 
           {(promptMeter !== null || (workspace.agentSession?.tokenCount ?? 0) > 0) && (
-            <p className="mt-1 text-[9px] leading-snug text-forge-muted">
+            <p className="mt-1 text-xs leading-snug text-forge-muted">
               {promptMeter !== null && (
                 <>
                   Last prompt: {promptMeter.lastChars.toLocaleString()} chars (~{promptMeter.lastEstTokens.toLocaleString()}{' '}
@@ -1220,7 +1220,7 @@ function ContextFooter({ workspaceId }: { workspaceId: string }) {
   if (!status) return null;
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1 border-t border-white/5 text-[11px] text-white/30">
+    <div className="flex items-center gap-2 px-3 py-1 border-t border-white/5 text-sm text-white/30">
       <span>ctx {status.engine}</span>
       {status.stale && (
         <span className="text-amber-400/70">[stale]</span>
