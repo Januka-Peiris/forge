@@ -111,18 +111,16 @@ export function TerminalPane({
   return (
     <section
       onMouseDown={onFocus}
-      className={`relative flex min-h-0 flex-1 flex-col rounded-xl border bg-[#08090c] ${focused ? 'border-forge-orange/50 shadow-lg shadow-orange-950/20' : 'border-forge-border'}`}
+      title={session.cwd}
+      className={`relative flex min-h-0 flex-1 flex-col rounded-md border bg-[#08090c] ${focused ? 'border-forge-orange/50 shadow-lg shadow-orange-950/20' : 'border-forge-border'}`}
     >
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-forge-border/70 bg-forge-surface px-2 py-1.5">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-[12px] font-bold text-forge-text">{title}</span>
-            <Badge variant={sessionBadgeVariant(session)}>
-              {session.status}
-            </Badge>
-            <Badge variant="muted">{session.backend}</Badge>
-          </div>
-          <p className="mt-0.5 truncate font-mono text-[10px] text-forge-text/82">{session.cwd}</p>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-[12px] font-bold text-forge-text">{title}</span>
+          <Badge variant={sessionBadgeVariant(session)}>
+            {session.status}
+          </Badge>
+          <Badge variant="muted">{session.backend}</Badge>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {running && (

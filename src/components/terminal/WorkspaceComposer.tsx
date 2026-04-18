@@ -337,45 +337,51 @@ export function WorkspaceComposer({
               <Link2 className="inline h-3 w-3" /> Insert linked context ({agentContext.linkedWorktrees.length})
             </button>
           )}
+          {contextPreview && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button className="flex shrink-0 items-center gap-1 rounded border border-forge-border/50 bg-forge-bg px-2 py-1 text-xs text-forge-muted hover:bg-white/5">
+                  <span className={contextPreview.status === 'fresh' ? 'text-forge-green' : 'text-forge-yellow'}>@</span>
+                  {contextPreview.items.filter((i) => i.included).length} files · {contextPreview.status}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="max-w-sm">
+                <div className="mb-1.5 flex flex-wrap items-center gap-2 text-xs">
+                  <span className="font-bold uppercase tracking-widest text-forge-text">Repo context</span>
+                  <span className={`rounded-full border px-1.5 py-0.5 ${contextPreview.status === 'fresh' ? 'border-forge-green/25 bg-forge-green/10 text-forge-green' : 'border-forge-yellow/25 bg-forge-yellow/10 text-forge-yellow'}`}>
+                    {contextPreview.status}
+                  </span>
+                  <span className="text-forge-muted">{contextPreview.defaultBranch}@{contextPreview.commitHash.slice(0, 8)}</span>
+                  <span className="text-forge-muted">
+                    {contextPreview.maxChars === 0
+                      ? <>{contextPreview.approxChars.toLocaleString()} chars · ~{roughTokenEstimateFromChars(contextPreview.approxChars).toLocaleString()} tok</>
+                      : <>{contextPreview.approxChars.toLocaleString()} / {contextPreview.maxChars.toLocaleString()} chars</>
+                    }
+                  </span>
+                  {contextPreview.trimmed && <span className="text-forge-yellow">trimmed</span>}
+                </div>
+                {contextPreview.warning && <div className="mb-1.5 text-xs text-forge-yellow">{contextPreview.warning}</div>}
+                <div className="flex flex-wrap gap-1">
+                  {contextPreview.items.slice(0, 18).map((item, index) => (
+                    <span
+                      key={`${item.kind}-${item.path ?? item.label}-${index}`}
+                      title={`${item.path ?? item.label} · ${item.chars.toLocaleString()} chars${item.trimmed ? ' · trimmed' : ''}`}
+                      className={`max-w-[220px] truncate rounded border px-1.5 py-0.5 text-xs ${item.included ? 'border-forge-blue/20 bg-forge-blue/10 text-forge-blue' : 'border-forge-border bg-white/5 text-forge-muted line-through'}`}
+                    >
+                      {item.label}{item.trimmed ? ' …' : ''}
+                    </span>
+                  ))}
+                  {contextPreview.items.length > 18 && (
+                    <span className="rounded border border-forge-border bg-white/5 px-1.5 py-0.5 text-xs">+{contextPreview.items.length - 18} more</span>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
           {promptTemplateWarning && (
             <span className="text-xs text-forge-yellow">{promptTemplateWarning}</span>
           )}
         </div>
-
-        {contextPreview && (
-          <div className="shrink-0 rounded-lg border border-forge-border bg-forge-bg/80 p-2 text-xs text-forge-muted">
-            <div className="mb-1 flex flex-wrap items-center gap-2">
-              <span className="font-bold uppercase tracking-widest text-forge-text">Repo context preview</span>
-              <span className={`rounded-full border px-1.5 py-0.5 ${contextPreview.status === 'fresh' ? 'border-forge-green/25 bg-forge-green/10 text-forge-green' : 'border-forge-yellow/25 bg-forge-yellow/10 text-forge-yellow'}`}>
-                {contextPreview.status}
-              </span>
-              <span>{contextPreview.defaultBranch}@{contextPreview.commitHash.slice(0, 8)}</span>
-              <span>
-                {contextPreview.maxChars === 0 ? (
-                  <>{contextPreview.approxChars.toLocaleString()} chars <span className="text-forge-muted">(~{roughTokenEstimateFromChars(contextPreview.approxChars).toLocaleString()} tok est.)</span> <span className="text-forge-muted">· no Forge cap</span></>
-                ) : (
-                  <>{contextPreview.approxChars.toLocaleString()} / {contextPreview.maxChars.toLocaleString()} chars</>
-                )}
-              </span>
-              {contextPreview.trimmed && <span className="text-forge-yellow">trimmed</span>}
-            </div>
-            {contextPreview.warning && <div className="mb-1 text-forge-yellow">{contextPreview.warning}</div>}
-            <div className="flex flex-wrap gap-1">
-              {contextPreview.items.slice(0, 18).map((item, index) => (
-                <span
-                  key={`${item.kind}-${item.path ?? item.label}-${index}`}
-                  title={`${item.path ?? item.label} · ${item.chars.toLocaleString()} chars${item.trimmed ? ' · trimmed' : ''}`}
-                  className={`max-w-[220px] truncate rounded border px-1.5 py-0.5 ${item.included ? 'border-forge-blue/20 bg-forge-blue/10 text-forge-blue' : 'border-forge-border bg-white/5 text-forge-muted line-through'}`}
-                >
-                  {item.label}{item.trimmed ? ' …' : ''}
-                </span>
-              ))}
-              {contextPreview.items.length > 18 && (
-                <span className="rounded border border-forge-border bg-white/5 px-1.5 py-0.5">+{contextPreview.items.length - 18} more</span>
-              )}
-            </div>
-          </div>
-        )}
 
         <div className="flex min-h-0 flex-1 gap-2">
           <textarea
@@ -387,7 +393,7 @@ export function WorkspaceComposer({
                 ? 'Send instruction to agent (Enter interrupts agent if needed then sends, Shift+Enter for newline)…'
                 : 'Send instruction to agent (Enter to send, Shift+Enter for newline)…'
             }
-            className="h-full min-h-0 w-0 flex-1 resize-none overflow-y-auto rounded-lg border border-forge-border bg-forge-bg px-3 py-2 text-sm leading-relaxed text-forge-text placeholder:text-forge-muted focus:border-forge-orange/40 focus:outline-none"
+            className="h-full min-h-0 w-0 flex-1 resize-none overflow-y-auto rounded border border-forge-border bg-forge-bg px-3 py-2 text-sm leading-relaxed text-forge-text placeholder:text-forge-muted focus:border-forge-orange/40 focus:outline-none"
             onKeyDown={(e) => {
               if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); onTogglePlanMode(); return; }
               if (e.key !== 'Enter' || e.shiftKey) return;
@@ -400,7 +406,7 @@ export function WorkspaceComposer({
             <button
               disabled={busy || !promptInput.trim()}
               onClick={handleSend}
-              className="rounded-lg border border-forge-orange/30 bg-forge-orange/10 px-3 py-2 text-sm font-semibold text-forge-orange hover:bg-forge-orange/20 disabled:opacity-50"
+              className="rounded border border-forge-orange/30 bg-forge-orange/10 px-3 py-2 text-sm font-semibold text-forge-orange hover:bg-forge-orange/20 disabled:opacity-50"
               title={settings.sendBehavior === 'interrupt_send' ? 'Interrupt then send (same as Enter)' : 'Send now (same as Enter)'}
             >
               <Zap className="inline h-3.5 w-3.5" /> Send

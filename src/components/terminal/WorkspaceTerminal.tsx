@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Copy, Plus, Square, Terminal as TerminalIcon, X } from 'lucide-react';
+import { ChevronRight, Copy, Plus, Square, Terminal as TerminalIcon, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
@@ -935,25 +935,19 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         {/* Shell / run session rail — left column, only when shells exist */}
         {visibleSessions.length > 0 && (
           shellRailOpen ? (
-            <div className="flex w-44 shrink-0 flex-col border-r border-forge-border/50 pr-2">
+            <div
+              className="flex w-44 shrink-0 flex-col border-r border-forge-border/50 pr-2"
+              onKeyDown={(e) => { if (e.key === 'Escape') setShellRailOpen(false); }}
+            >
               <div className="mb-1 flex shrink-0 items-center justify-between px-1">
                 <span className="text-[10px] font-semibold uppercase tracking-widest text-forge-muted/50">Shells</span>
-                <div className="flex items-center gap-0.5">
-                  <button
-                    onClick={() => void createTerminal('shell', 'shell', 'Shell')}
-                    className="rounded p-0.5 text-forge-muted/50 hover:bg-white/5 hover:text-forge-orange"
-                    title="New shell"
-                  >
-                    <Plus className="h-3 w-3" />
-                  </button>
-                  <button
-                    onClick={() => setShellRailOpen(false)}
-                    className="rounded p-0.5 text-forge-muted/50 hover:bg-white/5 hover:text-forge-text"
-                    title="Collapse shell panel"
-                  >
-                    <ChevronLeft className="h-3 w-3" />
-                  </button>
-                </div>
+                <button
+                  onClick={() => void createTerminal('shell', 'shell', 'Shell')}
+                  className="rounded p-0.5 text-forge-muted/50 hover:bg-white/5 hover:text-forge-orange"
+                  title="New shell"
+                >
+                  <Plus className="h-3 w-3" />
+                </button>
               </div>
               <div className="flex flex-col gap-0.5 overflow-y-auto">
                 {visibleSessions.map((session) => {
@@ -1051,10 +1045,8 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                         className={`group flex max-w-[220px] shrink-0 items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition-colors ${active ? 'border-forge-orange/40 bg-forge-orange/10 text-forge-text' : 'border-transparent bg-transparent text-forge-muted hover:bg-white/5 hover:text-forge-text/85'}`}
                         title={`${session.title} · ${session.status} · ${session.cwd}`}
                       >
+                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${session.status === 'running' ? 'bg-forge-green' : session.status === 'failed' || session.status === 'interrupted' ? 'bg-forge-red' : 'bg-forge-muted/50'}`} />
                         <span className="truncate text-sm font-semibold">{session.title}</span>
-                        <span className={`text-xs font-medium uppercase ${session.status === 'running' ? 'text-forge-green' : session.status === 'failed' || session.status === 'interrupted' ? 'text-forge-red' : 'text-forge-muted'} opacity-80`}>
-                          {session.status}
-                        </span>
                         <span
                           role="button"
                           tabIndex={-1}
