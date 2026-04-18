@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import {
   Bot,
   CheckCircle2,
+  ChevronRight,
   FileCode2,
   GitPullRequest,
   Hammer,
@@ -193,6 +194,21 @@ function ResultStrip({
   );
 }
 
+function sectionSummary(events: AgentChatEvent[]): string {
+  const counts: Record<string, number> = {};
+  for (const e of events) {
+    const key =
+      e.eventType === 'file_read' ? 'read' :
+      e.eventType === 'file_change' ? 'edit' :
+      e.eventType === 'command' || e.eventType === 'test_run' ? 'command' :
+      e.eventType === 'tool_call' ? 'tool call' : null;
+    if (key) counts[key] = (counts[key] ?? 0) + 1;
+  }
+  return Object.entries(counts)
+    .map(([k, n]) => `${n} ${k}${n === 1 ? '' : k === 'read' || k === 'edit' ? 's' : 's'}`)
+    .join(' · ');
+}
+
 function AgentRunSectionView({
   section,
   acceptedPlanId,
@@ -202,6 +218,8 @@ function AgentRunSectionView({
   acceptedPlanId?: string | null;
   onAction?: (action: AgentChatNextAction, event?: AgentChatEvent) => void;
 }) {
+  const defaultCollapsed = section.kind === 'actions';
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const visibleEvents = section.events.filter((event) => !shouldOmitEvent(event));
   if (visibleEvents.length === 0) return null;
 
@@ -224,18 +242,29 @@ function AgentRunSectionView({
         : <Terminal className="h-3 w-3 text-forge-red" />;
 
   const hasOnlyTimelineEvents = visibleEvents.every((event) => TIMELINE_EVENT_TYPES.has(event.eventType) || isCompactStatusEvent(event));
+  const summary = sectionSummary(visibleEvents);
 
   return (
     <div className="space-y-1">
-      <div className="flex items-center gap-1.5 px-1 text-[10px] font-bold uppercase tracking-widest text-forge-muted">
+      <button
+        type="button"
+        onClick={() => setCollapsed((v) => !v)}
+        className="flex w-full items-center gap-1.5 px-1 text-[10px] font-bold uppercase tracking-widest text-forge-muted hover:text-forge-text/80"
+      >
+        <ChevronRight className={`h-2.5 w-2.5 shrink-0 transition-transform ${collapsed ? '' : 'rotate-90'}`} />
         {icon}
-        {section.title}
-      </div>
-      <div className={hasOnlyTimelineEvents ? 'border-l border-forge-border/40 pl-2.5 py-1' : 'space-y-3'}>
-        {visibleEvents.map((event) => (
-          <AgentEventCard key={event.id} event={event} accepted={acceptedPlanId === event.id} onAction={onAction} />
-        ))}
-      </div>
+        <span>{section.title}</span>
+        {collapsed && summary && (
+          <span className="ml-0.5 font-normal normal-case tracking-normal text-forge-muted/55">{summary}</span>
+        )}
+      </button>
+      {!collapsed && (
+        <div className={hasOnlyTimelineEvents ? 'border-l border-forge-border/40 pl-2.5 py-1' : 'space-y-3'}>
+          {visibleEvents.map((event) => (
+            <AgentEventCard key={event.id} event={event} accepted={acceptedPlanId === event.id} onAction={onAction} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
