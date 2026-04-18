@@ -72,7 +72,11 @@ export function NewWorkspaceModal({ onClose, onCreate, repositories, initialRepo
           ? `worktree:${next.repository.worktrees[0].id}`
           : `branch:${next.branches[0] ?? next.repository.currentBranch ?? 'main'}`;
         setSource(defaultSource);
-        setBaseBranch(next.repository.currentBranch ?? next.branches[0] ?? 'main');
+        const preferredBase = ['main', 'master'].find((b) => next.branches.includes(b))
+          ?? next.repository.currentBranch
+          ?? next.branches[0]
+          ?? 'main';
+        setBaseBranch(preferredBase);
         setBranchName(defaultBranchForWorkspaceLabel(nameRef.current));
       })
       .catch((err) => setError(formatWorkspaceCreationError(err)))
