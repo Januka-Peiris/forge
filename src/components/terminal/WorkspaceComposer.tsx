@@ -6,7 +6,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import type { AgentChatSession, WorkspaceAgentContext, WorkspaceContextPreview } from '../../types';
 import { getWorkspaceContextPreview, refreshWorkspaceRepoContext } from '../../lib/tauri-api/agent-context';
 import { formatSessionError } from '../../lib/ui-errors';
-import { modelContextLabel } from '../../lib/agent-workbench';
 import {
   AGENT_COMPOSER_DEFAULT_PX,
   AGENT_COMPOSER_HEIGHT_KEY,
@@ -216,8 +215,6 @@ export function WorkspaceComposer({
                   ))}
                 </SelectContent>
               </Select>
-              <span>·</span>
-              <span className="text-forge-muted">{modelContextLabel(settings.selectedModel)}</span>
               {promptMeter && (
                 <>
                   <span>·</span>
@@ -241,7 +238,7 @@ export function WorkspaceComposer({
                 <Settings2 className="h-3 w-3" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="start" className="min-w-[240px]">
+            <PopoverContent align="start" className="min-w-[240px] max-h-[min(480px,80vh)] overflow-y-auto">
               <p className="mb-2 text-xs font-bold uppercase tracking-widest text-forge-muted">Agent Settings</p>
               <div className="space-y-2">
                 <div>

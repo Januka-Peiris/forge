@@ -345,17 +345,7 @@ function AgentEventCard({
 
   // Compact timeline rows for tool/action events
   if (TIMELINE_EVENT_TYPES.has(event.eventType)) {
-    return (
-      <div className="flex items-center gap-2 py-0.5 text-xs text-forge-muted">
-        {timelineIconForEvent(event)}
-        <span className="min-w-0 flex-1 truncate">{event.title || labelForEvent(event.eventType)}</span>
-        {event.status && (
-          <span className={`shrink-0 text-[10px] ${event.status === 'succeeded' || event.status === 'done' ? 'text-forge-green/70' : event.status === 'failed' ? 'text-forge-red/70' : 'text-forge-dim'}`}>
-            {event.status}
-          </span>
-        )}
-      </div>
-    );
+    return <TimelineEventRow event={event} />;
   }
 
   // Full card for plan, todo, result, error, next_action, and anything else
@@ -492,6 +482,58 @@ function MarkdownishText({ text }: { text: string }) {
   }, [text]);
 
   return <div className="text-sm leading-relaxed text-forge-text">{blocks}</div>;
+}
+
+function TimelineEventRow({ event }: { event: AgentChatEvent }) {
+  const [open, setOpen] = useState(false);
+  const hasBody = !!event.body;
+  const running = event.status === 'running';
+  const label = shortLabelForEvent(event);
+  const detail = detailForEvent(event);
+  return (
+    <div>
+      <button
+        type="button"
+        disabled={!hasBody}
+        onClick={() => hasBody && setOpen((v) => !v)}
+        className="flex w-full items-center gap-1.5 py-0.5 text-xs text-forge-muted hover:text-forge-text/80 disabled:cursor-default"
+      >
+        <ChevronRight
+          className={`h-3 w-3 shrink-0 transition-transform ${open ? 'rotate-90' : ''} ${!hasBody ? 'opacity-0' : 'opacity-60'}`}
+        />
+        {timelineIconForEvent(event)}
+        <span className="font-medium text-forge-text/70">{label}</span>
+        {detail && (
+          <>
+            <span className="text-forge-dim">·</span>
+            <span className="min-w-0 flex-1 truncate font-mono">{detail}</span>
+          </>
+        )}
+        {running && <span className="ml-auto h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-forge-green" />}
+      </button>
+      {open && hasBody && (
+        <pre className="mt-0.5 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded border border-forge-border/40 bg-forge-bg/60 p-2 font-mono text-[11px] leading-relaxed text-forge-text/80">
+          {event.body}
+        </pre>
+      )}
+    </div>
+  );
+}
+
+function shortLabelForEvent(event: AgentChatEvent): string {
+  if (event.eventType === 'file_read') return 'Read';
+  if (event.eventType === 'file_change') return 'Edit';
+  if (event.eventType === 'command') return 'Run';
+  if (event.eventType === 'test_run') return 'Test';
+  return event.title || labelForEvent(event.eventType);
+}
+
+function detailForEvent(event: AgentChatEvent): string {
+  const path = event.metadata?.path;
+  if (path) return path.split('/').pop() ?? path;
+  const cmd = event.metadata?.command;
+  if (cmd) return cmd.length > 50 ? cmd.slice(0, 47) + '\u2026' : cmd;
+  return '';
 }
 
 function timelineIconForEvent(event: AgentChatEvent) {

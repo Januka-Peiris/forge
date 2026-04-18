@@ -38,7 +38,7 @@ export function deriveAgentRunSections(events: AgentChatEvent[]): AgentRunSectio
   for (const event of events) {
     if (event.eventType === 'user_message' || event.eventType === 'assistant_message') {
       const mode = latestPlanModeBefore(events, event.seq);
-      if (event.eventType === 'assistant_message' && mode === 'Plan') byKind.planning.events.push({ ...event, eventType: 'plan', title: 'Plan' });
+      if (event.eventType === 'assistant_message' && mode === 'Plan' && event.body.includes('\n')) byKind.planning.events.push({ ...event, eventType: 'plan', title: 'Plan' });
       else byKind.conversation.events.push(event);
     } else if (PLANNING_EVENTS.has(event.eventType)) byKind.planning.events.push(event);
     else if (ACTION_EVENTS.has(event.eventType)) byKind.actions.events.push(event);
