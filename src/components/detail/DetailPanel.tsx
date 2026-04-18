@@ -12,7 +12,7 @@ import type {
 } from '../../types';
 import { listWorkspaceActivity } from '../../lib/tauri-api/activity';
 import { setWorkspaceCostLimit } from '../../lib/tauri-api/workspaces';
-import { StatusBadge, AgentBadge } from '../workspaces/StatusBadge';
+import { StatusBadge } from '../workspaces/StatusBadge';
 import { ContextPreviewPanel } from '../context/ContextPreviewPanel';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -176,7 +176,6 @@ export function DetailPanel({
           <span className="font-mono truncate text-forge-text/90">{workspace.branch}</span>
         </div>
         <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-          <AgentBadge agent={workspace.agent} />
           <span className="text-xs text-forge-muted">{sessionStatus} · {sessionModel}</span>
         </div>
       </div>
