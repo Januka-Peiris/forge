@@ -3,6 +3,7 @@ import {
   ChevronLeft,
   ClipboardCheck,
   Filter,
+  FolderPlus,
   GitBranch,
   LayoutGrid,
   Plus,
@@ -46,6 +47,7 @@ interface SidebarProps {
   onDeleteWorkspace: (workspaceId: string) => void;
   onRemoveRepository: (repositoryId: string) => void;
   onNewWorkspace: (repositoryId?: string) => void;
+  onAddRepository?: () => void;
   onCollapse?: () => void;
   onFilteredWorkspacesChange?: (workspaces: Workspace[]) => void;
 }
@@ -72,6 +74,7 @@ export function Sidebar({
   onDeleteWorkspace,
   onRemoveRepository,
   onNewWorkspace,
+  onAddRepository,
   onCollapse,
   onFilteredWorkspacesChange,
 }: SidebarProps) {
@@ -254,15 +257,28 @@ export function Sidebar({
       <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3">
         <div className="flex items-center justify-between px-2">
           <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest">Workspaces</p>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            onClick={() => onNewWorkspace()}
-            className="text-forge-orange hover:text-forge-text"
-            title="New branch workspace"
-          >
-            <Plus className="w-3 h-3" />
-          </Button>
+          <div className="flex items-center gap-0.5">
+            {onAddRepository && (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={onAddRepository}
+                className="text-forge-muted/60 hover:text-forge-text hover:bg-white/5"
+                title="Add repository"
+              >
+                <FolderPlus className="w-3 h-3" />
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={() => onNewWorkspace()}
+              className="text-forge-orange hover:text-forge-text"
+              title="New branch workspace"
+            >
+              <Plus className="w-3 h-3" />
+            </Button>
+          </div>
         </div>
 
         <div className="mt-2 px-2 flex items-center gap-2">

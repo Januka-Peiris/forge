@@ -2,12 +2,13 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { open as openFilePicker } from '@tauri-apps/plugin-dialog';
 import { DetailPanel } from './components/detail/DetailPanel';
 import { Sidebar, type NavView } from './components/layout/Sidebar';
 import { WorkspaceTerminal } from './components/terminal/WorkspaceTerminal';
-import { listRepositories, removeRepository } from './lib/tauri-api/repositories';
+import { listRepositories, removeRepository, addRepository } from './lib/tauri-api/repositories';
 import { createWorkspacePr } from './lib/tauri-api/pr-draft';
-import { getSettings, saveHasCompletedEnvCheck } from './lib/tauri-api/settings';
+import { getSettings, saveHasCompletedEnvCheck, resolveGitRepositoryPath } from './lib/tauri-api/settings';
 import { listActivity } from './lib/tauri-api/activity';
 import { openDeepLink } from './lib/tauri-api/deep-links';
 import { checkEnvironment } from './lib/tauri-api/environment';
@@ -609,6 +610,19 @@ export default function App() {
     }
   };
 
+  const handleAddRepository = async () => {
+    const picked = await openFilePicker({ directory: true, multiple: false, title: 'Choose a Git repository' });
+    if (!picked) return;
+    try {
+      const toplevel = await resolveGitRepositoryPath(picked as string);
+      const repos = await addRepository(toplevel);
+      setSettingsState((current) => current ? { ...current, discoveredRepositories: repos } : current);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      window.alert(`Failed to add repository: ${message}`);
+    }
+  };
+
   const handleDeleteWorkspace = async (workspaceId: string) => {
     const candidate = workspaces.find((workspace) => workspace.id === workspaceId);
     const label = candidate?.name ?? workspaceId;
@@ -740,6 +754,7 @@ export default function App() {
                     setBranchFromWorkspaceId(null);
                     setModalOpen(true);
                   }}
+                  onAddRepository={() => void handleAddRepository()}
                   onCollapse={() => setSidebarCollapsed(true)}
                   onFilteredWorkspacesChange={setDisplayedWorkspaces}
                 />
