@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type ElementType } from 'react';
 import {
   GitBranch, ArrowUp, ArrowDown, AlertTriangle,
-  Clock, ExternalLink, Activity, CheckCircle2,
-  Circle, AlertCircle, Link2, Plus, GitPullRequest, Loader2, GitMerge, ChevronDown, ChevronRight
+  Clock, ExternalLink, Activity, AlertCircle, CheckCircle2,
+  Link2, Plus, GitPullRequest, Loader2, ChevronRight
 } from 'lucide-react';
 import type {
   ActivityItem as ForgeActivityItem,
@@ -73,6 +73,7 @@ export function DetailPanel({
   const [prError, setPrError] = useState<string | null>(null);
   const [timelineItems, setTimelineItems] = useState<ForgeActivityItem[]>([]);
   const [timelineExpanded, setTimelineExpanded] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [linkedSearch, setLinkedSearch] = useState('');
   const [budgetInput, setBudgetInput] = useState('');
@@ -228,49 +229,47 @@ export function DetailPanel({
               )}
             </div>
 
-            {/* Timeline */}
-            <div className="px-4 pb-4">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest">Activity</p>
-                {timelineLoading && <Loader2 className="w-3 h-3 animate-spin text-forge-muted" />}
-              </div>
-              {(() => {
+            {/* Activity — collapsed by default */}
+            <div className="px-4 pb-2">
+              <button
+                type="button"
+                onClick={() => setActivityOpen((v) => !v)}
+                className="flex w-full items-center gap-1.5 text-xs font-semibold text-forge-muted hover:text-forge-text/80 uppercase tracking-widest"
+              >
+                <ChevronRight className={`w-3 h-3 transition-transform ${activityOpen ? 'rotate-90' : ''}`} />
+                Activity
+                {timelineLoading && <Loader2 className="ml-1 w-3 h-3 animate-spin" />}
+              </button>
+              {activityOpen && (() => {
                 const allItems = timelineItems.length > 0 ? timelineItems : activityRows.map((r, i) => ({
                   id: String(i), event: r.label, level: 'info' as const, timestamp: r.time,
                   repo: '', workspaceId: workspace.id,
                 }));
-                const visibleItems = timelineExpanded ? allItems : allItems.slice(0, 5);
-                const eventIcon = (event: string, level: string) => {
-                  if (event.toLowerCase().includes('pr') || event.toLowerCase().includes('pull')) return { icon: GitPullRequest, color: level === 'success' ? 'bg-forge-green/70' : 'bg-forge-blue/70' };
-                  if (event.toLowerCase().includes('rebase') || event.toLowerCase().includes('merge')) return { icon: GitMerge, color: level === 'warning' ? 'bg-forge-yellow/70' : 'bg-forge-green/70' };
-                  if (level === 'error') return { icon: AlertCircle, color: 'bg-forge-red/70' };
-                  if (level === 'warning') return { icon: AlertTriangle, color: 'bg-forge-yellow/70' };
-                  if (level === 'success') return { icon: CheckCircle2, color: 'bg-forge-green/70' };
-                  return { icon: Circle, color: 'bg-forge-muted/60' };
-                };
+                const visibleItems = timelineExpanded ? allItems : allItems.slice(0, 8);
                 return (
-                  <div className="relative">
-                    <div className="absolute left-2.5 top-2 bottom-2 w-px bg-forge-border/50" />
-                    <div className="pl-1">
-                      {visibleItems.length === 0 ? (
-                        <p className="text-xs text-forge-muted">No activity yet.</p>
-                      ) : visibleItems.map((item, i) => {
-                        const { icon, color } = eventIcon(item.event, item.level ?? 'info');
-                        const label = 'details' in item && item.details ? `${item.event} · ${item.details}` : item.event;
-                        const time = 'timestamp' in item ? String(item.timestamp) : '';
-                        return <TimelineRow key={i} icon={icon} color={color} label={label} time={time} />;
-                      })}
-                    </div>
-                    {allItems.length > 5 && (
-                      <Button
-                        variant="ghost"
-                        size="xs"
+                  <div className="mt-1.5 space-y-0.5">
+                    {visibleItems.length === 0 ? (
+                      <p className="text-xs text-forge-muted">No activity yet.</p>
+                    ) : visibleItems.map((item, i) => {
+                      const label = 'details' in item && item.details ? `${item.event} · ${item.details}` : item.event;
+                      const time = 'timestamp' in item ? String(item.timestamp) : '';
+                      const levelColor = item.level === 'error' ? 'text-forge-red' : item.level === 'warning' ? 'text-forge-yellow' : item.level === 'success' ? 'text-forge-green' : 'text-forge-muted';
+                      return (
+                        <div key={i} className="flex items-baseline gap-2">
+                          <span className={`shrink-0 text-xs font-mono ${levelColor}`}>›</span>
+                          <span className="min-w-0 flex-1 truncate text-xs text-forge-text/85" title={label}>{label}</span>
+                          <span className="shrink-0 text-[10px] text-forge-muted/60">{time}</span>
+                        </div>
+                      );
+                    })}
+                    {allItems.length > 8 && (
+                      <button
+                        type="button"
                         onClick={() => setTimelineExpanded((e) => !e)}
-                        className="mt-1"
+                        className="mt-1 text-xs text-forge-muted hover:text-forge-text"
                       >
-                        <ChevronDown className={`w-3 h-3 transition-transform ${timelineExpanded ? 'rotate-180' : ''}`} />
-                        {timelineExpanded ? 'Show less' : `${allItems.length - 5} more`}
-                      </Button>
+                        {timelineExpanded ? '↑ Show less' : `↓ ${allItems.length - 8} more`}
+                      </button>
                     )}
                   </div>
                 );
