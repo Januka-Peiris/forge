@@ -44,10 +44,7 @@ pub fn get_orchestrator_status(state: State<'_, AppState>) -> Result<Orchestrato
 }
 
 #[tauri::command]
-pub fn set_orchestrator_enabled(
-    state: State<'_, AppState>,
-    enabled: bool,
-) -> Result<(), String> {
+pub fn set_orchestrator_enabled(state: State<'_, AppState>, enabled: bool) -> Result<(), String> {
     state.orchestrator_enabled.store(enabled, Ordering::Relaxed);
     orchestrator_repository::save_setting(
         &state.db,
@@ -63,10 +60,7 @@ pub fn set_orchestrator_enabled(
 }
 
 #[tauri::command]
-pub fn set_orchestrator_model(
-    state: State<'_, AppState>,
-    model: String,
-) -> Result<(), String> {
+pub fn set_orchestrator_model(state: State<'_, AppState>, model: String) -> Result<(), String> {
     if let Ok(mut guard) = state.orchestrator_model.lock() {
         *guard = model.clone();
     }

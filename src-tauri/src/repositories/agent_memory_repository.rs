@@ -21,7 +21,9 @@ pub fn list_for_workspace(db: &Database, workspace_id: &str) -> Result<Vec<Agent
             "SELECT id, workspace_id, key, value, created_at, updated_at
              FROM agent_memory WHERE workspace_id = ?1 ORDER BY key ASC",
         )?;
-        let rows = stmt.query_map(params![workspace_id], memory_from_row)?.collect();
+        let rows = stmt
+            .query_map(params![workspace_id], memory_from_row)?
+            .collect();
         rows
     })
 }

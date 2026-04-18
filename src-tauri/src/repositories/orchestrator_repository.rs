@@ -56,9 +56,11 @@ pub fn load_setting(db: &Database, key: &str) -> Result<Option<String>, String> 
     use rusqlite::OptionalExtension;
     db.with_connection(|connection| {
         connection
-            .query_row("SELECT value FROM settings WHERE key = ?1", params![key], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT value FROM settings WHERE key = ?1",
+                params![key],
+                |row| row.get(0),
+            )
             .optional()
     })
 }

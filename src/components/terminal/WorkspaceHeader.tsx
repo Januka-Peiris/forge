@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, Copy, ExternalLink, Globe2, MoreHorizontal, PlugZap, RefreshCw, RotateCcw, Square, Terminal as TerminalIcon, Wrench, X } from 'lucide-react';
+import { ChevronDown, Copy, ExternalLink, Globe2, MoreHorizontal, PlugZap, RefreshCw, RotateCcw, Square, Terminal as TerminalIcon, Wrench } from 'lucide-react';
 import { Button } from '../ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import type { ForgeWorkspaceConfig, TerminalProfile, TerminalSession, Workspace, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
@@ -39,6 +39,7 @@ interface WorkspaceHeaderProps {
   onOpenPort: (port: number) => void;
   onKillPort: (port: WorkspacePort) => void;
   onRefreshHealth: () => void;
+  onRecoverSessions: () => void;
   onCloseTerminal: (sessionId: string) => void;
   onStartShell: () => void;
   onAttachTerminal: (session: TerminalSession) => void;
@@ -54,7 +55,6 @@ export function WorkspaceHeader({
   workspaceHealth,
   workspaceReadiness,
   visibleSessions,
-  allSessions,
   dockOverflowSessions,
   busy,
   error,
@@ -71,6 +71,7 @@ export function WorkspaceHeader({
   onOpenPort,
   onKillPort,
   onRefreshHealth,
+  onRecoverSessions,
   onCloseTerminal,
   onStartShell,
   onAttachTerminal,
@@ -224,6 +225,7 @@ export function WorkspaceHeader({
           displayPortCount={ports.length}
           busy={busy}
           onRefresh={onRefreshHealth}
+          onRecoverSessions={onRecoverSessions}
           onClose={onCloseTerminal}
           onStartShell={onStartShell}
         />

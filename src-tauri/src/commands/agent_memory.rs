@@ -20,7 +20,12 @@ pub fn set_agent_memory(
     state: State<'_, AppState>,
     input: SetAgentMemoryInput,
 ) -> Result<AgentMemory, String> {
-    agent_memory_repository::upsert(&state.db, input.workspace_id.as_deref(), &input.key, &input.value)
+    agent_memory_repository::upsert(
+        &state.db,
+        input.workspace_id.as_deref(),
+        &input.key,
+        &input.value,
+    )
 }
 
 #[tauri::command]

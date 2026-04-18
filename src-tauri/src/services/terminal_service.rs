@@ -14,14 +14,19 @@ use crate::models::{
     TerminalOutputChunk, TerminalOutputEvent, TerminalOutputResponse, TerminalSession,
     TerminalSessionState,
 };
-use crate::repositories::{terminal_repository, workspace_repository};
 use crate::repositories::settings_repository;
+use crate::repositories::{activity_repository, terminal_repository, workspace_repository};
 use crate::services::cost_parser;
-use crate::services::{agent_context_service, agent_profile_service, environment_service};
+use crate::services::{
+    agent_context_service, agent_profile_service, checkpoint_service, environment_service,
+};
 use crate::state::{ActiveTerminal, AppState};
 use tauri::Emitter;
 
-fn agent_effective_model(state: &AppState, profile: &crate::models::AgentProfile) -> Option<String> {
+fn agent_effective_model(
+    state: &AppState,
+    profile: &crate::models::AgentProfile,
+) -> Option<String> {
     // Profile-level model overrides the global default.
     profile.model.clone().or_else(|| {
         settings_repository::get_value(&state.db, "agent_default_model")
@@ -41,7 +46,8 @@ pub fn start_workspace_terminal_session(
         Some(&input.profile),
     )?;
     let effective_model = agent_effective_model(state, &resolved_profile);
-    let profile = TerminalProfile::from_agent_profile(&resolved_profile, effective_model.as_deref());
+    let profile =
+        TerminalProfile::from_agent_profile(&resolved_profile, effective_model.as_deref());
     let session_role = resolve_session_role(input.session_role.as_deref(), &profile.name);
     if input.replace_existing.unwrap_or(false) {
         if let Some(existing) = terminal_repository::latest_for_workspace_role(
@@ -80,7 +86,8 @@ pub fn create_workspace_terminal(
         Some(&input.profile),
     )?;
     let effective_model = agent_effective_model(state, &resolved_profile);
-    let profile = TerminalProfile::from_agent_profile(&resolved_profile, effective_model.as_deref());
+    let profile =
+        TerminalProfile::from_agent_profile(&resolved_profile, effective_model.as_deref());
     let kind = normalize_terminal_kind(&input.kind, &profile.name);
     let session_role = if kind == "shell" || kind == "utility" || kind == "run" {
         "utility"
@@ -295,6 +302,24 @@ pub fn approve_workspace_terminal_command(
         .remove(session_id)
         .ok_or_else(|| format!("No pending command for session {session_id}"))?;
 
+    if let Ok(Some(session)) = terminal_repository::get_session(&state.db, session_id) {
+        let line = data.trim_end_matches(['\r', '\n']);
+        let event = if approved {
+            "Command approved"
+        } else {
+            "Command denied"
+        };
+        let _ = activity_repository::record(
+            &state.db,
+            &session.workspace_id,
+            "",
+            None,
+            event,
+            if approved { "warning" } else { "info" },
+            Some(line),
+        );
+    }
+
     if approved {
         pty_write_raw(state, session_id, &data)
     } else {
@@ -344,7 +369,12 @@ fn is_dangerous_command(line: &str) -> bool {
     let lower = line.to_lowercase();
     DANGEROUS_PATTERNS.iter().any(|pat| {
         // Case-insensitive for SQL keywords, case-sensitive for shell commands.
-        if pat.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+        if pat
+            .chars()
+            .next()
+            .map(|c| c.is_uppercase())
+            .unwrap_or(false)
+        {
             lower.contains(&pat.to_lowercase())
         } else {
             line.contains(pat)
@@ -667,28 +697,33 @@ pub fn queue_workspace_agent_prompt(
     }
 
     // Session-open context injection: inject once on the first prompt of a new session
-    let context_enabled = crate::repositories::settings_repository::get_value(&state.db, "context_enabled")
-        .unwrap_or_default()
-        .map(|v| v != "false")
-        .unwrap_or(true);
+    let context_enabled =
+        crate::repositories::settings_repository::get_value(&state.db, "context_enabled")
+            .unwrap_or_default()
+            .map(|v| v != "false")
+            .unwrap_or(true);
 
     if context_enabled {
         let is_first_prompt = {
             let active_session = terminal_repository::get_active_session_id_for_workspace(
                 &state.db,
                 &input.workspace_id,
-            ).unwrap_or(None);
+            )
+            .unwrap_or(None);
             match active_session {
                 None => true, // no active session yet — this will be the first
                 Some(session_id) => {
                     terminal_repository::count_sent_prompts_for_session(&state.db, &session_id)
-                        .unwrap_or(1) == 0
+                        .unwrap_or(1)
+                        == 0
                 }
             }
         };
 
         if is_first_prompt && !prompt.contains("[FORGE CONTEXT]") {
-            if let Some(context_block) = agent_context_service::build_session_open_context(state, &input.workspace_id) {
+            if let Some(context_block) =
+                agent_context_service::build_session_open_context(state, &input.workspace_id)
+            {
                 prompt = format!("{}\n\nUser request:\n{}", context_block, prompt);
             }
         }
@@ -1033,9 +1068,7 @@ fn reconcile_orphan_running_session(
         &latest.id,
         &seq,
         "system",
-        &format!(
-            "Terminal session {status} (reconciled; no active PTY)\r\n"
-        ),
+        &format!("Terminal session {status} (reconciled; no active PTY)\r\n"),
     );
     let _ = terminal_repository::mark_prompt_status_by_session(&state.db, &latest.id, status);
     Ok(())
@@ -1118,13 +1151,17 @@ fn spawn_terminal_reader(
                         // Check budget cap
                         if let Ok(ws) = workspace_repository::get(&db, &workspace_id) {
                             if let Some(limit) = ws.cost_limit_usd {
-                                if let Ok(cost_float) = cost.trim_start_matches('$').parse::<f64>() {
+                                if let Ok(cost_float) = cost.trim_start_matches('$').parse::<f64>()
+                                {
                                     if cost_float >= limit {
-                                        let _ = app_handle.emit("forge://workspace-budget-exceeded", serde_json::json!({
-                                            "workspaceId": workspace_id,
-                                            "cost": cost,
-                                            "limit": limit,
-                                        }));
+                                        let _ = app_handle.emit(
+                                            "forge://workspace-budget-exceeded",
+                                            serde_json::json!({
+                                                "workspaceId": workspace_id,
+                                                "cost": cost,
+                                                "limit": limit,
+                                            }),
+                                        );
                                     }
                                 }
                             }
@@ -1257,6 +1294,18 @@ fn resolve_session_role(explicit: Option<&str>, profile: &str) -> String {
 }
 
 fn dispatch_prompt_entry(state: &AppState, entry: &mut AgentPromptEntry) -> Result<(), String> {
+    if let Err(err) = checkpoint_service::create_checkpoint_if_dirty(
+        state,
+        &entry.workspace_id,
+        "before agent prompt",
+    ) {
+        log::warn!(
+            target: "forge_lib",
+            "failed to create pre-prompt checkpoint for workspace {}: {err}",
+            entry.workspace_id
+        );
+    }
+
     let session = if let Some(active) = active_for_workspace(state, &entry.workspace_id, "agent")? {
         terminal_repository::get_session(&state.db, &active.session_id)?
             .ok_or_else(|| "Active agent session record was not found".to_string())?
@@ -1469,7 +1518,10 @@ fn resolve_terminal_command(command: &str) -> String {
 }
 
 impl TerminalProfile {
-    fn from_agent_profile(profile: &crate::models::AgentProfile, effective_model: Option<&str>) -> Self {
+    fn from_agent_profile(
+        profile: &crate::models::AgentProfile,
+        effective_model: Option<&str>,
+    ) -> Self {
         // Inject --model flag for claude command if a model is configured.
         let args = if profile.command.contains("claude") {
             if let Some(model) = effective_model.filter(|m| !m.is_empty()) {

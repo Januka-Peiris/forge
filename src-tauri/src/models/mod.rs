@@ -1,14 +1,15 @@
 pub mod activity;
-pub mod agent_context;
 pub mod agent_chat;
+pub mod agent_context;
 pub mod agent_memory;
 pub mod agent_profile;
-pub mod orchestrator;
 pub mod agent_run;
+pub mod checkpoint;
 pub mod deep_link;
 pub mod environment;
 pub mod git_review;
 pub mod merge_readiness;
+pub mod orchestrator;
 pub mod pr_draft;
 pub mod prompt_template;
 pub mod repository;
@@ -28,22 +29,26 @@ pub mod workspace_script;
 pub mod workspace_template;
 
 pub use activity::ActivityItem;
-pub use agent_context::{
-    AgentContextWorktree, WorkspaceAgentContext, WorkspaceContextItem, WorkspaceContextPreview,
-};
 pub use agent_chat::{
     AgentChatEvent, AgentChatEventEnvelope, AgentChatSession, CreateAgentChatSessionInput,
     SendAgentChatMessageInput,
 };
+pub use agent_context::{
+    AgentContextWorktree, WorkspaceAgentContext, WorkspaceContextItem, WorkspaceContextPreview,
+};
 pub use agent_memory::{AgentMemory, SetAgentMemoryInput};
-pub use orchestrator::{OrchestratorAction, OrchestratorStatus};
 pub use agent_profile::AgentProfile;
 pub use agent_run::{StartWorkspaceRunInput, WorkspaceRun, WorkspaceRunLog};
+pub use checkpoint::{
+    WorkspaceCheckpoint, WorkspaceCheckpointDiff, WorkspaceCheckpointRestorePlan,
+    WorkspaceCheckpointRestoreResult,
+};
 pub use deep_link::{OpenDeepLinkInput, OpenDeepLinkResult};
 pub use environment::EnvironmentCheckItem;
 pub use git_review::{WorkspaceChangedFile, WorkspaceFileDiff};
 pub use merge_readiness::WorkspaceMergeReadiness;
-pub use pr_draft::{WorkspacePrDraft, WorkspacePrResult};
+pub use orchestrator::{OrchestratorAction, OrchestratorStatus};
+pub use pr_draft::{WorkspacePrCheck, WorkspacePrDraft, WorkspacePrResult, WorkspacePrStatus};
 pub use prompt_template::{PromptTemplate, WorkspacePromptTemplates};
 pub use repository::{DiscoveredRepository, DiscoveredWorktree, ScanRepositoriesResult};
 pub use review::ReviewItem;
@@ -67,7 +72,9 @@ pub use workspace::{
 pub use workspace_attention::WorkspaceAttention;
 pub use workspace_cleanup::{CleanupWorkspaceInput, CleanupWorkspaceResult};
 pub use workspace_conflict::{WorkspaceConflict, WorkspaceConflicts};
-pub use workspace_health::{WorkspaceHealth, WorkspaceTerminalHealth};
+pub use workspace_health::{
+    WorkspaceHealth, WorkspaceSessionRecoveryResult, WorkspaceTerminalHealth,
+};
 pub use workspace_port::WorkspacePort;
 pub use workspace_readiness::WorkspaceReadiness;
 pub use workspace_script::ForgeWorkspaceConfig;

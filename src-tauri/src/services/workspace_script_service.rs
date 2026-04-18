@@ -4,7 +4,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::models::workspace_script::RawForgeWorkspaceConfig;
 use crate::models::{CreateWorkspaceTerminalInput, ForgeWorkspaceConfig, TerminalSession};
-use crate::repositories::{activity_repository, terminal_repository, workspace_repository};
+use crate::repositories::{
+    activity_repository, settings_repository, terminal_repository, workspace_repository,
+};
 use crate::services::{agent_profile_service, terminal_service};
 use crate::state::AppState;
 
@@ -151,6 +153,32 @@ pub fn start_command_terminal(
     title: &str,
     command: &str,
 ) -> Result<TerminalSession, String> {
+    if is_risky_script_command(command) && !risky_workspace_scripts_enabled(state) {
+        let message = format!(
+            "{title} was blocked because it looks destructive. Enable risky workspace scripts in Settings to run it."
+        );
+        insert_script_activity(
+            state,
+            workspace_id,
+            "Workspace script blocked",
+            "warning",
+            &format!("{message} Command: {command}"),
+        );
+        return Err(message);
+    }
+
+    insert_script_activity(
+        state,
+        workspace_id,
+        "Workspace script approved",
+        if is_risky_script_command(command) {
+            "warning"
+        } else {
+            "info"
+        },
+        &format!("{title} · {command}"),
+    );
+
     terminal_service::create_workspace_terminal(
         state,
         CreateWorkspaceTerminalInput {
@@ -239,6 +267,46 @@ fn sanitize_commands(commands: Vec<String>) -> Vec<String> {
         .map(|command| command.trim().to_string())
         .filter(|command| !command.is_empty())
         .collect()
+}
+
+const RISKY_SCRIPT_PATTERNS: &[&str] = &[
+    "rm -rf",
+    "rm -fr",
+    "sudo rm",
+    "git push --force",
+    "git push -f",
+    "git reset --hard",
+    "git clean -f",
+    "git clean -fd",
+    "chmod -R 777",
+    "dd if=",
+    "mkfs",
+    "DROP TABLE",
+    "DROP DATABASE",
+];
+
+fn is_risky_script_command(command: &str) -> bool {
+    let lower = command.to_lowercase();
+    RISKY_SCRIPT_PATTERNS.iter().any(|pattern| {
+        if pattern
+            .chars()
+            .next()
+            .map(|char| char.is_uppercase())
+            .unwrap_or(false)
+        {
+            lower.contains(&pattern.to_lowercase())
+        } else {
+            command.contains(pattern)
+        }
+    })
+}
+
+fn risky_workspace_scripts_enabled(state: &AppState) -> bool {
+    settings_repository::get_value(&state.db, "allow_risky_workspace_scripts")
+        .ok()
+        .flatten()
+        .as_deref()
+        == Some("true")
 }
 
 fn workspace_root_path(state: &AppState, workspace_id: &str) -> Result<PathBuf, String> {
@@ -366,5 +434,12 @@ mod tests {
             .len()
                 <= 45
         );
+    }
+
+    #[test]
+    fn risky_script_commands_are_detected() {
+        assert!(is_risky_script_command("git reset --hard HEAD"));
+        assert!(is_risky_script_command("psql -c 'DROP TABLE users'"));
+        assert!(!is_risky_script_command("npm run test"));
     }
 }

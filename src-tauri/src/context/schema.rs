@@ -88,14 +88,31 @@ impl RepoMapQuality {
             .filter(|e| !e.flags.is_config && !e.flags.is_generated && !e.flags.is_binary)
             .collect();
         let source_share = source_files.len() as f32 / total;
-        let with_symbols = source_files.iter().filter(|e| !e.top_symbols.is_empty()).count() as f32;
-        let symbol_coverage = if source_files.is_empty() { 0.0 } else { with_symbols / source_files.len() as f32 };
+        let with_symbols = source_files
+            .iter()
+            .filter(|e| !e.top_symbols.is_empty())
+            .count() as f32;
+        let symbol_coverage = if source_files.is_empty() {
+            0.0
+        } else {
+            with_symbols / source_files.len() as f32
+        };
         let total_internal_edges: usize = entries.iter().map(|e| e.imports_internal.len()).sum();
         let ref_density = (total_internal_edges as f32 / total).min(1.0);
-        let noise_files = entries.iter().filter(|e| e.flags.is_test || e.flags.is_config || e.flags.is_generated).count() as f32;
+        let noise_files = entries
+            .iter()
+            .filter(|e| e.flags.is_test || e.flags.is_config || e.flags.is_generated)
+            .count() as f32;
         let noise_ratio = noise_files / total;
-        let signal_score = 0.35 * source_share + 0.25 * symbol_coverage + 0.20 * ref_density + 0.20 * (1.0 - noise_ratio);
-        Self { signal_score, symbol_coverage, noise_ratio }
+        let signal_score = 0.35 * source_share
+            + 0.25 * symbol_coverage
+            + 0.20 * ref_density
+            + 0.20 * (1.0 - noise_ratio);
+        Self {
+            signal_score,
+            symbol_coverage,
+            noise_ratio,
+        }
     }
 }
 

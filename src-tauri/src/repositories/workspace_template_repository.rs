@@ -60,10 +60,7 @@ pub fn create(
 
 pub fn delete(db: &Database, id: &str) -> Result<(), String> {
     db.with_connection_mut(|connection| {
-        connection.execute(
-            "DELETE FROM workspace_templates WHERE id = ?1",
-            params![id],
-        )?;
+        connection.execute("DELETE FROM workspace_templates WHERE id = ?1", params![id])?;
         Ok(())
     })
 }

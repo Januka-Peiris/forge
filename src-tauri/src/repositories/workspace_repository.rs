@@ -38,16 +38,19 @@ pub fn get_detail(db: &Database, id: &str) -> Result<Option<WorkspaceDetail>, St
 
 pub fn get(db: &Database, id: &str) -> Result<WorkspaceSummary, String> {
     db.with_connection(|connection| {
-        connection
-            .query_row(
-                "SELECT * FROM workspaces WHERE id = ?1",
-                params![id],
-                |row| workspace_summary_from_row(row, connection),
-            )
+        connection.query_row(
+            "SELECT * FROM workspaces WHERE id = ?1",
+            params![id],
+            |row| workspace_summary_from_row(row, connection),
+        )
     })
 }
 
-pub fn set_cost_limit(db: &Database, workspace_id: &str, limit_usd: Option<f64>) -> Result<(), String> {
+pub fn set_cost_limit(
+    db: &Database,
+    workspace_id: &str,
+    limit_usd: Option<f64>,
+) -> Result<(), String> {
     db.with_connection_mut(|connection| {
         connection.execute(
             "UPDATE workspaces SET cost_limit_usd = ?1 WHERE id = ?2",

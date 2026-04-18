@@ -1,12 +1,13 @@
 pub mod activity;
-pub mod agent_context;
 pub mod agent_chat;
+pub mod agent_context;
 pub mod agent_memory;
-pub mod orchestrator;
 pub mod agent_profiles;
 pub mod agent_runs;
+pub mod checkpoints;
 pub mod deep_links;
 pub mod environment;
+pub mod orchestrator;
 pub mod reviews;
 pub mod workspaces;
 

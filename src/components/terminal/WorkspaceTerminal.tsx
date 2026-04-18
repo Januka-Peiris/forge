@@ -1,7 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronRight, Copy, Plus, Square, Terminal as TerminalIcon, X } from 'lucide-react';
-import { Button } from '../ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '../ui/dropdown-menu';
+import { ChevronRight, Plus, Terminal as TerminalIcon, X } from 'lucide-react';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { ForgeWorkspaceConfig, TerminalOutputChunk, TerminalOutputEvent, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
 import type { AgentChatEvent, AgentChatEventEnvelope, AgentChatNextAction, AgentChatSession } from '../../types/agent-chat';
@@ -34,11 +32,12 @@ import {
 } from '../../lib/tauri-api/workspace-ports';
 import { listWorkspacePromptTemplates } from '../../lib/tauri-api/prompt-templates';
 import { getWorkspaceAgentContext } from '../../lib/tauri-api/agent-context';
-import { getWorkspaceHealth } from '../../lib/tauri-api/workspace-health';
+import { getWorkspaceHealth, recoverWorkspaceSessions } from '../../lib/tauri-api/workspace-health';
 import { getWorkspaceReadiness } from '../../lib/tauri-api/workspace-readiness';
 import { getWorkspaceChangedFiles } from '../../lib/tauri-api/git-review';
 import { getWorkspaceReviewCockpit, refreshWorkspacePrComments } from '../../lib/tauri-api/review-cockpit';
 import { createWorkspacePr } from '../../lib/tauri-api/pr-draft';
+import { getContextStatus } from '../../lib/tauri-api/context';
 import {
   createAgentChatSession,
   closeAgentChatSession,
@@ -54,13 +53,12 @@ import {
 } from '../../lib/tauri-api/agent-profiles';
 import { forgeWarn } from '../../lib/forge-log';
 import { useAgentProfile } from '../../lib/hooks/useAgentProfile';
-import { formatCursorOpenError, formatSessionError } from '../../lib/ui-errors';
+import { formatSessionError } from '../../lib/ui-errors';
 import {
   deriveAgentRunSections,
   deriveNextActions,
   deriveWorkbenchSummary,
   latestPlanEvent,
-  modelContextLabel,
 } from '../../lib/agent-workbench';
 import {
   OUTPUT_RETENTION_CHUNKS,
@@ -71,6 +69,7 @@ import { TerminalPane } from './WorkspaceTerminalPane';
 import { AgentChatPanel } from '../agent/AgentChatPanel';
 import { WorkspaceHeader } from './WorkspaceHeader';
 import { WorkspaceComposer, type ComposerSettings } from './WorkspaceComposer';
+import type { PromptTemplate } from '../../types/prompt-template';
 
 interface WorkspaceTerminalProps {
   workspace: Workspace | null;
@@ -92,6 +91,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   const [ports, setPorts] = useState<WorkspacePort[]>([]);
   const [portsBusy, setPortsBusy] = useState(false);
   const [promptTemplateWarning, setPromptTemplateWarning] = useState<string | null>(null);
+  const [promptTemplates, setPromptTemplates] = useState<PromptTemplate[]>([]);
   const [agentContext, setAgentContext] = useState<WorkspaceAgentContext | null>(null);
   const [workspaceHealth, setWorkspaceHealth] = useState<WorkspaceHealth | null>(null);
   const [workspaceReadiness, setWorkspaceReadiness] = useState<WorkspaceReadiness | null>(null);
@@ -288,9 +288,11 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     if (!workspaceId) return;
     try {
       const result = await listWorkspacePromptTemplates(workspaceId);
+      setPromptTemplates(result.templates);
       setPromptTemplateWarning(result.warning ?? null);
     } catch (err) {
       forgeWarn('prompt-templates', 'load error', { err });
+      setPromptTemplates([]);
       setPromptTemplateWarning(formatSessionError(err));
     }
   }, [workspaceId]);
@@ -315,6 +317,31 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       setWorkspaceReadiness(null);
     }
   }, [workspaceId]);
+
+  const recoverSessions = async () => {
+    if (!workspaceId) return;
+    const confirmed = window.confirm(
+      [
+        'Recover stale or unhealthy sessions?',
+        '',
+        'Forge will close stale, detached, stuck, failed, or interrupted terminal sessions in the active view while preserving their history.',
+        'After recovery, start a fresh Claude/Codex tab when you are ready.',
+      ].join('\n'),
+    );
+    if (!confirmed) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await recoverWorkspaceSessions(workspaceId);
+      const warning = result.warnings.length > 0 ? ` ${result.warnings[0]}` : '';
+      setError(`Recovered ${result.closedSessions} session(s); skipped ${result.skippedSessions}.${warning}`);
+      await Promise.all([refreshSessions(), refreshHealth()]);
+    } catch (err) {
+      setError(formatSessionError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const refreshReadiness = useCallback(async () => {
     if (!workspaceId) return;
@@ -822,7 +849,8 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     }
   };
 
-  const applyWorkflowPreset = (_preset: 'plan-act' | 'plan-codex-review' | 'implement-review-pr', _defaultPrompt: string) => {
+  const applyWorkflowPreset = (_preset: 'plan-act' | 'plan-codex-review' | 'implement-review-pr', defaultPrompt: string) => {
+    void defaultPrompt;
     if (_preset === 'plan-act' || _preset === 'plan-codex-review') {
       setComposerSettings((current) => ({ ...current, selectedTaskMode: 'Plan', selectedClaudeAgent: 'Plan' }));
     } else {
@@ -925,6 +953,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         onOpenPort={(port) => void openPort(port)}
         onKillPort={(port) => void killPort(port)}
         onRefreshHealth={() => void refreshHealth()}
+        onRecoverSessions={() => void recoverSessions()}
         onCloseTerminal={(sessionId) => void closeTerminal(sessionId)}
         onStartShell={() => void createTerminal('shell', 'shell', 'Shell')}
         onAttachTerminal={(session) => void attachTerminal(session)}
@@ -1107,6 +1136,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
           focusedChatSession={focusedChatSession}
           busy={busy}
           promptTemplateWarning={promptTemplateWarning}
+          promptTemplates={promptTemplates}
           agentContext={agentContext}
           settings={composerSettings}
           onSettingsChange={(patch) => setComposerSettings((current) => ({ ...current, ...patch }))}
@@ -1123,11 +1153,11 @@ function ContextFooter({ workspaceId }: { workspaceId: string }) {
   const [status, setStatus] = React.useState<{ stale: boolean; tokens: number; engine: string } | null>(null);
 
   React.useEffect(() => {
-    import('../../lib/tauri-api/context').then(({ getContextStatus }) => {
-      getContextStatus(workspaceId).then(s => {
+    getContextStatus(workspaceId)
+      .then((s) => {
         setStatus({ stale: s.stale, tokens: (s.symbolCount ?? 0) * 3, engine: s.engine });
-      }).catch(() => {});
-    });
+      })
+      .catch(() => {});
   }, [workspaceId]);
 
   if (!status) return null;

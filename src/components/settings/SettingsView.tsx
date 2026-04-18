@@ -4,7 +4,7 @@ import { Button } from '../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Switch } from '../ui/switch';
 import { open } from '@tauri-apps/plugin-dialog';
-import { addRepository, removeRepository } from '../../lib/tauri-api/repositories';
+import { addRepository } from '../../lib/tauri-api/repositories';
 import { getAiModelSettings, getSetting, setSetting, resolveGitRepositoryPath, saveAiModelSettings } from '../../lib/tauri-api/settings';
 import type { AiModelSettings } from '../../types/settings';
 import type { AppSettings, DiscoveredRepository } from '../../types';
@@ -124,6 +124,92 @@ function RepoContextCard() {
   );
 }
 
+function TrustAndSafetyCard() {
+  const [autoRebaseEnabled, setAutoRebaseEnabled] = useState(false);
+  const [autoSetupEnabled, setAutoSetupEnabled] = useState(false);
+  const [riskyScriptsEnabled, setRiskyScriptsEnabled] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    void getSetting('auto_rebase_enabled')
+      .then((val) => setAutoRebaseEnabled(val === 'true'))
+      .catch(() => undefined);
+    void getSetting('auto_run_setup_enabled')
+      .then((val) => setAutoSetupEnabled(val === 'true'))
+      .catch(() => undefined);
+    void getSetting('allow_risky_workspace_scripts')
+      .then((val) => setRiskyScriptsEnabled(val === 'true'))
+      .catch(() => undefined);
+  }, []);
+
+  const updateAutoRebase = (checked: boolean) => {
+    setAutoRebaseEnabled(checked);
+    setMessage(checked
+      ? 'Auto-rebase enabled. Forge will periodically rebase active workspaces and report conflicts.'
+      : 'Auto-rebase disabled. Forge will not change branches in the background.');
+    void setSetting('auto_rebase_enabled', checked ? 'true' : 'false').catch((err) => {
+      setMessage(err instanceof Error ? err.message : String(err));
+    });
+  };
+
+  const updateAutoSetup = (checked: boolean) => {
+    setAutoSetupEnabled(checked);
+    setMessage(checked
+      ? 'Automatic setup enabled for new Forge-managed workspaces.'
+      : 'Automatic setup disabled. New workspaces will wait for manual setup.');
+    void setSetting('auto_run_setup_enabled', checked ? 'true' : 'false').catch((err) => {
+      setMessage(err instanceof Error ? err.message : String(err));
+    });
+  };
+
+  const updateRiskyScripts = (checked: boolean) => {
+    setRiskyScriptsEnabled(checked);
+    setMessage(checked
+      ? 'Risky workspace scripts enabled. Forge will still record every configured script execution in activity.'
+      : 'Risky workspace scripts blocked. Destructive setup/run/teardown commands will not start.');
+    void setSetting('allow_risky_workspace_scripts', checked ? 'true' : 'false').catch((err) => {
+      setMessage(err instanceof Error ? err.message : String(err));
+    });
+  };
+
+  return (
+    <div className="rounded-xl border border-forge-border bg-forge-card p-4">
+      <div className="mb-4">
+        <h2 className="text-[14px] font-bold text-forge-text">Trust & Safety</h2>
+        <p className="text-[11px] text-forge-muted mt-0.5">Keep background Git behavior explicit and inspectable.</p>
+      </div>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-[12px] text-forge-text/80">Auto-rebase active workspaces</p>
+          <p className="text-[11px] text-forge-muted mt-0.5">
+            Off by default. When enabled, Forge periodically rebases active workspaces onto their base branch and surfaces conflicts.
+          </p>
+        </div>
+        <Switch checked={autoRebaseEnabled} onCheckedChange={updateAutoRebase} />
+      </div>
+      <div className="mt-4 flex items-center justify-between gap-4 border-t border-forge-border/60 pt-4">
+        <div>
+          <p className="text-[12px] text-forge-text/80">Auto-run setup for new workspaces</p>
+          <p className="text-[11px] text-forge-muted mt-0.5">
+            Off by default. When enabled, Forge immediately runs `.forge/config.json` setup commands after creating a managed worktree.
+          </p>
+        </div>
+        <Switch checked={autoSetupEnabled} onCheckedChange={updateAutoSetup} />
+      </div>
+      <div className="mt-4 flex items-center justify-between gap-4 border-t border-forge-border/60 pt-4">
+        <div>
+          <p className="text-[12px] text-forge-text/80">Allow risky workspace scripts</p>
+          <p className="text-[11px] text-forge-muted mt-0.5">
+            Off by default. When disabled, configured setup/run/teardown scripts that look destructive are blocked and logged.
+          </p>
+        </div>
+        <Switch checked={riskyScriptsEnabled} onCheckedChange={updateRiskyScripts} />
+      </div>
+      {message && <p className="mt-3 text-[12px] text-forge-muted">{message}</p>}
+    </div>
+  );
+}
+
 export function SettingsView({
   settings,
   onSettingsChange,
@@ -183,6 +269,7 @@ export function SettingsView({
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
         <AiModelsCard />
         <RepoContextCard />
+        <TrustAndSafetyCard />
 
         <div className="rounded-xl border border-forge-border bg-forge-card p-4">
           <div className="flex items-center justify-between mb-3">

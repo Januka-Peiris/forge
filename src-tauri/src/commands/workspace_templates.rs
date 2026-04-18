@@ -32,9 +32,6 @@ pub fn create_workspace_template(
 }
 
 #[tauri::command]
-pub fn delete_workspace_template(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<(), String> {
+pub fn delete_workspace_template(state: State<'_, AppState>, id: String) -> Result<(), String> {
     workspace_template_repository::delete(&state.db, &id)
 }

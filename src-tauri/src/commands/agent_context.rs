@@ -34,9 +34,13 @@ pub fn build_workspace_repo_context(
     workspace_id: String,
     force: bool,
 ) -> Result<String, String> {
-    let workspace = crate::repositories::workspace_repository::get_detail(&state.db, &workspace_id)?
-        .ok_or_else(|| format!("Workspace {workspace_id} not found"))?;
-    let primary_path = workspace.summary.workspace_root_path.clone()
+    let workspace =
+        crate::repositories::workspace_repository::get_detail(&state.db, &workspace_id)?
+            .ok_or_else(|| format!("Workspace {workspace_id} not found"))?;
+    let primary_path = workspace
+        .summary
+        .workspace_root_path
+        .clone()
         .unwrap_or_else(|| workspace.worktree_path.clone());
     let root = std::path::Path::new(&primary_path);
     let (_, meta) = crate::context::discovery::build_repo_map(root, force, &state.db)?;
@@ -55,13 +59,20 @@ pub fn get_context_status(
     state: State<'_, AppState>,
     workspace_id: String,
 ) -> Result<serde_json::Value, String> {
-    let workspace = crate::repositories::workspace_repository::get_detail(&state.db, &workspace_id)?
-        .ok_or_else(|| format!("Workspace {workspace_id} not found"))?;
-    let primary_path = workspace.summary.workspace_root_path.clone()
+    let workspace =
+        crate::repositories::workspace_repository::get_detail(&state.db, &workspace_id)?
+            .ok_or_else(|| format!("Workspace {workspace_id} not found"))?;
+    let primary_path = workspace
+        .summary
+        .workspace_root_path
+        .clone()
         .unwrap_or_else(|| workspace.worktree_path.clone());
     let root = std::path::Path::new(&primary_path);
     let stale = crate::context::discovery::is_stale(root, &state.db);
-    let meta_path = root.join(".forge").join("context").join("repo_map.meta.json");
+    let meta_path = root
+        .join(".forge")
+        .join("context")
+        .join("repo_map.meta.json");
     if let Ok(raw) = std::fs::read_to_string(&meta_path) {
         if let Ok(meta) = serde_json::from_str::<crate::context::schema::RepoMapMetaV2>(&raw) {
             return Ok(serde_json::json!({

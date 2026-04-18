@@ -31,7 +31,10 @@ pub fn get_ai_model_settings(state: State<'_, AppState>) -> Result<AiModelSettin
         .unwrap_or_else(|| "claude-sonnet-4-6".to_string());
     let orchestrator_model = settings_repository::get_value(&state.db, "orchestrator_model")?
         .unwrap_or_else(|| "claude-opus-4-6".to_string());
-    Ok(AiModelSettings { agent_model, orchestrator_model })
+    Ok(AiModelSettings {
+        agent_model,
+        orchestrator_model,
+    })
 }
 
 #[tauri::command]

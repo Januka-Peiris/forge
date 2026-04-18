@@ -20,3 +20,28 @@ pub struct WorkspacePrResult {
     pub pr_number: i64,
     pub title: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspacePrStatus {
+    pub workspace_id: String,
+    pub found: bool,
+    pub number: Option<i64>,
+    pub title: Option<String>,
+    pub url: Option<String>,
+    pub state: Option<String>,
+    pub is_draft: bool,
+    pub review_decision: Option<String>,
+    pub checks_summary: String,
+    pub checks: Vec<WorkspacePrCheck>,
+    pub warning: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspacePrCheck {
+    pub name: String,
+    pub status: String,
+    pub conclusion: Option<String>,
+    pub url: Option<String>,
+}

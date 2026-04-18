@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use tauri::Emitter;
 
-use crate::repositories::{activity_repository, workspace_repository};
+use crate::repositories::{activity_repository, settings_repository, workspace_repository};
 use crate::services::agent_process_service;
 use crate::state::AppState;
 
@@ -26,6 +26,15 @@ pub fn start_auto_rebase_loop(state: AppState) {
 }
 
 fn run_rebase_pass(state: &AppState) -> Result<(), String> {
+    let enabled = settings_repository::get_value(&state.db, "auto_rebase_enabled")
+        .ok()
+        .flatten()
+        .map(|value| value == "true")
+        .unwrap_or(false);
+    if !enabled {
+        return Ok(());
+    }
+
     let workspaces = workspace_repository::list(&state.db)?;
 
     for workspace in workspaces {
@@ -108,7 +117,9 @@ fn run_rebase_pass(state: &AppState) -> Result<(), String> {
                     Some(&workspace.branch),
                     "Auto-rebase conflict",
                     "warning",
-                    Some(&format!("Conflict rebasing onto origin/{base_branch} — rebase aborted")),
+                    Some(&format!(
+                        "Conflict rebasing onto origin/{base_branch} — rebase aborted"
+                    )),
                 );
                 let _ = state.app_handle.emit(
                     "forge://workspace-rebase-conflict",

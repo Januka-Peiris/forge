@@ -9,11 +9,12 @@ mod state;
 use std::sync::atomic::Ordering;
 
 use commands::{
-    activity, agent_chat, agent_context, agent_memory, agent_profiles, agent_runs, deep_links,
-    environment, git_review, merge_readiness, orchestrator as orchestrator_commands, pr_draft,
-    prompt_templates, repositories as repository_commands, review_cockpit, review_summary, reviews,
-    settings, terminal, workspace_attention, workspace_cleanup, workspace_health, workspace_ports,
-    workspace_readiness, workspace_scripts, workspace_templates, workspaces,
+    activity, agent_chat, agent_context, agent_memory, agent_profiles, agent_runs, checkpoints,
+    deep_links, environment, git_review, merge_readiness, orchestrator as orchestrator_commands,
+    pr_draft, prompt_templates, repositories as repository_commands, review_cockpit,
+    review_summary, reviews, settings, terminal, workspace_attention, workspace_cleanup,
+    workspace_health, workspace_ports, workspace_readiness, workspace_scripts, workspace_templates,
+    workspaces,
 };
 use services::{orchestrator_service, rebase_service};
 use state::AppState;
@@ -38,12 +39,16 @@ pub fn run() {
 
             // Restore persisted orchestrator settings.
             if let Ok(Some(val)) = crate::repositories::orchestrator_repository::load_setting(
-                &state.db, "orchestrator_enabled",
+                &state.db,
+                "orchestrator_enabled",
             ) {
-                state.orchestrator_enabled.store(val == "true", Ordering::Relaxed);
+                state
+                    .orchestrator_enabled
+                    .store(val == "true", Ordering::Relaxed);
             }
             if let Ok(Some(model)) = crate::repositories::orchestrator_repository::load_setting(
-                &state.db, "orchestrator_model",
+                &state.db,
+                "orchestrator_model",
             ) {
                 if let Ok(mut guard) = state.orchestrator_model.lock() {
                     *guard = model;
@@ -108,6 +113,11 @@ pub fn run() {
             agent_runs::stop_workspace_run,
             agent_runs::get_workspace_runs,
             agent_runs::get_workspace_run_logs,
+            checkpoints::list_workspace_checkpoints,
+            checkpoints::create_workspace_checkpoint,
+            checkpoints::get_workspace_checkpoint_diff,
+            checkpoints::get_workspace_checkpoint_restore_plan,
+            checkpoints::restore_workspace_checkpoint,
             git_review::get_workspace_changed_files,
             git_review::get_workspace_file_diff,
             review_summary::get_workspace_review_summary,
@@ -117,6 +127,7 @@ pub fn run() {
             pr_draft::get_workspace_pr_draft,
             pr_draft::refresh_workspace_pr_draft,
             pr_draft::create_workspace_pr,
+            pr_draft::get_workspace_pr_status,
             prompt_templates::list_workspace_prompt_templates,
             terminal::create_workspace_terminal,
             terminal::attach_workspace_terminal_session,
@@ -153,6 +164,7 @@ pub fn run() {
             workspace_attention::mark_workspace_attention_read,
             workspace_health::get_workspace_health,
             workspace_health::get_workspace_conflicts,
+            workspace_health::recover_workspace_sessions,
             workspace_readiness::get_workspace_readiness,
             workspace_cleanup::cleanup_workspace,
             workspace_ports::list_workspace_ports,
