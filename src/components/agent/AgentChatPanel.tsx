@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import type { AgentChatEvent, AgentChatNextAction, AgentChatSession } from '../../types/agent-chat';
 import type { AgentRunSection, AgentWorkbenchSummary } from '../../lib/agent-workbench';
+import { latestPlanEvent } from '../../lib/agent-workbench';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -39,7 +40,8 @@ export function AgentChatPanel({
   onInterrupt: () => void;
   onAction?: (action: AgentChatNextAction, event?: AgentChatEvent) => void;
 }) {
-  const [tab, setTab] = useState<'chat' | 'raw'>('chat');
+  const [tab, setTab] = useState<'chat' | 'raw' | 'plan'>('chat');
+  const latestPlan = latestPlanEvent(events);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const running = session.status === 'running';
   const handleAction = (action: AgentChatNextAction, event?: AgentChatEvent) => {
@@ -66,6 +68,11 @@ export function AgentChatPanel({
           <div className="flex shrink-0 items-center gap-1">
             <TabsList>
               <TabsTrigger value="chat">Chat</TabsTrigger>
+              {latestPlan && (
+                <TabsTrigger value="plan" className={!acceptedPlanId ? 'data-[state=inactive]:text-forge-blue/70' : ''}>
+                  Plan
+                </TabsTrigger>
+              )}
               <TabsTrigger value="raw">Raw</TabsTrigger>
             </TabsList>
             {running && (
@@ -79,6 +86,41 @@ export function AgentChatPanel({
         {(hasSummary || hasNextActions) && (
           <ResultStrip summary={summary ?? null} nextActions={nextActions ?? []} onAction={handleAction} />
         )}
+
+        <TabsContent value="plan">
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+            {latestPlan ? (
+              <>
+                <div className="mb-2 flex items-center gap-2">
+                  <ListChecks className="h-3.5 w-3.5 text-forge-blue" />
+                  <span className="text-xs font-semibold uppercase tracking-widest text-forge-muted">
+                    {latestPlan.title || 'Plan'}
+                  </span>
+                  {acceptedPlanId === latestPlan.id && (
+                    <span className="rounded border border-forge-green/25 bg-forge-green/10 px-1.5 py-0.5 text-[9px] uppercase text-forge-green">accepted</span>
+                  )}
+                </div>
+                <MarkdownishText text={latestPlan.body} />
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {([
+                    { id: 'accept-plan', label: acceptedPlanId === latestPlan.id ? 'Plan accepted' : 'Accept Plan', kind: 'accept_plan', tone: 'primary' },
+                    { id: 'copy-plan', label: 'Copy Plan', kind: 'copy_plan' },
+                    { id: 'switch-to-act', label: 'Switch to Act', kind: 'switch_to_act' },
+                  ] as AgentChatNextAction[]).map((action) => (
+                    <ActionButton
+                      key={action.id}
+                      action={action}
+                      disabled={acceptedPlanId === latestPlan.id && action.kind === 'accept_plan'}
+                      onClick={() => handleAction(action, latestPlan)}
+                    />
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="text-xs text-forge-muted">No plan yet.</p>
+            )}
+          </div>
+        </TabsContent>
 
         <TabsContent value="raw">
           <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap bg-[#08090c] p-3 font-mono text-xs leading-relaxed text-forge-text/85">
