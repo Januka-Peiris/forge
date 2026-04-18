@@ -6,15 +6,6 @@ use crate::models::{
     WorkspaceSummary,
 };
 
-#[allow(dead_code)]
-pub fn is_empty(db: &Database) -> Result<bool, String> {
-    db.with_connection(|connection| {
-        let count: i64 =
-            connection.query_row("SELECT COUNT(*) FROM workspaces", [], |row| row.get(0))?;
-        Ok(count == 0)
-    })
-}
-
 pub fn list(db: &Database) -> Result<Vec<WorkspaceSummary>, String> {
     db.with_connection(|connection| {
         let mut statement = connection.prepare(
@@ -134,17 +125,6 @@ pub fn insert(db: &Database, detail: &WorkspaceDetail) -> Result<(), String> {
     db.with_connection_mut(|connection| {
         let transaction = connection.transaction()?;
         insert_with_transaction(&transaction, detail)?;
-        transaction.commit()
-    })
-}
-
-#[allow(dead_code)]
-pub fn seed(db: &Database, workspaces: &[WorkspaceDetail]) -> Result<(), String> {
-    db.with_connection_mut(|connection| {
-        let transaction = connection.transaction()?;
-        for workspace in workspaces {
-            insert_with_transaction(&transaction, workspace)?;
-        }
         transaction.commit()
     })
 }

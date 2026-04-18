@@ -14,19 +14,6 @@ fn memory_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentMemory> {
     })
 }
 
-/// List all global memory entries (workspace_id IS NULL).
-#[allow(dead_code)]
-pub fn list_global(db: &Database) -> Result<Vec<AgentMemory>, String> {
-    db.with_connection(|connection| {
-        let mut stmt = connection.prepare(
-            "SELECT id, workspace_id, key, value, created_at, updated_at
-             FROM agent_memory WHERE workspace_id IS NULL ORDER BY key ASC",
-        )?;
-        let rows = stmt.query_map([], memory_from_row)?.collect();
-        rows
-    })
-}
-
 /// List memory entries for a specific workspace.
 pub fn list_for_workspace(db: &Database, workspace_id: &str) -> Result<Vec<AgentMemory>, String> {
     db.with_connection(|connection| {

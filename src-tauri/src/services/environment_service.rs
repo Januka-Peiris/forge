@@ -1,5 +1,5 @@
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 
 use crate::models::EnvironmentCheckItem;
@@ -182,11 +182,6 @@ fn home_dir() -> Option<PathBuf> {
 
 fn shell_single_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
-}
-
-#[allow(dead_code)]
-fn is_executable_file(path: &Path) -> bool {
-    path.is_file()
 }
 
 #[cfg(test)]

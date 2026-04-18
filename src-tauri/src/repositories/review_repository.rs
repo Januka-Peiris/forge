@@ -1,5 +1,3 @@
-use rusqlite::params;
-
 use crate::db::Database;
 use crate::models::ReviewItem;
 
@@ -34,37 +32,5 @@ pub fn list_pending(db: &Database) -> Result<Vec<ReviewItem>, String> {
             .collect();
 
         items
-    })
-}
-
-#[allow(dead_code)]
-pub fn seed(db: &Database, reviews: &[ReviewItem]) -> Result<(), String> {
-    db.with_connection_mut(|connection| {
-        let transaction = connection.transaction()?;
-        for review in reviews {
-            transaction.execute(
-                r#"
-                INSERT OR REPLACE INTO review_items (
-                    id, workspace_id, workspace_name, repo, branch, risk, files_changed,
-                    additions, deletions, ai_summary, author, created_at_label
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
-                "#,
-                params![
-                    review.id,
-                    review.workspace_id,
-                    review.workspace_name,
-                    review.repo,
-                    review.branch,
-                    review.risk,
-                    review.files_changed,
-                    review.additions,
-                    review.deletions,
-                    review.ai_summary,
-                    review.author,
-                    review.created_at,
-                ],
-            )?;
-        }
-        transaction.commit()
     })
 }

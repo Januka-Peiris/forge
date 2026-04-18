@@ -98,30 +98,3 @@ pub fn insert(db: &Database, item: &ActivityItem) -> Result<(), String> {
         Ok(())
     })
 }
-
-#[allow(dead_code)]
-pub fn seed(db: &Database, items: &[ActivityItem]) -> Result<(), String> {
-    db.with_connection_mut(|connection| {
-        let transaction = connection.transaction()?;
-        for item in items {
-            transaction.execute(
-                r#"
-                INSERT OR REPLACE INTO activity_items (
-                    id, workspace_id, repo, branch, event, level, details, timestamp
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
-                "#,
-                params![
-                    item.id,
-                    item.workspace_id,
-                    item.repo,
-                    item.branch,
-                    item.event,
-                    item.level,
-                    item.details,
-                    item.timestamp,
-                ],
-            )?;
-        }
-        transaction.commit()
-    })
-}
