@@ -67,7 +67,7 @@ export function Sidebar({
   repositories,
   workspaces,
   workspaceAttention,
-  conflictingWorkspaceIds,
+  conflictingWorkspaceIds: _conflictingWorkspaceIds,
   archivedWorkspaceIds,
   selectedWorkspaceId,
   onSelectWorkspace,
@@ -380,7 +380,6 @@ export function Sidebar({
                   repo.workspaces.map((workspace) => {
                     const isSelected = workspace.id === selectedWorkspaceId;
                     const isHovered = hoveredId === workspace.id;
-                    const isArchived = archivedSet.has(workspace.id);
                     const attention = workspaceAttention[workspace.id];
                     const statusTone =
                       attention?.status === 'running' || workspace.status === 'Running'
@@ -457,23 +456,9 @@ export function Sidebar({
                                     {attention.queuedCount} queued
                                   </span>
                                 )}
-                              </div>
-                              <div className="mt-0.5 flex items-center gap-1.5">
-                                <span className="truncate text-xs font-mono text-forge-muted">{workspace.branch || '(no branch)'}</span>
                                 <span className={`shrink-0 text-xs px-1.5 py-0.5 rounded-full ${statusTone}`}>
                                   {attention?.status ?? workspace.status}
                                 </span>
-                                {isArchived && <span className="shrink-0 text-xs px-1.5 py-0.5 rounded-full bg-white/10 text-forge-muted">Archived</span>}
-                                {conflictingWorkspaceIds.has(workspace.id) && (
-                                  <span className="shrink-0 text-xs px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/25" title="This workspace shares modified files with another active workspace">
-                                    conflict
-                                  </span>
-                                )}
-                                {workspace.agentSession?.estimatedCost && workspace.agentSession.estimatedCost !== '$0.00' && (
-                                  <span className="shrink-0 text-xs font-mono text-forge-muted/70" title="Estimated agent cost">
-                                    {workspace.agentSession.estimatedCost}
-                                  </span>
-                                )}
                               </div>
                             </div>
                           </div>
