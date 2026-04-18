@@ -181,26 +181,28 @@ export function NewWorkspaceModal({ onClose, onCreate, repositories, initialRepo
               <p className="mt-1 text-[10px] text-forge-muted">Random two-word default (shuffle anytime). Checkouts live under <span className="font-mono text-forge-text/80">{'forge/<workspace-id>'}</span> inside the repo you pick so everything stays with that main checkout.</p>
             </div>
 
-            <div className="col-span-2">
-              <label className="block text-[11px] font-semibold text-forge-muted uppercase tracking-wider mb-1.5">
-                <div className="flex items-center gap-1.5"><FolderGit2 className="w-3 h-3" />Repository</div>
-              </label>
-              <Select value={repositoryId} onValueChange={setRepositoryId}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select repository" />
-                </SelectTrigger>
-                <SelectContent>
-                  {repositories.length === 0 && (
-                    <SelectItem value="" disabled>No discovered repos — scan in Settings first</SelectItem>
-                  )}
-                  {repositories.map((repository) => (
-                    <SelectItem key={repository.id} value={repository.id}>
-                      {repository.name} · {repository.path}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {!initialRepositoryId && (
+              <div className="col-span-2">
+                <label className="block text-[11px] font-semibold text-forge-muted uppercase tracking-wider mb-1.5">
+                  <div className="flex items-center gap-1.5"><FolderGit2 className="w-3 h-3" />Repository</div>
+                </label>
+                <Select value={repositoryId} onValueChange={setRepositoryId}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select repository" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {repositories.length === 0 && (
+                      <SelectItem value="" disabled>No discovered repos — scan in Settings first</SelectItem>
+                    )}
+                    {repositories.map((repository) => (
+                      <SelectItem key={repository.id} value={repository.id}>
+                        {repository.name} · {repository.path}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div>
               <label className="block text-[11px] font-semibold text-forge-muted uppercase tracking-wider mb-1.5">

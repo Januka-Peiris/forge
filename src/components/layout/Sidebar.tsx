@@ -344,7 +344,12 @@ export function Sidebar({
                 <Button
                   variant="ghost"
                   size="icon-xs"
-                  onClick={() => onNewWorkspace(repo.id.startsWith('name:') ? undefined : repo.id)}
+                  onClick={() => {
+                    const id = repo.id.startsWith('name:')
+                      ? repo.workspaces.find((w) => w.repositoryId)?.repositoryId
+                      : repo.id;
+                    onNewWorkspace(id);
+                  }}
                   className="ml-auto text-forge-muted hover:bg-white/6 hover:text-forge-orange"
                   title="New branch workspace in repository"
                 >
