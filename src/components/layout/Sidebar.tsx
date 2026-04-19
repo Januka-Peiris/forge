@@ -21,7 +21,6 @@ import type { DiscoveredRepository, Workspace, WorkspaceAttention } from '../../
 import type { OrchestratorStatus } from '../../types/orchestrator';
 import { batchDispatchWorkspaceAgentPrompt } from '../../lib/tauri-api/terminal';
 import { getOrchestratorStatus, setOrchestratorEnabled } from '../../lib/tauri-api/orchestrator';
-import { cockpitToneClass, deriveWorkspaceCockpit } from '../../lib/workspace-cockpit';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
@@ -68,7 +67,7 @@ export function Sidebar({
   repositories,
   workspaces,
   workspaceAttention,
-  conflictingWorkspaceIds,
+  conflictingWorkspaceIds: _conflictingWorkspaceIds,
   archivedWorkspaceIds,
   selectedWorkspaceId,
   onSelectWorkspace,
@@ -381,13 +380,8 @@ export function Sidebar({
                   repo.workspaces.map((workspace) => {
                     const isSelected = workspace.id === selectedWorkspaceId;
                     const isHovered = hoveredId === workspace.id;
-                    const isArchived = archivedWorkspaceIds.includes(workspace.id);
                     const attention = workspaceAttention[workspace.id];
-                    const cockpit = deriveWorkspaceCockpit(workspace, {
-                      attention,
-                      hasConflict: conflictingWorkspaceIds.has(workspace.id),
-                      isArchived,
-                    });
+
                     const statusTone =
                       attention?.status === 'running' || workspace.status === 'Running'
                         ? 'bg-forge-green/20 text-forge-green/95'
@@ -465,14 +459,6 @@ export function Sidebar({
                                 )}
                                 <span className={`shrink-0 text-xs px-1.5 py-0.5 rounded-full ${statusTone}`}>
                                   {attention?.status ?? workspace.status}
-                                </span>
-                              </div>
-                              <div className="mt-1 flex min-w-0 items-center gap-1.5">
-                                <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-xs font-semibold ${cockpitToneClass(cockpit.nextActionTone)}`}>
-                                  {cockpit.nextAction}
-                                </span>
-                                <span className="min-w-0 truncate text-xs text-forge-muted" title={`${cockpit.agentState} · ${cockpit.changeSummary}`}>
-                                  {cockpit.agentState} · {cockpit.changeSummary}
                                 </span>
                               </div>
                             </div>
