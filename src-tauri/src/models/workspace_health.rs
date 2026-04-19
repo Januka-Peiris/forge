@@ -36,5 +36,15 @@ pub struct WorkspaceSessionRecoveryResult {
     pub workspace_id: String,
     pub closed_sessions: u32,
     pub skipped_sessions: u32,
+    pub actions: Vec<WorkspaceSessionRecoveryAction>,
     pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceSessionRecoveryAction {
+    pub session_id: String,
+    pub title: String,
+    pub action: String,
+    pub reason: String,
 }

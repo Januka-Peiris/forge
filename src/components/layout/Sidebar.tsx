@@ -68,7 +68,7 @@ export function Sidebar({
   repositories,
   workspaces,
   workspaceAttention,
-  conflictingWorkspaceIds: _conflictingWorkspaceIds,
+  conflictingWorkspaceIds,
   archivedWorkspaceIds,
   selectedWorkspaceId,
   onSelectWorkspace,
@@ -381,6 +381,7 @@ export function Sidebar({
                   repo.workspaces.map((workspace) => {
                     const isSelected = workspace.id === selectedWorkspaceId;
                     const isHovered = hoveredId === workspace.id;
+                    const isArchived = archivedWorkspaceIds.includes(workspace.id);
                     const attention = workspaceAttention[workspace.id];
                     const cockpit = deriveWorkspaceCockpit(workspace, {
                       attention,

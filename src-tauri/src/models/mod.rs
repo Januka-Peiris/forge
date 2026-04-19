@@ -40,8 +40,8 @@ pub use agent_memory::{AgentMemory, SetAgentMemoryInput};
 pub use agent_profile::AgentProfile;
 pub use agent_run::{StartWorkspaceRunInput, WorkspaceRun, WorkspaceRunLog};
 pub use checkpoint::{
-    WorkspaceCheckpoint, WorkspaceCheckpointDiff, WorkspaceCheckpointRestorePlan,
-    WorkspaceCheckpointRestoreResult,
+    WorkspaceCheckpoint, WorkspaceCheckpointBranchResult, WorkspaceCheckpointDeleteResult,
+    WorkspaceCheckpointDiff, WorkspaceCheckpointRestorePlan, WorkspaceCheckpointRestoreResult,
 };
 pub use deep_link::{OpenDeepLinkInput, OpenDeepLinkResult};
 pub use environment::EnvironmentCheckItem;
@@ -73,9 +73,10 @@ pub use workspace_attention::WorkspaceAttention;
 pub use workspace_cleanup::{CleanupWorkspaceInput, CleanupWorkspaceResult};
 pub use workspace_conflict::{WorkspaceConflict, WorkspaceConflicts};
 pub use workspace_health::{
-    WorkspaceHealth, WorkspaceSessionRecoveryResult, WorkspaceTerminalHealth,
+    WorkspaceHealth, WorkspaceSessionRecoveryAction, WorkspaceSessionRecoveryResult,
+    WorkspaceTerminalHealth,
 };
 pub use workspace_port::WorkspacePort;
 pub use workspace_readiness::WorkspaceReadiness;
-pub use workspace_script::ForgeWorkspaceConfig;
+pub use workspace_script::{ForgeMcpServerConfig, ForgeWorkspaceConfig};
 pub use workspace_template::WorkspaceTemplate;

@@ -195,18 +195,14 @@ pub fn create_workspace(
         return Err(err);
     }
 
-    activity_repository::insert(
+    activity_repository::record(
         &state.db,
-        &crate::models::ActivityItem {
-            id: format!("act-{}", detail.summary.id),
-            workspace_id: Some(detail.summary.id.clone()),
-            repo: detail.summary.repo.clone(),
-            branch: Some(detail.summary.branch.clone()),
-            event: "Workspace created".to_string(),
-            level: "success".to_string(),
-            details: Some(format!("{} · {}", workspace_source, detail.worktree_path)),
-            timestamp: "just now".to_string(),
-        },
+        &detail.summary.id,
+        &detail.summary.repo,
+        Some(&detail.summary.branch),
+        "Workspace created",
+        "success",
+        Some(&format!("{} · {}", workspace_source, detail.worktree_path)),
     )?;
 
     if let Some(repository_id) = detail.summary.repository_id.as_deref() {
@@ -222,56 +218,44 @@ pub fn create_workspace(
     if detail.summary.worktree_managed_by_forge && auto_setup_enabled {
         match workspace_script_service::run_workspace_setup(state, &detail.summary.id) {
             Ok(sessions) if !sessions.is_empty() => {
-                let _ = activity_repository::insert(
+                let details = format!(
+                    "Started {} setup command(s) from .forge/config.json",
+                    sessions.len()
+                );
+                let _ = activity_repository::record(
                     &state.db,
-                    &crate::models::ActivityItem {
-                        id: format!("act-setup-{}", detail.summary.id),
-                        workspace_id: Some(detail.summary.id.clone()),
-                        repo: detail.summary.repo.clone(),
-                        branch: Some(detail.summary.branch.clone()),
-                        event: "Workspace setup launched".to_string(),
-                        level: "info".to_string(),
-                        details: Some(format!(
-                            "Started {} setup command(s) from .forge/config.json",
-                            sessions.len()
-                        )),
-                        timestamp: "just now".to_string(),
-                    },
+                    &detail.summary.id,
+                    &detail.summary.repo,
+                    Some(&detail.summary.branch),
+                    "Workspace setup launched",
+                    "info",
+                    Some(&details),
                 );
             }
             Ok(_) => {}
             Err(err) => {
-                let _ = activity_repository::insert(
+                let _ = activity_repository::record(
                     &state.db,
-                    &crate::models::ActivityItem {
-                        id: format!("act-setup-warning-{}", detail.summary.id),
-                        workspace_id: Some(detail.summary.id.clone()),
-                        repo: detail.summary.repo.clone(),
-                        branch: Some(detail.summary.branch.clone()),
-                        event: "Workspace setup warning".to_string(),
-                        level: "warning".to_string(),
-                        details: Some(err),
-                        timestamp: "just now".to_string(),
-                    },
+                    &detail.summary.id,
+                    &detail.summary.repo,
+                    Some(&detail.summary.branch),
+                    "Workspace setup warning",
+                    "warning",
+                    Some(&err),
                 );
             }
         }
     } else if detail.summary.worktree_managed_by_forge {
-        let _ = activity_repository::insert(
+        let _ = activity_repository::record(
             &state.db,
-            &crate::models::ActivityItem {
-                id: format!("act-setup-skipped-{}", detail.summary.id),
-                workspace_id: Some(detail.summary.id.clone()),
-                repo: detail.summary.repo.clone(),
-                branch: Some(detail.summary.branch.clone()),
-                event: "Workspace setup waiting".to_string(),
-                level: "info".to_string(),
-                details: Some(
-                    "Automatic setup is disabled. Run setup manually from the workspace commands panel."
-                        .to_string(),
-                ),
-                timestamp: "just now".to_string(),
-            },
+            &detail.summary.id,
+            &detail.summary.repo,
+            Some(&detail.summary.branch),
+            "Workspace setup waiting",
+            "info",
+            Some(
+                "Automatic setup is disabled. Run setup manually from the workspace commands panel.",
+            ),
         );
     }
 

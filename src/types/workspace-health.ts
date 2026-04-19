@@ -39,5 +39,13 @@ export interface WorkspaceSessionRecoveryResult {
   workspaceId: string;
   closedSessions: number;
   skippedSessions: number;
+  actions: WorkspaceSessionRecoveryAction[];
   warnings: string[];
+}
+
+export interface WorkspaceSessionRecoveryAction {
+  sessionId: string;
+  title: string;
+  action: 'closed' | 'skipped' | 'failed' | string;
+  reason: string;
 }

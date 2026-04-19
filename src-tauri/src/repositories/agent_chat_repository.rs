@@ -3,6 +3,14 @@ use rusqlite::{params, OptionalExtension};
 use crate::db::Database;
 use crate::models::{AgentChatEvent, AgentChatSession};
 
+#[derive(Debug, Clone)]
+pub struct StartupRunningChatGroup {
+    pub workspace_id: String,
+    pub repo: String,
+    pub branch: String,
+    pub count: u32,
+}
+
 pub fn insert_session(db: &Database, session: &AgentChatSession) -> Result<(), String> {
     db.with_connection(|connection| {
         connection.execute(
@@ -62,6 +70,47 @@ pub fn close_session(db: &Database, session_id: &str, closed_at: &str) -> Result
             WHERE id = ?1
             "#,
             params![session_id, closed_at],
+        )?;
+        Ok(())
+    })
+}
+
+pub fn list_running_chat_groups(db: &Database) -> Result<Vec<StartupRunningChatGroup>, String> {
+    db.with_connection(|connection| {
+        let mut statement = connection.prepare(
+            r#"
+            SELECT acs.workspace_id, w.repo, w.branch, COUNT(*) as session_count
+            FROM agent_chat_sessions acs
+            JOIN workspaces w ON w.id = acs.workspace_id
+            WHERE acs.status = 'running' AND acs.closed_at IS NULL
+            GROUP BY acs.workspace_id, w.repo, w.branch
+            "#,
+        )?;
+        let groups = statement
+            .query_map([], |row| {
+                Ok(StartupRunningChatGroup {
+                    workspace_id: row.get(0)?,
+                    repo: row.get(1)?,
+                    branch: row.get(2)?,
+                    count: row.get::<_, i64>(3)? as u32,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(groups)
+    })
+}
+
+pub fn mark_running_chats_interrupted(db: &Database, timestamp: &str) -> Result<(), String> {
+    db.with_connection(|connection| {
+        connection.execute(
+            r#"
+            UPDATE agent_chat_sessions
+            SET status = 'interrupted',
+                ended_at = COALESCE(ended_at, ?1),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE status = 'running' AND closed_at IS NULL
+            "#,
+            params![timestamp],
         )?;
         Ok(())
     })

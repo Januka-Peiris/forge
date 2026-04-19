@@ -5,7 +5,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use crate::models::WorkspacePort;
-use crate::repositories::workspace_repository;
+use crate::repositories::{activity_repository, workspace_repository};
 use crate::state::AppState;
 
 const PORT_CACHE_TTL: Duration = Duration::from_secs(15);
@@ -117,12 +117,13 @@ pub fn kill_workspace_port_process(
     let current = list_workspace_ports(state, workspace_id)?;
     let target = current
         .iter()
-        .any(|item| item.port == port && item.pid == pid && item.workspace_matched);
-    if !target {
+        .find(|item| item.port == port && item.pid == pid && item.workspace_matched)
+        .cloned();
+    let Some(target) = target else {
         return Err(format!(
             "Process {pid} is no longer a verified listener for workspace port {port}"
         ));
-    }
+    };
 
     invalidate_workspace_port_cache(workspace_id);
     let output = Command::new("kill")
@@ -139,7 +140,27 @@ pub fn kill_workspace_port_process(
     }
 
     invalidate_workspace_port_cache(workspace_id);
+    if let Ok(Some(workspace)) = workspace_repository::get_detail(&state.db, workspace_id) {
+        let details = format_port_kill_activity_details(&target);
+        let _ = activity_repository::record(
+            &state.db,
+            workspace_id,
+            &workspace.summary.repo,
+            Some(&workspace.summary.branch),
+            "Workspace port process killed",
+            "warning",
+            Some(&details),
+        );
+    }
     Ok(scan_workspace_ports(state, workspace_id).unwrap_or_default())
+}
+
+fn format_port_kill_activity_details(port: &WorkspacePort) -> String {
+    let cwd = port.cwd.as_deref().unwrap_or("unknown cwd");
+    format!(
+        "Sent SIGTERM to pid {} ({}) on localhost:{}; cwd: {}.",
+        port.pid, port.command, port.port, cwd
+    )
 }
 
 fn listener_to_workspace_port(
@@ -315,5 +336,24 @@ mod tests {
             Path::new("/tmp/forge-other"),
             root
         ));
+    }
+
+    #[test]
+    fn formats_port_kill_activity_details() {
+        let details = format_port_kill_activity_details(&WorkspacePort {
+            port: 5173,
+            pid: 12345,
+            command: "node".to_string(),
+            user: Some("jay".to_string()),
+            protocol: "tcp".to_string(),
+            address: "*:5173".to_string(),
+            cwd: Some("/tmp/forge-workspace".to_string()),
+            workspace_matched: true,
+        });
+
+        assert!(details.contains("pid 12345"));
+        assert!(details.contains("node"));
+        assert!(details.contains("localhost:5173"));
+        assert!(details.contains("/tmp/forge-workspace"));
     }
 }

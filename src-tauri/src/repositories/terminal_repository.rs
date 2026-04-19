@@ -4,6 +4,14 @@ use serde::Serialize;
 use crate::db::Database;
 use crate::models::{AgentPromptEntry, TerminalOutputChunk, TerminalSession};
 
+#[derive(Debug, Clone)]
+pub struct StartupStaleTerminalGroup {
+    pub workspace_id: String,
+    pub repo: String,
+    pub branch: String,
+    pub count: u32,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalSearchResult {
@@ -257,6 +265,33 @@ pub fn mark_stale_running_sessions(db: &Database, timestamp: &str) -> Result<(),
             params![timestamp],
         )?;
         Ok(())
+    })
+}
+
+pub fn list_running_session_groups(
+    db: &Database,
+) -> Result<Vec<StartupStaleTerminalGroup>, String> {
+    db.with_connection(|connection| {
+        let mut statement = connection.prepare(
+            r#"
+            SELECT ts.workspace_id, w.repo, w.branch, COUNT(*) as session_count
+            FROM terminal_sessions ts
+            JOIN workspaces w ON w.id = ts.workspace_id
+            WHERE ts.status = 'running'
+            GROUP BY ts.workspace_id, w.repo, w.branch
+            "#,
+        )?;
+        let groups = statement
+            .query_map([], |row| {
+                Ok(StartupStaleTerminalGroup {
+                    workspace_id: row.get(0)?,
+                    repo: row.get(1)?,
+                    branch: row.get(2)?,
+                    count: row.get::<_, i64>(3)? as u32,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(groups)
     })
 }
 

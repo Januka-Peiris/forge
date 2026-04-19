@@ -3,8 +3,8 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::models::{
-    WorkspaceCheckpoint, WorkspaceCheckpointDiff, WorkspaceCheckpointRestorePlan,
-    WorkspaceCheckpointRestoreResult,
+    WorkspaceCheckpoint, WorkspaceCheckpointBranchResult, WorkspaceCheckpointDeleteResult,
+    WorkspaceCheckpointDiff, WorkspaceCheckpointRestorePlan, WorkspaceCheckpointRestoreResult,
 };
 use crate::repositories::{activity_repository, workspace_repository};
 use crate::state::AppState;
@@ -159,7 +159,10 @@ pub fn restore_workspace_checkpoint(
             Some(&workspace.summary.branch),
             "Checkpoint restored",
             "warning",
-            Some(reference),
+            Some(&format!(
+                "Ref: {reference}; checkpoint files: {}; mode: git restore --staged --worktree; checkpoint preserved.",
+                plan.checkpoint_file_count
+            )),
         );
     }
 
@@ -171,6 +174,84 @@ pub fn restore_workspace_checkpoint(
     })
 }
 
+pub fn delete_workspace_checkpoint(
+    state: &AppState,
+    workspace_id: &str,
+    reference: &str,
+) -> Result<WorkspaceCheckpointDeleteResult, String> {
+    let root = workspace_root_path(state, workspace_id)?;
+    validate_checkpoint_ref(workspace_id, reference)?;
+    ensure_checkpoint_ref_exists(&root, reference)?;
+
+    git(&root, &["update-ref", "-d", reference])?;
+
+    if let Ok(Some(workspace)) = workspace_repository::get_detail(&state.db, workspace_id) {
+        let _ = activity_repository::record(
+            &state.db,
+            workspace_id,
+            &workspace.summary.repo,
+            Some(&workspace.summary.branch),
+            "Checkpoint deleted",
+            "warning",
+            Some(&format!(
+                "Deleted checkpoint ref {reference}. This removes Forge's direct recovery pointer for that checkpoint."
+            )),
+        );
+    }
+
+    Ok(WorkspaceCheckpointDeleteResult {
+        workspace_id: workspace_id.to_string(),
+        reference: reference.to_string(),
+        deleted: true,
+        message: "Checkpoint ref deleted. Workspace files were not changed.".to_string(),
+    })
+}
+
+pub fn create_branch_from_workspace_checkpoint(
+    state: &AppState,
+    workspace_id: &str,
+    reference: &str,
+    branch: &str,
+) -> Result<WorkspaceCheckpointBranchResult, String> {
+    let root = workspace_root_path(state, workspace_id)?;
+    validate_checkpoint_ref(workspace_id, reference)?;
+    ensure_checkpoint_ref_exists(&root, reference)?;
+    validate_branch_name(&root, branch)?;
+    ensure_branch_does_not_exist(&root, branch)?;
+
+    let oid = git(
+        &root,
+        &["rev-parse", "--verify", &format!("{reference}^{{commit}}")],
+    )?;
+    let branch_ref = format!("refs/heads/{branch}");
+    git(&root, &["update-ref", &branch_ref, &oid])?;
+
+    if let Ok(Some(workspace)) = workspace_repository::get_detail(&state.db, workspace_id) {
+        let _ = activity_repository::record(
+            &state.db,
+            workspace_id,
+            &workspace.summary.repo,
+            Some(&workspace.summary.branch),
+            "Checkpoint branch created",
+            "info",
+            Some(&format!(
+                "Created branch {branch} from checkpoint {reference} at {}. Workspace files were not changed.",
+                &oid[..oid.len().min(12)]
+            )),
+        );
+    }
+
+    Ok(WorkspaceCheckpointBranchResult {
+        workspace_id: workspace_id.to_string(),
+        reference: reference.to_string(),
+        branch: branch.to_string(),
+        created: true,
+        message: format!(
+            "Branch {branch} created from checkpoint. Workspace files were not changed."
+        ),
+    })
+}
+
 pub fn create_checkpoint_if_dirty(
     state: &AppState,
     workspace_id: &str,
@@ -178,7 +259,11 @@ pub fn create_checkpoint_if_dirty(
 ) -> Result<Option<String>, String> {
     let root = workspace_root_path(state, workspace_id)?;
     let status = git(&root, &["status", "--porcelain"])?;
-    if status.trim().is_empty() {
+    let changed_file_count = status
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .count();
+    if changed_file_count == 0 {
         return Ok(None);
     }
 
@@ -200,7 +285,10 @@ pub fn create_checkpoint_if_dirty(
             Some(&workspace.summary.branch),
             "Checkpoint created",
             "info",
-            Some(&format!("{checkpoint_ref} · {}", &oid[..oid.len().min(12)])),
+            Some(&format!(
+                "Reason: {reason}; files: {changed_file_count}; ref: {checkpoint_ref}; oid: {}",
+                &oid[..oid.len().min(12)]
+            )),
         );
     }
 
@@ -227,6 +315,26 @@ fn validate_checkpoint_ref(workspace_id: &str, reference: &str) -> Result<(), St
     Ok(())
 }
 
+fn ensure_checkpoint_ref_exists(root: &PathBuf, reference: &str) -> Result<(), String> {
+    git(root, &["rev-parse", "--verify", "--quiet", reference]).map(|_| ())
+}
+
+fn validate_branch_name(root: &PathBuf, branch: &str) -> Result<(), String> {
+    let branch = branch.trim();
+    if branch.is_empty() {
+        return Err("Branch name is required".to_string());
+    }
+    git(root, &["check-ref-format", "--branch", branch]).map(|_| ())
+}
+
+fn ensure_branch_does_not_exist(root: &PathBuf, branch: &str) -> Result<(), String> {
+    let branch_ref = format!("refs/heads/{branch}");
+    match git(root, &["rev-parse", "--verify", "--quiet", &branch_ref]) {
+        Ok(_) => Err(format!("Branch {branch} already exists")),
+        Err(_) => Ok(()),
+    }
+}
+
 fn git(root: &PathBuf, args: &[&str]) -> Result<String, String> {
     let output = Command::new("git")
         .current_dir(root)
@@ -249,4 +357,16 @@ fn unique_suffix() -> String {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_nanos().to_string())
         .unwrap_or_else(|_| "0".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validates_checkpoint_ref_ownership() {
+        assert!(validate_checkpoint_ref("ws-1", "refs/forge/checkpoints/ws-1/123").is_ok());
+        assert!(validate_checkpoint_ref("ws-1", "refs/forge/checkpoints/ws-2/123").is_err());
+        assert!(validate_checkpoint_ref("ws-1", "refs/heads/main").is_err());
+    }
 }

@@ -1,5 +1,7 @@
 import type {
   WorkspaceCheckpoint,
+  WorkspaceCheckpointBranchResult,
+  WorkspaceCheckpointDeleteResult,
   WorkspaceCheckpointDiff,
   WorkspaceCheckpointRestorePlan,
   WorkspaceCheckpointRestoreResult,
@@ -24,4 +26,16 @@ export function getWorkspaceCheckpointRestorePlan(workspaceId: string, reference
 
 export function restoreWorkspaceCheckpoint(workspaceId: string, reference: string): Promise<WorkspaceCheckpointRestoreResult> {
   return invokeCommand<WorkspaceCheckpointRestoreResult>('restore_workspace_checkpoint', { workspaceId, reference });
+}
+
+export function deleteWorkspaceCheckpoint(workspaceId: string, reference: string): Promise<WorkspaceCheckpointDeleteResult> {
+  return invokeCommand<WorkspaceCheckpointDeleteResult>('delete_workspace_checkpoint', { workspaceId, reference });
+}
+
+export function createBranchFromWorkspaceCheckpoint(
+  workspaceId: string,
+  reference: string,
+  branch: string,
+): Promise<WorkspaceCheckpointBranchResult> {
+  return invokeCommand<WorkspaceCheckpointBranchResult>('create_branch_from_workspace_checkpoint', { workspaceId, reference, branch });
 }

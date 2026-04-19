@@ -38,3 +38,22 @@ pub struct WorkspaceCheckpointRestoreResult {
     pub applied: bool,
     pub message: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceCheckpointDeleteResult {
+    pub workspace_id: String,
+    pub reference: String,
+    pub deleted: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceCheckpointBranchResult {
+    pub workspace_id: String,
+    pub reference: String,
+    pub branch: String,
+    pub created: bool,
+    pub message: String,
+}

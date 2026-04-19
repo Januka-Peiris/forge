@@ -63,10 +63,16 @@ Forge is being shaped as a **local-first agent conductor**: simple by default, i
 ### Safety and Trust
 
 - Auto-rebase is off by default and controlled by a Trust & Safety setting.
+- Auto-rebase skips dirty workspaces instead of running background git changes over uncommitted work.
+- Auto-rebase activity records previous/new HEADs and a manual reversal hint when it moves a branch.
 - Auto-run setup for new workspaces is off by default.
 - Risky configured workspace scripts are blocked by default and recorded in activity.
 - Risky workspace scripts can be explicitly allowed from Settings.
 - Shell command approvals/denials are recorded in workspace activity.
+- Terminal interrupt/stop/close lifecycle actions are recorded in workspace activity.
+- Session recovery returns per-session close/skip/failure reasons for inspectable recovery history.
+- Explicit workspace port kills are recorded in activity with pid, command, port, and cwd.
+- Workspace creation/setup activity uses durable timestamped audit records instead of placeholder timestamps.
 - Destructive/lifecycle actions now explain consequences before running.
 
 ### Safe Iteration
@@ -74,6 +80,8 @@ Forge is being shaped as a **local-first agent conductor**: simple by default, i
 - Git-backed checkpoints can be created manually.
 - Dirty workspaces get automatic checkpoints before risky agent turns/chat runs.
 - Checkpoint diffs can be previewed.
+- Checkpoint refs can be explicitly deleted/abandoned through the backend API without changing workspace files.
+- Branches can be created from checkpoint refs through the backend API without switching or modifying the workspace.
 - Checkpoint restore is guarded:
   - refuses dirty current workspaces
   - confirms in UI
@@ -86,6 +94,15 @@ Forge is being shaped as a **local-first agent conductor**: simple by default, i
   - built-in workflows
   - repo prompt templates from `.forge/prompts.json`
   - markdown prompt templates from `.forge/prompts/*.md`
+
+### Workspace Configuration
+
+- `.forge/config.json` is documented in [`docs/forge-config.md`](./forge-config.md).
+- Workspace config now covers:
+  - setup/run/teardown scripts
+  - repo-defined agent profiles
+  - MCP server metadata
+- MCP config is parsed and validated without launching MCP processes yet.
 
 ## Current Validation Commands
 
@@ -104,4 +121,3 @@ cargo test --manifest-path src-tauri/Cargo.toml
 - Add stronger checkpoint history controls, including abandon/branch-from-checkpoint flows.
 - Add repo/workspace MCP/profile/context configuration as a developer-depth feature.
 - Add keyboard-first navigation for workspace/status/review flows.
-

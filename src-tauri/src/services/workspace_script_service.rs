@@ -1,13 +1,14 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::models::workspace_script::RawForgeWorkspaceConfig;
-use crate::models::{CreateWorkspaceTerminalInput, ForgeWorkspaceConfig, TerminalSession};
+use crate::models::{
+    CreateWorkspaceTerminalInput, ForgeMcpServerConfig, ForgeWorkspaceConfig, TerminalSession,
+};
 use crate::repositories::{
     activity_repository, settings_repository, terminal_repository, workspace_repository,
 };
-use crate::services::{agent_profile_service, terminal_service};
+use crate::services::{agent_profile_service, command_safety_service, terminal_service};
 use crate::state::AppState;
 
 const CONFIG_RELATIVE_PATH: &str = ".forge/config.json";
@@ -153,7 +154,8 @@ pub fn start_command_terminal(
     title: &str,
     command: &str,
 ) -> Result<TerminalSession, String> {
-    if is_risky_script_command(command) && !risky_workspace_scripts_enabled(state) {
+    if command_safety_service::is_risky_command(command) && !risky_workspace_scripts_enabled(state)
+    {
         let message = format!(
             "{title} was blocked because it looks destructive. Enable risky workspace scripts in Settings to run it."
         );
@@ -171,7 +173,7 @@ pub fn start_command_terminal(
         state,
         workspace_id,
         "Workspace script approved",
-        if is_risky_script_command(command) {
+        if command_safety_service::is_risky_command(command) {
             "warning"
         } else {
             "info"
@@ -215,19 +217,24 @@ pub fn load_config_from_root(root: &Path) -> ForgeWorkspaceConfig {
     };
 
     match serde_json::from_str::<RawForgeWorkspaceConfig>(&text) {
-        Ok(raw) => ForgeWorkspaceConfig {
-            exists: true,
-            path: Some(display_path),
-            setup: sanitize_commands(raw.setup),
-            run: sanitize_commands(raw.run),
-            teardown: sanitize_commands(raw.teardown),
-            agent_profiles: raw
-                .agent_profiles
-                .into_iter()
-                .filter_map(agent_profile_service::raw_to_profile)
-                .collect(),
-            warning: None,
-        },
+        Ok(raw) => {
+            let (mcp_servers, mcp_warnings) = parse_mcp_servers(raw.mcp_servers);
+            ForgeWorkspaceConfig {
+                exists: true,
+                path: Some(display_path),
+                setup: sanitize_commands(raw.setup),
+                run: sanitize_commands(raw.run),
+                teardown: sanitize_commands(raw.teardown),
+                agent_profiles: raw
+                    .agent_profiles
+                    .into_iter()
+                    .filter_map(agent_profile_service::raw_to_profile)
+                    .collect(),
+                mcp_servers,
+                mcp_warnings,
+                warning: None,
+            }
+        }
         Err(err) => ForgeWorkspaceConfig {
             exists: true,
             path: Some(display_path),
@@ -269,35 +276,119 @@ fn sanitize_commands(commands: Vec<String>) -> Vec<String> {
         .collect()
 }
 
-const RISKY_SCRIPT_PATTERNS: &[&str] = &[
-    "rm -rf",
-    "rm -fr",
-    "sudo rm",
-    "git push --force",
-    "git push -f",
-    "git reset --hard",
-    "git clean -f",
-    "git clean -fd",
-    "chmod -R 777",
-    "dd if=",
-    "mkfs",
-    "DROP TABLE",
-    "DROP DATABASE",
-];
+fn parse_mcp_servers(value: serde_json::Value) -> (Vec<ForgeMcpServerConfig>, Vec<String>) {
+    match value {
+        serde_json::Value::Array(items) => collect_mcp_servers(
+            items
+                .into_iter()
+                .enumerate()
+                .map(|(index, item)| (format!("server-{}", index + 1), item)),
+        ),
+        serde_json::Value::Object(map) => collect_mcp_servers(map),
+        serde_json::Value::Null => (vec![], vec![]),
+        _ => (
+            vec![],
+            vec!["MCP config must be an object or array.".to_string()],
+        ),
+    }
+}
 
-fn is_risky_script_command(command: &str) -> bool {
-    let lower = command.to_lowercase();
-    RISKY_SCRIPT_PATTERNS.iter().any(|pattern| {
-        if pattern
-            .chars()
-            .next()
-            .map(|char| char.is_uppercase())
-            .unwrap_or(false)
-        {
-            lower.contains(&pattern.to_lowercase())
-        } else {
-            command.contains(pattern)
+fn collect_mcp_servers(
+    items: impl IntoIterator<Item = (String, serde_json::Value)>,
+) -> (Vec<ForgeMcpServerConfig>, Vec<String>) {
+    let mut servers = Vec::new();
+    let mut warnings = Vec::new();
+    for (id_hint, value) in items {
+        match mcp_from_value(id_hint.clone(), value) {
+            Ok(server) => servers.push(server),
+            Err(warning) => warnings.push(format!("{id_hint}: {warning}")),
         }
+    }
+    (servers, warnings)
+}
+
+fn mcp_from_value(
+    id_hint: String,
+    value: serde_json::Value,
+) -> Result<ForgeMcpServerConfig, String> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| "MCP server entry must be an object.".to_string())?;
+    let enabled = object
+        .get("enabled")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(true);
+    let id = object
+        .get("id")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(&id_hint)
+        .to_string();
+    let transport = object
+        .get("transport")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| {
+            if object.get("url").is_some() {
+                "http"
+            } else {
+                "stdio"
+            }
+        })
+        .to_string();
+    let command = object
+        .get("command")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    let url = object
+        .get("url")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    let args = object
+        .get("args")
+        .and_then(serde_json::Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    let env = object
+        .get("env")
+        .and_then(serde_json::Value::as_object)
+        .map(|map| {
+            map.iter()
+                .filter_map(|(key, value)| {
+                    value
+                        .as_str()
+                        .map(|_| (key.clone(), "<redacted>".to_string()))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if enabled && command.is_none() && url.is_none() {
+        return Err("enabled MCP server needs either command or url.".to_string());
+    }
+
+    Ok(ForgeMcpServerConfig {
+        id,
+        transport,
+        command,
+        args,
+        env,
+        url,
+        enabled,
     })
 }
 
@@ -338,26 +429,15 @@ fn insert_script_activity(
         Ok(Some(workspace)) => workspace,
         _ => return,
     };
-    let _ = activity_repository::insert(
+    let _ = activity_repository::record(
         &state.db,
-        &crate::models::ActivityItem {
-            id: format!("act-script-{workspace_id}-{}", unique_suffix()),
-            workspace_id: Some(workspace_id.to_string()),
-            repo: workspace.summary.repo,
-            branch: Some(workspace.summary.branch),
-            event: event.to_string(),
-            level: level.to_string(),
-            details: Some(details.to_string()),
-            timestamp: "just now".to_string(),
-        },
+        workspace_id,
+        &workspace.summary.repo,
+        Some(&workspace.summary.branch),
+        event,
+        level,
+        Some(details),
     );
-}
-
-fn unique_suffix() -> String {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_nanos().to_string())
-        .unwrap_or_else(|_| "0".to_string())
 }
 
 #[cfg(test)]
@@ -391,7 +471,7 @@ mod tests {
         fs::create_dir_all(dir.join(".forge")).expect("forge dir");
         fs::write(
             dir.join(CONFIG_RELATIVE_PATH),
-            r#"{"setup":[" npm install ", ""],"run":["npm run dev"],"teardown":["kill-port 3000"]}"#,
+            r#"{"setup":[" npm install ", ""],"run":["npm run dev"],"teardown":["kill-port 3000"],"mcpServers":{"linear":{"command":"npx","args":["-y","linear-mcp"],"env":{"LINEAR_API_KEY":"test"}}}}"#,
         )
         .expect("write config");
 
@@ -400,7 +480,38 @@ mod tests {
         assert_eq!(config.setup, vec!["npm install"]);
         assert_eq!(config.run, vec!["npm run dev"]);
         assert_eq!(config.teardown, vec!["kill-port 3000"]);
+        assert_eq!(config.mcp_servers.len(), 1);
+        assert_eq!(config.mcp_servers[0].id, "linear");
+        assert_eq!(config.mcp_servers[0].command.as_deref(), Some("npx"));
+        assert_eq!(config.mcp_servers[0].args, vec!["-y", "linear-mcp"]);
+        assert_eq!(
+            config.mcp_servers[0]
+                .env
+                .get("LINEAR_API_KEY")
+                .map(String::as_str),
+            Some("<redacted>")
+        );
+        assert!(config.mcp_warnings.is_empty());
         assert!(config.warning.is_none());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn invalid_mcp_config_is_non_blocking_warning() {
+        let dir = temp_root("invalid-mcp");
+        fs::create_dir_all(dir.join(".forge")).expect("forge dir");
+        fs::write(
+            dir.join(CONFIG_RELATIVE_PATH),
+            r#"{"setup":["echo ok"],"mcpServers":{"broken":{"transport":"stdio"}}}"#,
+        )
+        .expect("write config");
+
+        let config = load_config_from_root(&dir);
+        assert!(config.exists);
+        assert_eq!(config.setup, vec!["echo ok"]);
+        assert!(config.warning.is_none());
+        assert!(config.mcp_servers.is_empty());
+        assert!(config.mcp_warnings[0].contains("needs either command or url"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -434,12 +545,5 @@ mod tests {
             .len()
                 <= 45
         );
-    }
-
-    #[test]
-    fn risky_script_commands_are_detected() {
-        assert!(is_risky_script_command("git reset --hard HEAD"));
-        assert!(is_risky_script_command("psql -c 'DROP TABLE users'"));
-        assert!(!is_risky_script_command("npm run test"));
     }
 }

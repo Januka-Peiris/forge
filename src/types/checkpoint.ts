@@ -28,3 +28,18 @@ export interface WorkspaceCheckpointRestoreResult {
   applied: boolean;
   message: string;
 }
+
+export interface WorkspaceCheckpointDeleteResult {
+  workspaceId: string;
+  reference: string;
+  deleted: boolean;
+  message: string;
+}
+
+export interface WorkspaceCheckpointBranchResult {
+  workspaceId: string;
+  reference: string;
+  branch: string;
+  created: boolean;
+  message: string;
+}

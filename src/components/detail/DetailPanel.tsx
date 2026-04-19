@@ -114,6 +114,22 @@ function ChecksShippingPanel({
   const reviewLabel = prStatus?.reviewDecision
     ? prStatus.reviewDecision.toLowerCase().replace(/_/g, ' ')
     : 'no review decision';
+  const prChecks = [...(prStatus?.checks ?? [])].sort((a, b) => {
+    const rank = (check: { status: string; conclusion?: string | null }) => {
+      const value = `${check.status} ${check.conclusion ?? ''}`.toLowerCase();
+      if (value.includes('fail') || value.includes('error') || value.includes('cancel')) return 0;
+      if (value.includes('pending') || value.includes('progress') || value.includes('queued')) return 1;
+      return 2;
+    };
+    return rank(a) - rank(b);
+  });
+  const checkTone = (check: { status: string; conclusion?: string | null }) => {
+    const value = `${check.status} ${check.conclusion ?? ''}`.toLowerCase();
+    if (value.includes('fail') || value.includes('error') || value.includes('cancel')) return 'border-forge-red/20 bg-forge-red/10 text-forge-red';
+    if (value.includes('pending') || value.includes('progress') || value.includes('queued')) return 'border-forge-yellow/20 bg-forge-yellow/10 text-forge-yellow';
+    if (value.includes('success') || value.includes('pass') || value.includes('complete')) return 'border-forge-green/20 bg-forge-green/10 text-forge-green';
+    return 'border-forge-border bg-white/5 text-forge-muted';
+  };
 
   return (
     <div className="px-4 pb-4">
@@ -130,6 +146,39 @@ function ChecksShippingPanel({
           <CockpitLine label="CI" value={prStatus?.checksSummary ?? 'not checked'} />
           <CockpitLine label="Review" value={`${reviewLabel} · ${readiness?.prCommentCount ?? 0} comment(s)`} />
         </div>
+        {prChecks.length > 0 && (
+          <div className="mt-3 rounded-lg border border-forge-border/60 bg-black/10 p-2">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-forge-text/85">GitHub checks</p>
+              <span className="text-xs text-forge-muted">{prChecks.length} reported</span>
+            </div>
+            <div className="space-y-1">
+              {prChecks.slice(0, 5).map((check) => {
+                const label = check.conclusion ?? check.status;
+                return (
+                  <div key={`${check.name}-${check.status}-${check.conclusion ?? ''}`} className="flex items-center gap-2 rounded border border-forge-border/50 bg-black/15 px-2 py-1">
+                    <span className="min-w-0 flex-1 truncate text-xs text-forge-text/90" title={check.name}>{check.name}</span>
+                    <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] uppercase ${checkTone(check)}`}>
+                      {label.replace(/_/g, ' ')}
+                    </span>
+                    {check.url && (
+                      <a
+                        href={check.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="shrink-0 text-forge-blue hover:text-forge-blue/80"
+                        title="Open check details"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
+              {prChecks.length > 5 && <p className="text-xs text-forge-muted">+{prChecks.length - 5} more check(s)</p>}
+            </div>
+          </div>
+        )}
         {(setupCount > 0 || runCount > 0 || teardownCount > 0) && (
           <>
             <div className="mt-2 flex flex-wrap gap-1">

@@ -266,6 +266,8 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         run: [],
         teardown: [],
         agentProfiles: [],
+        mcpServers: [],
+        mcpWarnings: [],
         warning: formatSessionError(err),
       });
     }

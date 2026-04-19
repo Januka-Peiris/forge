@@ -113,6 +113,42 @@ pub fn prompt_metadata_preamble(
     lines.join("\n")
 }
 
+pub fn prompt_metadata_preamble_for_workspace(
+    state: &AppState,
+    workspace_id: Option<&str>,
+    profile: &AgentProfile,
+    task_mode: Option<&str>,
+    reasoning: Option<&str>,
+) -> String {
+    let mut preamble = prompt_metadata_preamble(profile, task_mode, reasoning);
+    if let Some(workspace_id) = workspace_id {
+        if let Ok(config) =
+            workspace_script_service::get_workspace_forge_config(state, workspace_id)
+        {
+            let enabled_mcp = config
+                .mcp_servers
+                .iter()
+                .filter(|server| server.enabled)
+                .map(|server| {
+                    let endpoint = server
+                        .url
+                        .as_deref()
+                        .or(server.command.as_deref())
+                        .unwrap_or("configured");
+                    format!("{} ({}, {})", server.id, server.transport, endpoint)
+                })
+                .collect::<Vec<_>>();
+            if !enabled_mcp.is_empty() {
+                preamble.push_str("\nForge workspace MCP config:");
+                preamble.push_str("\n- Available MCP servers: ");
+                preamble.push_str(&enabled_mcp.join(", "));
+                preamble.push_str("\n- Instruction: use MCP servers only when the active agent runtime has them configured; otherwise treat this as local config metadata.");
+            }
+        }
+    }
+    preamble
+}
+
 pub fn default_profiles() -> Vec<AgentProfile> {
     vec![
         AgentProfile {

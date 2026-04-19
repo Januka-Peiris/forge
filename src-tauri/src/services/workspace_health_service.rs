@@ -4,7 +4,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use rusqlite::{params, OptionalExtension};
 
 use crate::models::{
-    TerminalSession, WorkspaceHealth, WorkspaceSessionRecoveryResult, WorkspaceTerminalHealth,
+    TerminalSession, WorkspaceHealth, WorkspaceSessionRecoveryAction,
+    WorkspaceSessionRecoveryResult, WorkspaceTerminalHealth,
 };
 use crate::repositories::{activity_repository, terminal_repository, workspace_repository};
 use crate::services::terminal_service;
@@ -90,21 +91,42 @@ pub fn recover_workspace_sessions(
     let health = get_workspace_health(state, workspace_id)?;
     let mut closed_sessions = 0u32;
     let mut skipped_sessions = 0u32;
+    let mut actions = Vec::new();
     let mut warnings = Vec::new();
 
     for terminal in health.terminals {
-        let should_close = terminal.stale
-            || terminal.stuck_since.is_some()
-            || matches!(terminal.status.as_str(), "failed" | "interrupted")
-            || (terminal.status == "running" && !terminal.attached);
-        if !should_close {
+        let recovery_reason = terminal_recovery_reason(&terminal);
+        if recovery_reason.is_none() {
             skipped_sessions += 1;
+            actions.push(WorkspaceSessionRecoveryAction {
+                session_id: terminal.session_id,
+                title: terminal.title,
+                action: "skipped".to_string(),
+                reason: "Session looks healthy enough to keep visible.".to_string(),
+            });
             continue;
         }
+        let reason = recovery_reason.unwrap_or_else(|| "Session is unhealthy.".to_string());
         match terminal_service::close_workspace_terminal_session_by_id(state, &terminal.session_id)
         {
-            Ok(_) => closed_sessions += 1,
-            Err(err) => warnings.push(format!("Could not close {}: {err}", terminal.title)),
+            Ok(_) => {
+                closed_sessions += 1;
+                actions.push(WorkspaceSessionRecoveryAction {
+                    session_id: terminal.session_id,
+                    title: terminal.title,
+                    action: "closed".to_string(),
+                    reason,
+                });
+            }
+            Err(err) => {
+                warnings.push(format!("Could not close {}: {err}", terminal.title));
+                actions.push(WorkspaceSessionRecoveryAction {
+                    session_id: terminal.session_id,
+                    title: terminal.title,
+                    action: "failed".to_string(),
+                    reason: format!("{reason} Close failed: {err}"),
+                });
+            }
         }
     }
 
@@ -134,8 +156,30 @@ pub fn recover_workspace_sessions(
         workspace_id: workspace_id.to_string(),
         closed_sessions,
         skipped_sessions,
+        actions,
         warnings,
     })
+}
+
+fn terminal_recovery_reason(terminal: &WorkspaceTerminalHealth) -> Option<String> {
+    if terminal.stale {
+        return Some(
+            "Session was marked stale after app restart or lost process state.".to_string(),
+        );
+    }
+    if terminal.stuck_since.is_some() {
+        return Some("Session appeared stuck with no recent output.".to_string());
+    }
+    if terminal.status == "failed" {
+        return Some("Session had failed.".to_string());
+    }
+    if terminal.status == "interrupted" {
+        return Some("Session had been interrupted.".to_string());
+    }
+    if terminal.status == "running" && !terminal.attached {
+        return Some("Session was running but not attached to an active PTY.".to_string());
+    }
+    None
 }
 
 fn is_attached(state: &AppState, session_id: &str) -> bool {
@@ -278,6 +322,27 @@ mod tests {
             recommend_terminal_action(&session("running", true), false, true),
             "close it or start a fresh terminal"
         );
+    }
+
+    #[test]
+    fn explains_recovery_reason_for_stale_sessions() {
+        let terminal = WorkspaceTerminalHealth {
+            session_id: "term-1".to_string(),
+            title: "Codex".to_string(),
+            kind: "agent".to_string(),
+            profile: "codex".to_string(),
+            status: "running".to_string(),
+            backend: "pty".to_string(),
+            attached: false,
+            stale: true,
+            last_output_at: None,
+            recommended_action: "close it or start a fresh terminal".to_string(),
+            stuck_since: None,
+        };
+
+        assert!(terminal_recovery_reason(&terminal)
+            .unwrap()
+            .contains("stale"));
     }
 
     #[test]

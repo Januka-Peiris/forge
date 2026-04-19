@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::BTreeMap;
 
 use crate::models::agent_profile::RawAgentProfile;
 use crate::models::AgentProfile;
@@ -12,7 +14,21 @@ pub struct ForgeWorkspaceConfig {
     pub run: Vec<String>,
     pub teardown: Vec<String>,
     pub agent_profiles: Vec<AgentProfile>,
+    pub mcp_servers: Vec<ForgeMcpServerConfig>,
+    pub mcp_warnings: Vec<String>,
     pub warning: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ForgeMcpServerConfig {
+    pub id: String,
+    pub transport: String,
+    pub command: Option<String>,
+    pub args: Vec<String>,
+    pub env: BTreeMap<String, String>,
+    pub url: Option<String>,
+    pub enabled: bool,
 }
 
 impl Default for ForgeWorkspaceConfig {
@@ -24,6 +40,8 @@ impl Default for ForgeWorkspaceConfig {
             run: vec![],
             teardown: vec![],
             agent_profiles: vec![],
+            mcp_servers: vec![],
+            mcp_warnings: vec![],
             warning: None,
         }
     }
@@ -40,4 +58,6 @@ pub(crate) struct RawForgeWorkspaceConfig {
     pub teardown: Vec<String>,
     #[serde(default, alias = "agent_profiles")]
     pub agent_profiles: Vec<RawAgentProfile>,
+    #[serde(default, alias = "mcpServers", alias = "mcp")]
+    pub mcp_servers: Value,
 }

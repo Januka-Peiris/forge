@@ -1,5 +1,5 @@
 use crate::models::{CleanupWorkspaceInput, CleanupWorkspaceResult};
-use crate::repositories::{terminal_repository, workspace_repository};
+use crate::repositories::{activity_repository, terminal_repository, workspace_repository};
 use crate::services::{
     terminal_service, workspace_health_service, workspace_port_service, workspace_script_service,
     workspace_service,
@@ -10,8 +10,10 @@ pub fn cleanup_workspace(
     state: &AppState,
     input: CleanupWorkspaceInput,
 ) -> Result<CleanupWorkspaceResult, String> {
-    workspace_repository::get_detail(&state.db, &input.workspace_id)?
+    let workspace = workspace_repository::get_detail(&state.db, &input.workspace_id)?
         .ok_or_else(|| format!("Workspace {} was not found", input.workspace_id))?;
+    let workspace_repo = workspace.summary.repo.clone();
+    let workspace_branch = workspace.summary.branch.clone();
     let mut warnings = Vec::new();
     let mut stopped_sessions = 0u32;
     for session in terminal_repository::list_visible_for_workspace(&state.db, &input.workspace_id)?
@@ -79,8 +81,8 @@ pub fn cleanup_workspace(
         }
     }
 
-    Ok(CleanupWorkspaceResult {
-        workspace_id: input.workspace_id,
+    let result = CleanupWorkspaceResult {
+        workspace_id: input.workspace_id.clone(),
         stopped_sessions,
         teardown_sessions,
         remaining_ports,
@@ -88,5 +90,30 @@ pub fn cleanup_workspace(
         health,
         workspace_deleted,
         warnings,
-    })
+    };
+
+    let details = format!(
+        "Stopped {} session(s); launched {} teardown command(s); killed {} port process(es); remaining ports: {}; workspace deleted: {}; warnings: {}.",
+        result.stopped_sessions,
+        result.teardown_sessions,
+        result.killed_ports,
+        result.remaining_ports.len(),
+        result.workspace_deleted,
+        result.warnings.len()
+    );
+    let _ = activity_repository::record(
+        &state.db,
+        &result.workspace_id,
+        &workspace_repo,
+        Some(&workspace_branch),
+        "Workspace cleanup completed",
+        if result.warnings.is_empty() {
+            "info"
+        } else {
+            "warning"
+        },
+        Some(&details),
+    );
+
+    Ok(result)
 }

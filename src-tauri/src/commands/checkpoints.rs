@@ -1,8 +1,8 @@
 use tauri::State;
 
 use crate::models::{
-    WorkspaceCheckpoint, WorkspaceCheckpointDiff, WorkspaceCheckpointRestorePlan,
-    WorkspaceCheckpointRestoreResult,
+    WorkspaceCheckpoint, WorkspaceCheckpointBranchResult, WorkspaceCheckpointDeleteResult,
+    WorkspaceCheckpointDiff, WorkspaceCheckpointRestorePlan, WorkspaceCheckpointRestoreResult,
 };
 use crate::services::checkpoint_service;
 use crate::state::AppState;
@@ -49,4 +49,28 @@ pub fn restore_workspace_checkpoint(
     reference: String,
 ) -> Result<WorkspaceCheckpointRestoreResult, String> {
     checkpoint_service::restore_workspace_checkpoint(&state, &workspace_id, &reference)
+}
+
+#[tauri::command]
+pub fn delete_workspace_checkpoint(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    reference: String,
+) -> Result<WorkspaceCheckpointDeleteResult, String> {
+    checkpoint_service::delete_workspace_checkpoint(&state, &workspace_id, &reference)
+}
+
+#[tauri::command]
+pub fn create_branch_from_workspace_checkpoint(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    reference: String,
+    branch: String,
+) -> Result<WorkspaceCheckpointBranchResult, String> {
+    checkpoint_service::create_branch_from_workspace_checkpoint(
+        &state,
+        &workspace_id,
+        &reference,
+        &branch,
+    )
 }

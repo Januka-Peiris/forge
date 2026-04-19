@@ -9,7 +9,9 @@ use tauri::AppHandle;
 
 use crate::db::Database;
 use crate::models::OrchestratorAction;
-use crate::repositories::{agent_run_repository, terminal_repository};
+use crate::repositories::{
+    activity_repository, agent_chat_repository, agent_run_repository, terminal_repository,
+};
 
 pub type ProcessRegistry = Arc<Mutex<HashMap<String, Arc<Mutex<Option<Child>>>>>>;
 pub type TerminalRegistry = Arc<Mutex<HashMap<String, Arc<ActiveTerminal>>>>;
@@ -53,8 +55,57 @@ impl AppState {
         }
 
         let now = crate::services::agent_process_service::timestamp();
+        let interrupted_chat_groups = agent_chat_repository::list_running_chat_groups(&db)?;
+        agent_chat_repository::mark_running_chats_interrupted(&db, &now)?;
+        for group in interrupted_chat_groups {
+            let details = format!(
+                "{} running chat session(s) were marked interrupted after app restart; transcript was preserved.",
+                group.count
+            );
+            let _ = activity_repository::record(
+                &db,
+                &group.workspace_id,
+                &group.repo,
+                Some(&group.branch),
+                "Startup chat reconciliation",
+                "warning",
+                Some(&details),
+            );
+        }
+        let abandoned_run_groups = agent_run_repository::list_running_run_groups(&db)?;
         agent_run_repository::mark_stale_running_abandoned(&db, &now)?;
+        for group in abandoned_run_groups {
+            let details = format!(
+                "{} running agent run(s) were marked abandoned after app restart; logs were preserved.",
+                group.count
+            );
+            let _ = activity_repository::record(
+                &db,
+                &group.workspace_id,
+                &group.repo,
+                Some(&group.branch),
+                "Startup agent-run reconciliation",
+                "warning",
+                Some(&details),
+            );
+        }
+        let stale_terminal_groups = terminal_repository::list_running_session_groups(&db)?;
         terminal_repository::mark_stale_running_sessions(&db, &now)?;
+        for group in stale_terminal_groups {
+            let details = format!(
+                "{} running terminal session(s) were marked stale after app restart; history was preserved.",
+                group.count
+            );
+            let _ = activity_repository::record(
+                &db,
+                &group.workspace_id,
+                &group.repo,
+                Some(&group.branch),
+                "Startup session reconciliation",
+                "warning",
+                Some(&details),
+            );
+        }
         let state = Self {
             app_handle: app_handle.clone(),
             db,

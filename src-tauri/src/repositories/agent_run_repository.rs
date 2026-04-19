@@ -3,6 +3,14 @@ use rusqlite::{params, OptionalExtension};
 use crate::db::Database;
 use crate::models::{WorkspaceRun, WorkspaceRunLog};
 
+#[derive(Debug, Clone)]
+pub struct StartupAbandonedRunGroup {
+    pub workspace_id: String,
+    pub repo: String,
+    pub branch: String,
+    pub count: u32,
+}
+
 pub fn insert_run(db: &Database, run: &WorkspaceRun) -> Result<(), String> {
     let args = serde_json::to_string(&run.args)
         .map_err(|err| format!("Failed to serialize args: {err}"))?;
@@ -132,6 +140,31 @@ pub fn mark_stale_running_abandoned(db: &Database, timestamp: &str) -> Result<()
             params![timestamp],
         )?;
         Ok(())
+    })
+}
+
+pub fn list_running_run_groups(db: &Database) -> Result<Vec<StartupAbandonedRunGroup>, String> {
+    db.with_connection(|connection| {
+        let mut statement = connection.prepare(
+            r#"
+            SELECT wr.workspace_id, w.repo, w.branch, COUNT(*) as run_count
+            FROM workspace_runs wr
+            JOIN workspaces w ON w.id = wr.workspace_id
+            WHERE wr.status = 'running'
+            GROUP BY wr.workspace_id, w.repo, w.branch
+            "#,
+        )?;
+        let groups = statement
+            .query_map([], |row| {
+                Ok(StartupAbandonedRunGroup {
+                    workspace_id: row.get(0)?,
+                    repo: row.get(1)?,
+                    branch: row.get(2)?,
+                    count: row.get::<_, i64>(3)? as u32,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(groups)
     })
 }
 

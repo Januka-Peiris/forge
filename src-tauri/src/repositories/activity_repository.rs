@@ -55,12 +55,11 @@ pub fn record(
     details: Option<&str>,
 ) -> Result<(), String> {
     use std::time::{SystemTime, UNIX_EPOCH};
-    let ts = SystemTime::now()
+    let duration = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    // Unique enough for our insert-or-replace
-    let id = format!("act-{workspace_id}-{ts}");
+        .unwrap_or_default();
+    let ts = duration.as_secs();
+    let id = format!("act-{workspace_id}-{ts}-{}", duration.as_nanos());
     insert(
         db,
         &ActivityItem {
@@ -97,4 +96,61 @@ pub fn insert(db: &Database, item: &ActivityItem) -> Result<(), String> {
         )?;
         Ok(())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn record_does_not_replace_same_second_workspace_events() {
+        let db = Database::in_memory().expect("db");
+        db.with_connection(|connection| {
+            connection.execute(
+                r#"
+                INSERT INTO workspaces (
+                    id, name, repo, branch, agent, status, current_step, completed_steps,
+                    last_updated, description, current_task, merge_risk, last_rebase, base_branch,
+                    agent_session_id, agent_session_agent, agent_session_status,
+                    agent_session_model, agent_session_estimated_cost, agent_session_last_message,
+                    agent_session_started_at, worktree_path, recent_events
+                ) VALUES (
+                    'ws-activity', 'Activity Workspace', 'repo', 'branch', 'Codex', 'Waiting', 'Planning', '[]',
+                    'now', 'desc', 'task', 'Low', 'never', 'main',
+                    'agent-session-1', 'Codex', 'idle',
+                    'local', '$0.00', 'none',
+                    'not started', '/tmp/ws-activity', '[]'
+                )
+                "#,
+                [],
+            )?;
+            Ok(())
+        })
+        .expect("workspace insert");
+        record(
+            &db,
+            "ws-activity",
+            "repo",
+            Some("branch"),
+            "First",
+            "info",
+            None,
+        )
+        .unwrap();
+        record(
+            &db,
+            "ws-activity",
+            "repo",
+            Some("branch"),
+            "Second",
+            "warning",
+            None,
+        )
+        .unwrap();
+
+        let items = list_for_workspace(&db, "ws-activity", 10).unwrap();
+        assert_eq!(items.len(), 2);
+        assert!(items.iter().any(|item| item.event == "First"));
+        assert!(items.iter().any(|item| item.event == "Second"));
+    }
 }

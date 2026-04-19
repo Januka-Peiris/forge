@@ -12,7 +12,9 @@ use crate::models::{
     SendAgentChatMessageInput,
 };
 use crate::repositories::{agent_chat_repository, workspace_repository};
-use crate::services::{checkpoint_service, environment_service, terminal_service};
+use crate::services::{
+    agent_profile_service, checkpoint_service, environment_service, terminal_service,
+};
 use crate::state::AppState;
 
 pub fn create_agent_chat_session(
@@ -80,9 +82,15 @@ pub fn send_agent_chat_message(
                 .to_string(),
         );
     }
-    let prompt = input.prompt.trim().to_string();
+    let mut prompt = input.prompt.trim().to_string();
     if prompt.is_empty() {
         return Err("Prompt is required".to_string());
+    }
+
+    if let Some(metadata) = workspace_mcp_metadata(state, &session.workspace_id) {
+        if !prompt.contains("Forge workspace MCP config:") {
+            prompt = format!("{metadata}\n\nUser request:\n{prompt}");
+        }
     }
 
     let user_metadata = serde_json::json!({
@@ -137,6 +145,22 @@ pub fn send_agent_chat_message(
         should_resume_provider_session,
     )?;
     Ok(user_event)
+}
+
+fn workspace_mcp_metadata(state: &AppState, workspace_id: &str) -> Option<String> {
+    let profile = agent_profile_service::default_profiles()
+        .into_iter()
+        .find(|profile| profile.id == "claude-default")?;
+    let metadata = agent_profile_service::prompt_metadata_preamble_for_workspace(
+        state,
+        Some(workspace_id),
+        &profile,
+        None,
+        None,
+    );
+    metadata
+        .contains("Forge workspace MCP config:")
+        .then_some(metadata)
 }
 
 pub fn interrupt_agent_chat_session(

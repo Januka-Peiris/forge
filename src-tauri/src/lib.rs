@@ -118,6 +118,8 @@ pub fn run() {
             checkpoints::get_workspace_checkpoint_diff,
             checkpoints::get_workspace_checkpoint_restore_plan,
             checkpoints::restore_workspace_checkpoint,
+            checkpoints::delete_workspace_checkpoint,
+            checkpoints::create_branch_from_workspace_checkpoint,
             git_review::get_workspace_changed_files,
             git_review::get_workspace_file_diff,
             review_summary::get_workspace_review_summary,

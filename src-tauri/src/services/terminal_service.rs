@@ -18,7 +18,8 @@ use crate::repositories::settings_repository;
 use crate::repositories::{activity_repository, terminal_repository, workspace_repository};
 use crate::services::cost_parser;
 use crate::services::{
-    agent_context_service, agent_profile_service, checkpoint_service, environment_service,
+    agent_context_service, agent_profile_service, checkpoint_service, command_safety_service,
+    environment_service,
 };
 use crate::state::{ActiveTerminal, AppState};
 use tauri::Emitter;
@@ -267,7 +268,7 @@ pub fn write_workspace_terminal_session_input(
     if let Ok(Some(session)) = terminal_repository::get_session(&state.db, session_id) {
         if matches!(session.terminal_kind.as_str(), "shell" | "utility") {
             let line = data.trim_end_matches(['\r', '\n']);
-            if !line.is_empty() && is_dangerous_command(line) {
+            if !line.is_empty() && command_safety_service::is_risky_command(line) {
                 // Stash the data and ask the user before writing.
                 state
                     .pending_commands
@@ -343,43 +344,6 @@ fn pty_write_raw(state: &AppState, session_id: &str, data: &str) -> Result<(), S
         .flush()
         .map_err(|err| format!("Failed to flush terminal input: {err}"))?;
     Ok(())
-}
-
-/// Shell command patterns considered dangerous enough to require explicit approval.
-const DANGEROUS_PATTERNS: &[&str] = &[
-    "rm -rf",
-    "rm -fr",
-    "rm -r ",
-    "sudo rm",
-    "git push --force",
-    "git push -f ",
-    "git push -f\r",
-    "git reset --hard",
-    "git clean -f",
-    "git clean -fd",
-    "chmod -R 777",
-    "dd if=",
-    "mkfs",
-    ": >",
-    "DROP TABLE",
-    "DROP DATABASE",
-];
-
-fn is_dangerous_command(line: &str) -> bool {
-    let lower = line.to_lowercase();
-    DANGEROUS_PATTERNS.iter().any(|pat| {
-        // Case-insensitive for SQL keywords, case-sensitive for shell commands.
-        if pat
-            .chars()
-            .next()
-            .map(|c| c.is_uppercase())
-            .unwrap_or(false)
-        {
-            lower.contains(&pat.to_lowercase())
-        } else {
-            line.contains(pat)
-        }
-    })
 }
 
 pub fn interrupt_workspace_terminal_session_by_id(
@@ -462,6 +426,7 @@ pub fn interrupt_workspace_terminal_session(
             let session = terminal_repository::get_session(&state.db, &active.session_id)?
                 .ok_or_else(|| "Active terminal session record was not found".to_string())?;
             send_interrupt_to_session(state, &session)?;
+            record_terminal_lifecycle_activity(state, &session, "Terminal session interrupted");
             let seq = Arc::new(AtomicU64::new(
                 terminal_repository::next_seq(&state.db, &active.session_id).unwrap_or(0),
             ));
@@ -481,6 +446,11 @@ pub fn interrupt_workspace_terminal_session(
             {
                 if session.status == "running" {
                     send_interrupt_to_session(state, &session)?;
+                    record_terminal_lifecycle_activity(
+                        state,
+                        &session,
+                        "Terminal session interrupted",
+                    );
                     append_log_line(
                         state,
                         workspace_id,
@@ -518,6 +488,7 @@ pub fn stop_workspace_terminal_session_by_id(
     detach_active_terminal(state, session_id);
     let ended_at = timestamp();
     terminal_repository::mark_finished(&state.db, session_id, "stopped", &ended_at, false)?;
+    record_terminal_lifecycle_activity(state, &session, "Terminal session stopped");
     append_log_line(
         state,
         &session.workspace_id,
@@ -540,6 +511,7 @@ pub fn close_workspace_terminal_session_by_id(
     }
     let closed_at = timestamp();
     terminal_repository::mark_closed(&state.db, session_id, &closed_at)?;
+    record_terminal_lifecycle_activity(state, &session, "Terminal session closed");
     append_log_line(
         state,
         &session.workspace_id,
@@ -549,6 +521,40 @@ pub fn close_workspace_terminal_session_by_id(
     );
     terminal_repository::get_session(&state.db, session_id)?
         .ok_or_else(|| format!("Terminal session {session_id} was not found"))
+}
+
+fn record_terminal_lifecycle_activity(state: &AppState, session: &TerminalSession, event: &str) {
+    let workspace = match workspace_repository::get_detail(&state.db, &session.workspace_id) {
+        Ok(Some(workspace)) => workspace,
+        _ => return,
+    };
+    let details = format_terminal_lifecycle_activity_details(session);
+    let _ = activity_repository::record(
+        &state.db,
+        &session.workspace_id,
+        &workspace.summary.repo,
+        Some(&workspace.summary.branch),
+        event,
+        "info",
+        Some(&details),
+    );
+}
+
+fn format_terminal_lifecycle_activity_details(session: &TerminalSession) -> String {
+    let pid = session
+        .pid
+        .map(|pid| pid.to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+    format!(
+        "Session {}; role: {}; kind: {}; title: {}; profile: {}; pid: {}; cwd: {}.",
+        session.id,
+        session.session_role,
+        session.terminal_kind,
+        session.title,
+        session.profile,
+        pid,
+        session.cwd
+    )
 }
 
 pub fn list_workspace_visible_terminal_sessions(
@@ -735,7 +741,9 @@ pub fn queue_workspace_agent_prompt(
         input.profile_id.as_deref(),
         input.profile.as_deref(),
     )?;
-    let metadata = agent_profile_service::prompt_metadata_preamble(
+    let metadata = agent_profile_service::prompt_metadata_preamble_for_workspace(
+        state,
+        Some(&input.workspace_id),
         &resolved_profile,
         input.task_mode.as_deref(),
         input.reasoning.as_deref(),
@@ -1539,5 +1547,42 @@ impl TerminalProfile {
             command: profile.command.clone(),
             args,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn formats_terminal_lifecycle_activity_details() {
+        let details = format_terminal_lifecycle_activity_details(&TerminalSession {
+            id: "term-123".to_string(),
+            workspace_id: "ws-123".to_string(),
+            session_role: "agent".to_string(),
+            profile: "codex".to_string(),
+            cwd: "/tmp/forge-workspace".to_string(),
+            status: "running".to_string(),
+            started_at: "now".to_string(),
+            ended_at: None,
+            command: "codex".to_string(),
+            args: vec![],
+            pid: Some(42),
+            stale: false,
+            closed_at: None,
+            backend: "pty".to_string(),
+            title: "Codex".to_string(),
+            terminal_kind: "agent".to_string(),
+            display_order: 0,
+            is_visible: true,
+            last_attached_at: None,
+            last_captured_seq: 0,
+        });
+
+        assert!(details.contains("term-123"));
+        assert!(details.contains("role: agent"));
+        assert!(details.contains("profile: codex"));
+        assert!(details.contains("pid: 42"));
+        assert!(details.contains("/tmp/forge-workspace"));
     }
 }
