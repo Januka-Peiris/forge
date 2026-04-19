@@ -382,16 +382,6 @@ export function Sidebar({
                     const isHovered = hoveredId === workspace.id;
                     const attention = workspaceAttention[workspace.id];
 
-                    const statusTone =
-                      attention?.status === 'running' || workspace.status === 'Running'
-                        ? 'bg-forge-green/20 text-forge-green/95'
-                        : attention?.status === 'error' || workspace.status === 'Blocked'
-                        ? 'bg-forge-red/20 text-forge-red/95'
-                        : attention?.status === 'complete' || workspace.status === 'Review Ready'
-                        ? 'bg-forge-blue/20 text-forge-blue/95'
-                        : attention?.status === 'waiting'
-                        ? 'bg-forge-yellow/20 text-forge-yellow/95'
-                        : 'bg-white/10 text-forge-text/88';
                     const attentionDot =
                       attention?.status === 'running'
                         ? 'bg-forge-green'
@@ -457,9 +447,10 @@ export function Sidebar({
                                     {attention.queuedCount} queued
                                   </span>
                                 )}
-                                <span className={`shrink-0 text-xs px-1.5 py-0.5 rounded-full ${statusTone}`}>
-                                  {attention?.status ?? workspace.status}
-                                </span>
+                                <span
+                                  className={`shrink-0 h-2 w-2 rounded-full ${attentionDot}`}
+                                  title={attention?.status ?? workspace.status}
+                                />
                               </div>
                             </div>
                           </div>
