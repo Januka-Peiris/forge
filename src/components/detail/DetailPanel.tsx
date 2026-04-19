@@ -23,8 +23,12 @@ import { listWorkspacePorts } from '../../lib/tauri-api/workspace-ports';
 import { getWorkspacePrStatus } from '../../lib/tauri-api/pr-draft';
 import { cleanupWorkspace } from '../../lib/tauri-api/workspace-cleanup';
 import { getWorkspaceChangedFiles } from '../../lib/tauri-api/git-review';
+import { getWorkspaceHealth, recoverWorkspaceSessions } from '../../lib/tauri-api/workspace-health';
+import { getWorkspaceReviewCockpit, refreshWorkspacePrComments } from '../../lib/tauri-api/review-cockpit';
 import {
   createWorkspaceCheckpoint,
+  createBranchFromWorkspaceCheckpoint,
+  deleteWorkspaceCheckpoint,
   getWorkspaceCheckpointDiff,
   getWorkspaceCheckpointRestorePlan,
   listWorkspaceCheckpoints,
@@ -35,6 +39,8 @@ import type { WorkspaceReadiness } from '../../types/workspace-readiness';
 import type { WorkspacePrStatus } from '../../types/pr-draft';
 import type { WorkspaceCheckpoint, WorkspaceCheckpointRestorePlan } from '../../types/checkpoint';
 import type { WorkspaceChangedFile } from '../../types/git-review';
+import type { WorkspaceHealth, WorkspaceSessionRecoveryResult } from '../../types/workspace-health';
+import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
 import { StatusBadge } from '../workspaces/StatusBadge';
 import { ContextPreviewPanel } from '../context/ContextPreviewPanel';
 import { Button } from '../ui/button';
@@ -308,20 +314,38 @@ function ShippingGuidePanel({
 function LifecyclePanel({
   isArchived,
   terminalHealth,
+  workspaceHealth,
+  recoveryResult,
   cleanupBusy,
+  recoveryBusy,
   message,
   onCleanup,
+  onRecover,
   onArchive,
   onDelete,
 }: {
   isArchived: boolean;
   terminalHealth?: string | null;
+  workspaceHealth: WorkspaceHealth | null;
+  recoveryResult: WorkspaceSessionRecoveryResult | null;
   cleanupBusy: boolean;
+  recoveryBusy: boolean;
   message: string | null;
   onCleanup: () => void;
+  onRecover: () => void;
   onArchive?: () => void;
   onDelete?: () => void;
 }) {
+  const unhealthySessions = workspaceHealth?.terminals.filter((terminal) => (
+    terminal.stale
+    || terminal.status === 'failed'
+    || terminal.status === 'interrupted'
+    || (terminal.status === 'running' && !terminal.attached)
+  )) ?? [];
+  const terminalLabel = workspaceHealth
+    ? `${workspaceHealth.status} · ${workspaceHealth.terminals.length} session(s)`
+    : terminalHealth ?? 'not checked';
+
   return (
     <div className="px-4 pb-4">
       <div className="rounded-xl border border-forge-border bg-forge-card/70 p-3">
@@ -331,14 +355,38 @@ function LifecyclePanel({
         </div>
         <div className="grid grid-cols-1 gap-2 text-xs">
           <CockpitLine label="View state" value={isArchived ? 'Archived — hidden from active flow' : 'Active — visible in cockpit'} />
-          <CockpitLine label="Terminal state" value={terminalHealth ?? 'not checked'} />
+          <CockpitLine label="Terminal state" value={terminalLabel} />
           <CockpitLine label="Cleanup mode" value="Stop terminals + teardown only; no worktree removal" />
+          <CockpitLine label="Recovery" value={unhealthySessions.length > 0 ? `${unhealthySessions.length} session(s) need attention` : 'no stale sessions detected'} />
           <CockpitLine label="History" value="Activity, checkpoints, and context remain inspectable" />
         </div>
+        {workspaceHealth?.warnings.length ? (
+          <div className="mt-2 space-y-1 rounded border border-forge-yellow/20 bg-forge-yellow/10 px-2 py-1.5 text-xs text-forge-yellow">
+            {workspaceHealth.warnings.slice(0, 3).map((warning) => (
+              <p key={warning}>{warning}</p>
+            ))}
+            {workspaceHealth.warnings.length > 3 && <p>+{workspaceHealth.warnings.length - 3} more warning(s)</p>}
+          </div>
+        ) : null}
+        {unhealthySessions.length > 0 && (
+          <div className="mt-2 space-y-1 rounded border border-forge-border/60 bg-black/10 p-2">
+            {unhealthySessions.slice(0, 3).map((terminal) => (
+              <div key={terminal.sessionId} className="flex items-center justify-between gap-2 text-xs">
+                <span className="min-w-0 truncate text-forge-text/85" title={terminal.title}>{terminal.title}</span>
+                <span className="shrink-0 text-forge-muted">{terminal.recommendedAction}</span>
+              </div>
+            ))}
+            {unhealthySessions.length > 3 && <p className="text-xs text-forge-muted">+{unhealthySessions.length - 3} more session(s)</p>}
+          </div>
+        )}
         <div className="mt-3 flex flex-wrap gap-2">
           <Button variant="secondary" size="xs" disabled={cleanupBusy} onClick={onCleanup}>
             {cleanupBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
             Safe cleanup
+          </Button>
+          <Button variant="secondary" size="xs" disabled={recoveryBusy || unhealthySessions.length === 0} onClick={onRecover}>
+            {recoveryBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+            Recover sessions
           </Button>
           <Button variant="secondary" size="xs" disabled={!onArchive} onClick={onArchive}>
             {isArchived ? 'Unarchive' : 'Archive'}
@@ -353,6 +401,33 @@ function LifecyclePanel({
             Delete workspace
           </Button>
         </div>
+        {recoveryResult && (
+          <div className="mt-2 rounded border border-forge-border/60 bg-black/10 p-2">
+            <p className="text-xs text-forge-muted">
+              Recovery closed {recoveryResult.closedSessions}, skipped {recoveryResult.skippedSessions}
+              {recoveryResult.warnings.length > 0 ? `, with ${recoveryResult.warnings.length} warning(s)` : ''}.
+            </p>
+            <div className="mt-1 space-y-1">
+              {recoveryResult.actions.slice(0, 4).map((action) => (
+                <div key={action.sessionId} className="flex items-start gap-2 text-xs">
+                  <span className={`shrink-0 rounded border px-1 py-0.5 text-[10px] uppercase ${
+                    action.action === 'closed'
+                      ? 'border-forge-green/20 bg-forge-green/10 text-forge-green'
+                      : action.action === 'failed'
+                      ? 'border-forge-red/20 bg-forge-red/10 text-forge-red'
+                      : 'border-forge-border bg-white/5 text-forge-muted'
+                  }`}>
+                    {action.action}
+                  </span>
+                  <span className="min-w-0 flex-1 text-forge-muted">
+                    <span className="text-forge-text/85">{action.title}</span> — {action.reason}
+                  </span>
+                </div>
+              ))}
+              {recoveryResult.actions.length > 4 && <p className="text-xs text-forge-muted">+{recoveryResult.actions.length - 4} more action(s)</p>}
+            </div>
+          </div>
+        )}
         {message && <p className="mt-2 text-xs text-forge-muted">{message}</p>}
       </div>
     </div>
@@ -435,6 +510,193 @@ function ChangeUnderstandingPanel({
   );
 }
 
+function ReviewBlockersPanel({
+  cockpit,
+  loading,
+  refreshing,
+  message,
+  onRefreshComments,
+  onOpenReviewFile,
+}: {
+  cockpit: WorkspaceReviewCockpit | null;
+  loading: boolean;
+  refreshing: boolean;
+  message: string | null;
+  onRefreshComments: () => void;
+  onOpenReviewFile?: (path?: string) => void;
+}) {
+  const comments = cockpit?.prComments ?? [];
+  const openComments = comments.filter((comment) => !comment.resolvedAt && comment.state !== 'resolved');
+  const inlineComments = openComments.filter((comment) => Boolean(comment.path));
+  const mergeReadiness = cockpit?.mergeReadiness;
+  const reviewSummary = cockpit?.reviewSummary;
+  const blockers = [
+    ...(mergeReadiness?.reasons ?? []),
+    ...(mergeReadiness?.warnings ?? []),
+    ...(reviewSummary?.riskReasons ?? []),
+  ].filter((item, index, all) => item.trim() && all.indexOf(item) === index);
+  const riskLabel = reviewSummary
+    ? `${reviewSummary.riskLevel} · ${reviewSummary.filesFlagged} flagged`
+    : 'not summarized';
+  const readinessLabel = mergeReadiness
+    ? `${mergeReadiness.readinessLevel}${mergeReadiness.mergeReady ? ' · merge-ready' : ' · not ready'}`
+    : 'not checked';
+
+  return (
+    <div className="px-4 pb-4">
+      <div className="rounded-xl border border-forge-border bg-forge-card/70 p-3">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-forge-muted">Review Blockers</p>
+            <p className="mt-0.5 text-xs text-forge-muted">PR comments, local risk summary, and merge-readiness in one place.</p>
+          </div>
+          {(loading || refreshing) && <Loader2 className="h-3.5 w-3.5 animate-spin text-forge-muted" />}
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <CockpitLine label="Readiness" value={readinessLabel} />
+          <CockpitLine label="Risk" value={riskLabel} />
+          <CockpitLine label="PR comments" value={`${openComments.length} open · ${inlineComments.length} inline`} />
+          <CockpitLine label="Reviewed files" value={`${cockpit?.files.filter((file) => file.review?.status === 'reviewed').length ?? 0}/${cockpit?.files.length ?? 0}`} />
+        </div>
+        {blockers.length > 0 && (
+          <div className="mt-2 space-y-1 rounded border border-forge-yellow/20 bg-forge-yellow/10 px-2 py-1.5 text-xs text-forge-yellow">
+            {blockers.slice(0, 4).map((blocker) => (
+              <p key={blocker}>{blocker}</p>
+            ))}
+            {blockers.length > 4 && <p>+{blockers.length - 4} more blocker/risk note(s)</p>}
+          </div>
+        )}
+        {openComments.length > 0 ? (
+          <div className="mt-2 space-y-1">
+            {openComments.slice(0, 4).map((comment) => (
+              <button
+                key={comment.commentId}
+                type="button"
+                onClick={() => onOpenReviewFile?.(comment.path ?? undefined)}
+                className="w-full rounded border border-forge-border/50 bg-black/10 px-2 py-1.5 text-left hover:bg-white/10"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 truncate text-xs font-medium text-forge-text/90">
+                    {comment.author}{comment.path ? ` · ${comment.path}${comment.line ? `:${comment.line}` : ''}` : ' · general'}
+                  </span>
+                  {comment.url && (
+                    <a
+                      href={comment.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(event) => event.stopPropagation()}
+                      className="shrink-0 text-forge-blue hover:text-forge-blue/80"
+                      title="Open comment on GitHub"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                </div>
+                <p className="mt-0.5 line-clamp-2 text-xs text-forge-muted">{comment.body}</p>
+              </button>
+            ))}
+            {openComments.length > 4 && <p className="text-xs text-forge-muted">+{openComments.length - 4} more comment(s) in the Review Cockpit</p>}
+          </div>
+        ) : (
+          <p className="mt-2 text-xs text-forge-muted">No open PR comments cached for this workspace.</p>
+        )}
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button variant="secondary" size="xs" disabled={refreshing} onClick={onRefreshComments}>
+            {refreshing ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+            Refresh PR comments
+          </Button>
+          <Button variant="secondary" size="xs" onClick={() => onOpenReviewFile?.()}>
+            Open review cockpit
+          </Button>
+        </div>
+        {message && <p className="mt-2 text-xs text-forge-muted">{message}</p>}
+        {(cockpit?.warnings.length ?? 0) > 0 && (
+          <p className="mt-2 text-xs text-forge-yellow">{cockpit?.warnings[0]}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function WorkspaceConfigDepthPanel({ config }: { config: ForgeWorkspaceConfig | null }) {
+  const profileCount = config?.agentProfiles.length ?? 0;
+  const mcpCount = config?.mcpServers.length ?? 0;
+  const enabledMcpCount = config?.mcpServers.filter((server) => server.enabled).length ?? 0;
+  const scriptCount = (config?.setup.length ?? 0) + (config?.run.length ?? 0) + (config?.teardown.length ?? 0);
+
+  return (
+    <div className="px-4 pb-4">
+      <div className="rounded-xl border border-forge-border bg-forge-card/70 p-3">
+        <div className="mb-2">
+          <p className="text-xs font-semibold uppercase tracking-widest text-forge-muted">Workspace Config</p>
+          <p className="mt-0.5 text-xs text-forge-muted">Developer-depth view of local repo configuration. Nothing here launches MCP servers.</p>
+        </div>
+        <div className="grid grid-cols-1 gap-2 text-xs">
+          <CockpitLine label="Config file" value={config?.exists ? (config.path ?? '.forge/config.json') : 'not configured'} />
+          <CockpitLine label="Scripts" value={`${scriptCount} total · ${config?.run.length ?? 0} check/run`} />
+          <CockpitLine label="Agent profiles" value={`${profileCount} repo profile${profileCount === 1 ? '' : 's'}`} />
+          <CockpitLine label="MCP servers" value={`${enabledMcpCount}/${mcpCount} enabled`} />
+        </div>
+        {config?.warning && (
+          <div className="mt-2 rounded border border-forge-yellow/20 bg-forge-yellow/10 px-2 py-1.5 text-xs text-forge-yellow">
+            {config.warning}
+          </div>
+        )}
+        {(config?.mcpWarnings.length ?? 0) > 0 && (
+          <div className="mt-2 space-y-1 rounded border border-forge-yellow/20 bg-forge-yellow/10 px-2 py-1.5 text-xs text-forge-yellow">
+            {config?.mcpWarnings.slice(0, 3).map((warning) => (
+              <p key={warning}>{warning}</p>
+            ))}
+            {(config?.mcpWarnings.length ?? 0) > 3 && <p>+{(config?.mcpWarnings.length ?? 0) - 3} more warning(s)</p>}
+          </div>
+        )}
+        {profileCount > 0 && (
+          <div className="mt-3 space-y-1">
+            <p className="text-xs font-semibold text-forge-text/85">Repo agent profiles</p>
+            {config?.agentProfiles.slice(0, 4).map((profile) => (
+              <div key={profile.id} className="rounded border border-forge-border/50 bg-black/10 px-2 py-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 truncate text-xs font-medium text-forge-text" title={profile.label}>{profile.label}</span>
+                  <span className="shrink-0 rounded border border-forge-border bg-white/5 px-1.5 py-0.5 text-[10px] uppercase text-forge-muted">
+                    {profile.local ? 'local' : profile.agent}
+                  </span>
+                </div>
+                <p className="mt-0.5 truncate font-mono text-[10px] text-forge-muted" title={`${profile.command} ${profile.args.join(' ')}`}>
+                  {profile.command} {profile.args.join(' ')}
+                </p>
+              </div>
+            ))}
+            {profileCount > 4 && <p className="text-xs text-forge-muted">+{profileCount - 4} more profile(s)</p>}
+          </div>
+        )}
+        {mcpCount > 0 && (
+          <div className="mt-3 space-y-1">
+            <p className="text-xs font-semibold text-forge-text/85">MCP servers</p>
+            {config?.mcpServers.slice(0, 5).map((server) => {
+              const preview = server.url ?? [server.command, ...server.args].filter(Boolean).join(' ');
+              const envCount = Object.keys(server.env ?? {}).length;
+              return (
+                <div key={server.id} className="rounded border border-forge-border/50 bg-black/10 px-2 py-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate text-xs font-medium text-forge-text" title={server.id}>{server.id}</span>
+                    <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] uppercase ${server.enabled ? 'border-forge-green/20 bg-forge-green/10 text-forge-green' : 'border-forge-border bg-white/5 text-forge-muted'}`}>
+                      {server.enabled ? 'enabled' : 'disabled'}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 truncate font-mono text-[10px] text-forge-muted" title={preview}>
+                    {server.transport} · {preview || 'no command/url'}{envCount > 0 ? ` · ${envCount} env` : ''}
+                  </p>
+                </div>
+              );
+            })}
+            {mcpCount > 5 && <p className="text-xs text-forge-muted">+{mcpCount - 5} more server(s)</p>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function DetailPanel({
   workspace,
   isArchived = false,
@@ -459,6 +721,7 @@ export function DetailPanel({
   const [prError, setPrError] = useState<string | null>(null);
   const [shippingMessage, setShippingMessage] = useState<string | null>(null);
   const [cleanupBusy, setCleanupBusy] = useState(false);
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
   const [timelineItems, setTimelineItems] = useState<ForgeActivityItem[]>([]);
   const [timelineExpanded, setTimelineExpanded] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
@@ -468,6 +731,9 @@ export function DetailPanel({
   const [forgeConfig, setForgeConfig] = useState<ForgeWorkspaceConfig | null>(null);
   const [workspaceReadiness, setWorkspaceReadiness] = useState<WorkspaceReadiness | null>(null);
   const [workspacePrStatus, setWorkspacePrStatus] = useState<WorkspacePrStatus | null>(null);
+  const [workspaceHealth, setWorkspaceHealth] = useState<WorkspaceHealth | null>(null);
+  const [reviewCockpit, setReviewCockpit] = useState<WorkspaceReviewCockpit | null>(null);
+  const [recoveryResult, setRecoveryResult] = useState<WorkspaceSessionRecoveryResult | null>(null);
   const [workspacePortCount, setWorkspacePortCount] = useState<number | null>(null);
   const [workspaceChangedFiles, setWorkspaceChangedFiles] = useState<WorkspaceChangedFile[]>([]);
   const [scriptActionBusy, setScriptActionBusy] = useState<string | null>(null);
@@ -479,6 +745,8 @@ export function DetailPanel({
   const [checkpointBusy, setCheckpointBusy] = useState(false);
   const [checkpointMessage, setCheckpointMessage] = useState<string | null>(null);
   const [cockpitLoading, setCockpitLoading] = useState(false);
+  const [reviewCommentsRefreshing, setReviewCommentsRefreshing] = useState(false);
+  const [reviewMessage, setReviewMessage] = useState<string | null>(null);
   const workspaceId = workspace?.id;
   useEffect(() => {
     if (!workspaceId) return;
@@ -496,6 +764,9 @@ export function DetailPanel({
       setForgeConfig(null);
       setWorkspaceReadiness(null);
       setWorkspacePrStatus(null);
+      setWorkspaceHealth(null);
+      setReviewCockpit(null);
+      setRecoveryResult(null);
       setWorkspacePortCount(null);
       setWorkspaceChangedFiles([]);
       setScriptActionBusy(null);
@@ -513,15 +784,19 @@ export function DetailPanel({
       getWorkspaceReadiness(workspaceId),
       listWorkspacePorts(workspaceId),
       getWorkspacePrStatus(workspaceId),
+      getWorkspaceHealth(workspaceId),
+      getWorkspaceReviewCockpit(workspaceId, null),
       listWorkspaceCheckpoints(workspaceId),
       getWorkspaceChangedFiles(workspaceId),
     ])
-      .then(([configResult, readinessResult, portsResult, prStatusResult, checkpointsResult, changedFilesResult]) => {
+      .then(([configResult, readinessResult, portsResult, prStatusResult, healthResult, reviewCockpitResult, checkpointsResult, changedFilesResult]) => {
         if (cancelled) return;
         setForgeConfig(configResult.status === 'fulfilled' ? configResult.value : null);
         setWorkspaceReadiness(readinessResult.status === 'fulfilled' ? readinessResult.value : null);
         setWorkspacePortCount(portsResult.status === 'fulfilled' ? portsResult.value.length : null);
         setWorkspacePrStatus(prStatusResult.status === 'fulfilled' ? prStatusResult.value : null);
+        setWorkspaceHealth(healthResult.status === 'fulfilled' ? healthResult.value : null);
+        setReviewCockpit(reviewCockpitResult.status === 'fulfilled' ? reviewCockpitResult.value : null);
         setCheckpoints(checkpointsResult.status === 'fulfilled' ? checkpointsResult.value : []);
         setWorkspaceChangedFiles(changedFilesResult.status === 'fulfilled' ? changedFilesResult.value : []);
       })
@@ -573,11 +848,13 @@ export function DetailPanel({
 
   const refreshCockpitData = async () => {
     if (!workspaceId) return;
-    const [configResult, readinessResult, portsResult, prStatusResult, checkpointsResult, changedFilesResult] = await Promise.allSettled([
+    const [configResult, readinessResult, portsResult, prStatusResult, healthResult, reviewCockpitResult, checkpointsResult, changedFilesResult] = await Promise.allSettled([
       getWorkspaceForgeConfig(workspaceId),
       getWorkspaceReadiness(workspaceId),
       listWorkspacePorts(workspaceId),
       getWorkspacePrStatus(workspaceId),
+      getWorkspaceHealth(workspaceId),
+      getWorkspaceReviewCockpit(workspaceId, null),
       listWorkspaceCheckpoints(workspaceId),
       getWorkspaceChangedFiles(workspaceId),
     ]);
@@ -585,6 +862,8 @@ export function DetailPanel({
     setWorkspaceReadiness(readinessResult.status === 'fulfilled' ? readinessResult.value : null);
     setWorkspacePortCount(portsResult.status === 'fulfilled' ? portsResult.value.length : null);
     setWorkspacePrStatus(prStatusResult.status === 'fulfilled' ? prStatusResult.value : null);
+    setWorkspaceHealth(healthResult.status === 'fulfilled' ? healthResult.value : null);
+    setReviewCockpit(reviewCockpitResult.status === 'fulfilled' ? reviewCockpitResult.value : null);
     setCheckpoints(checkpointsResult.status === 'fulfilled' ? checkpointsResult.value : []);
     setWorkspaceChangedFiles(changedFilesResult.status === 'fulfilled' ? changedFilesResult.value : []);
   };
@@ -634,6 +913,24 @@ export function DetailPanel({
       setScriptActionMessage(err instanceof Error ? err.message : String(err));
     } finally {
       setScriptActionBusy(null);
+    }
+  };
+
+  const refreshPrCommentsFromCockpit = async () => {
+    if (!workspaceId) return;
+    setReviewCommentsRefreshing(true);
+    setReviewMessage(null);
+    try {
+      const cockpit = await refreshWorkspacePrComments(workspaceId);
+      setReviewCockpit(cockpit);
+      const openComments = cockpit.prComments.filter((comment) => !comment.resolvedAt && comment.state !== 'resolved').length;
+      setReviewMessage(`Fetched ${openComments} open PR comment(s).`);
+      await refreshCockpitData();
+      onRefreshWorkspaceState?.();
+    } catch (err) {
+      setReviewMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setReviewCommentsRefreshing(false);
     }
   };
 
@@ -697,6 +994,32 @@ export function DetailPanel({
     if (confirmed) onArchiveWorkspace();
   };
 
+  const recoverSessionsFromCockpit = async () => {
+    if (!workspaceId) return;
+    const confirmed = window.confirm(
+      [
+        'Recover unhealthy workspace sessions?',
+        '',
+        'Forge will close stale, failed, interrupted, stuck, or detached running terminal sessions.',
+        'Terminal history and workspace activity will be preserved.',
+        'It will not delete files, remove the worktree, or kill unrelated ports.',
+      ].join('\n'),
+    );
+    if (!confirmed) return;
+    setRecoveryResult(null);
+    setRecoveryBusy(true);
+    try {
+      const result = await recoverWorkspaceSessions(workspaceId);
+      setRecoveryResult(result);
+      await refreshCockpitData();
+      onRefreshWorkspaceState?.();
+    } catch (err) {
+      setShippingMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRecoveryBusy(false);
+    }
+  };
+
   const restoreSelectedCheckpoint = async () => {
     if (!workspaceId || !selectedCheckpointRef || !checkpointRestorePlan) return;
     const confirmed = window.confirm(
@@ -715,6 +1038,68 @@ export function DetailPanel({
       const result = await restoreWorkspaceCheckpoint(workspaceId, selectedCheckpointRef);
       setCheckpointMessage(result.message);
       setCheckpoints(await listWorkspaceCheckpoints(workspaceId));
+      onRefreshWorkspaceState?.();
+    } catch (err) {
+      setCheckpointMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCheckpointBusy(false);
+    }
+  };
+
+  const branchFromCheckpoint = async (checkpoint: WorkspaceCheckpoint) => {
+    if (!workspaceId) return;
+    const branch = window.prompt(
+      [
+        'Create a branch from this checkpoint?',
+        '',
+        'Forge will create a Git branch at the checkpoint commit.',
+        'It will not switch branches or change workspace files.',
+        '',
+        'Branch name:',
+      ].join('\n'),
+      `forge/checkpoint-${checkpoint.shortOid}`,
+    );
+    const branchName = branch?.trim();
+    if (!branchName) return;
+
+    setCheckpointBusy(true);
+    setCheckpointMessage(null);
+    try {
+      const result = await createBranchFromWorkspaceCheckpoint(workspaceId, checkpoint.reference, branchName);
+      setCheckpointMessage(result.message);
+      await refreshCockpitData();
+      onRefreshWorkspaceState?.();
+    } catch (err) {
+      setCheckpointMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCheckpointBusy(false);
+    }
+  };
+
+  const abandonCheckpoint = async (checkpoint: WorkspaceCheckpoint) => {
+    if (!workspaceId) return;
+    const confirmed = window.confirm(
+      [
+        'Abandon this checkpoint?',
+        '',
+        `Forge will delete checkpoint ref ${checkpoint.reference}.`,
+        'Workspace files, branches, and commits will not be changed.',
+      ].join('\n'),
+    );
+    if (!confirmed) return;
+
+    setCheckpointBusy(true);
+    setCheckpointMessage(null);
+    try {
+      const result = await deleteWorkspaceCheckpoint(workspaceId, checkpoint.reference);
+      setCheckpointMessage(result.message);
+      if (selectedCheckpointRef === checkpoint.reference) {
+        setSelectedCheckpointRef(null);
+        setCheckpointDiff(null);
+        setCheckpointRestorePlan(null);
+      }
+      setCheckpoints(await listWorkspaceCheckpoints(workspaceId));
+      await refreshCockpitData();
       onRefreshWorkspaceState?.();
     } catch (err) {
       setCheckpointMessage(err instanceof Error ? err.message : String(err));
@@ -871,6 +1256,15 @@ export function DetailPanel({
               onOpenReviewFile={onOpenReviewFile}
             />
 
+            <ReviewBlockersPanel
+              cockpit={reviewCockpit}
+              loading={cockpitLoading}
+              refreshing={reviewCommentsRefreshing}
+              message={reviewMessage}
+              onRefreshComments={() => void refreshPrCommentsFromCockpit()}
+              onOpenReviewFile={onOpenReviewFile}
+            />
+
             <ShippingGuidePanel
               changedFiles={changedFileCount}
               runCount={forgeConfig?.run.length ?? 0}
@@ -886,9 +1280,13 @@ export function DetailPanel({
             <LifecyclePanel
               isArchived={isArchived}
               terminalHealth={workspaceReadiness?.terminalHealth}
+              workspaceHealth={workspaceHealth}
+              recoveryResult={recoveryResult}
               cleanupBusy={cleanupBusy}
+              recoveryBusy={recoveryBusy}
               message={shippingMessage}
               onCleanup={() => void cleanupFromCockpit()}
+              onRecover={() => void recoverSessionsFromCockpit()}
               onArchive={onArchiveWorkspace ? archiveFromCockpit : undefined}
               onDelete={onDeleteWorkspace}
             />
@@ -954,6 +1352,25 @@ export function DetailPanel({
                                   {checkpointBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
                                   Restore checkpoint
                                 </Button>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <Button
+                                    variant="secondary"
+                                    size="xs"
+                                    disabled={checkpointBusy}
+                                    onClick={() => void branchFromCheckpoint(checkpoint)}
+                                  >
+                                    Branch from checkpoint
+                                  </Button>
+                                  <Button
+                                    variant="secondary"
+                                    size="xs"
+                                    disabled={checkpointBusy}
+                                    className="text-forge-red/80 hover:text-forge-red"
+                                    onClick={() => void abandonCheckpoint(checkpoint)}
+                                  >
+                                    Abandon checkpoint
+                                  </Button>
+                                </div>
                               </div>
                             )}
                             <div className="max-h-72 overflow-hidden rounded border border-forge-border">
@@ -1112,6 +1529,8 @@ export function DetailPanel({
             <div className="mx-4 pb-4">
               <ContextPreviewPanel workspaceId={workspace.id} />
             </div>
+
+            <WorkspaceConfigDepthPanel config={forgeConfig} />
 
             {/* Linked Worktrees */}
             <div className="px-4 pb-4">

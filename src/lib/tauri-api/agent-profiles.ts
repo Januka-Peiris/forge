@@ -5,6 +5,14 @@ export function listWorkspaceAgentProfiles(workspaceId?: string | null): Promise
   return invokeCommand<AgentProfile[]>('list_workspace_agent_profiles', { workspaceId });
 }
 
+export function listAppAgentProfiles(): Promise<AgentProfile[]> {
+  return invokeCommand<AgentProfile[]>('list_app_agent_profiles');
+}
+
+export function saveAppAgentProfiles(profiles: AgentProfile[]): Promise<AgentProfile[]> {
+  return invokeCommand<AgentProfile[]>('save_app_agent_profiles', { profiles });
+}
+
 /** Non-shell profiles for pickers: Claude first, then Codex, then others. */
 export function agentProfilesForPromptPicker(profiles: AgentProfile[]): AgentProfile[] {
   return profiles

@@ -37,6 +37,11 @@ export type { AgentRunStatus, AgentRunStreamType, AgentRunType, StartWorkspaceRu
 export type { DiscoveredRepository, DiscoveredWorktree, ScanRepositoriesResult } from './repository';
 export type { AppSettings, SaveRepoRootsInput } from './settings';
 export type { EnvironmentCheckItem, EnvironmentCheckStatus } from './environment';
+export type {
+  LocalLlmModel,
+  LocalLlmProfileDiagnostic,
+  LocalLlmProfileDiagnosticCheck,
+} from './local-llm';
 export type { WorkspaceAttention, WorkspaceAttentionStatus } from './workspace-attention';
 export type {
   WorkspaceHealth,

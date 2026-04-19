@@ -8,6 +8,7 @@ pub mod checkpoint;
 pub mod deep_link;
 pub mod environment;
 pub mod git_review;
+pub mod local_llm;
 pub mod merge_readiness;
 pub mod orchestrator;
 pub mod pr_draft;
@@ -46,6 +47,7 @@ pub use checkpoint::{
 pub use deep_link::{OpenDeepLinkInput, OpenDeepLinkResult};
 pub use environment::EnvironmentCheckItem;
 pub use git_review::{WorkspaceChangedFile, WorkspaceFileDiff};
+pub use local_llm::{LocalLlmModel, LocalLlmProfileDiagnostic, LocalLlmProfileDiagnosticCheck};
 pub use merge_readiness::WorkspaceMergeReadiness;
 pub use orchestrator::{OrchestratorAction, OrchestratorStatus};
 pub use pr_draft::{WorkspacePrCheck, WorkspacePrDraft, WorkspacePrResult, WorkspacePrStatus};

@@ -67,7 +67,6 @@ export function Sidebar({
   repositories,
   workspaces,
   workspaceAttention,
-  conflictingWorkspaceIds: _conflictingWorkspaceIds,
   archivedWorkspaceIds,
   selectedWorkspaceId,
   onSelectWorkspace,

@@ -93,15 +93,83 @@ Common fields:
 
 - `id`
 - `label`
-- `agent`: `codex`, `claude_code`, or `shell`
+- `agent`: `codex`, `claude_code`, `local_llm`, or `shell`
 - `command`
 - `args`
 - `model`
 - `reasoning`
 - `mode`
+- `provider`
+- `endpoint`
+- `local`
 - `description`
 - `skills`
 - `templates`
+
+## Local LLM Profiles
+
+Local LLMs are configured as normal agent profiles. Forge does not start or manage model servers for you; it launches the configured local command in an inspectable terminal and passes normal Forge prompt metadata into that session.
+
+You can create app-wide local profiles from:
+
+```text
+Settings → Agent Profiles & Local LLMs
+```
+
+App-level profiles are saved in Forge settings and are available to every workspace. Repo/workspace `.forge/config.json` profiles can still add or override profiles for a specific codebase. For Ollama, Settings can also discover installed models from `ollama list` so you can pick a local model instead of typing it manually.
+
+Use the **Test** action in Settings to validate a local profile before launching it in a workspace. The diagnostic checks command availability, local endpoint metadata, localhost TCP reachability, and Ollama model presence when relevant. It does not send a prompt, pull models, or start/stop servers.
+
+Built-in local profile:
+
+- `ollama-local`
+  - agent: `local_llm`
+  - command: `ollama`
+  - args: `["run", "llama3.2"]`
+  - provider: `ollama`
+  - endpoint: `http://localhost:11434`
+
+You can override or add repo-specific profiles:
+
+```json
+{
+  "agentProfiles": [
+    {
+      "id": "ollama-qwen-coder",
+      "label": "Ollama Qwen Coder",
+      "agent": "local_llm",
+      "provider": "ollama",
+      "endpoint": "http://localhost:11434",
+      "local": true,
+      "command": "ollama",
+      "args": ["run", "qwen2.5-coder"],
+      "model": "qwen2.5-coder",
+      "mode": "act",
+      "description": "Local Ollama coding model"
+    },
+    {
+      "id": "local-openai-wrapper",
+      "label": "Local OpenAI-Compatible CLI",
+      "agent": "local_llm",
+      "provider": "openai-compatible",
+      "endpoint": "http://localhost:1234/v1",
+      "local": true,
+      "command": "my-local-agent",
+      "args": ["--model", "local-model"],
+      "model": "local-model"
+    }
+  ]
+}
+```
+
+Notes:
+
+- Local profiles are developer-depth configuration, not cloud-agent hosting.
+- `endpoint` is metadata for visibility and prompt context; Forge does not inject secrets.
+- `command` and `args` stay visible and inspectable.
+- Common aliases such as `ollama`, `llama.cpp`, `lmstudio`, and `openai-compatible` normalize to `local_llm`.
+- If a local model server is not running, the terminal command will fail visibly instead of Forge silently managing it.
+- Profile resolution order is built-in defaults, then app-level profiles, then workspace `.forge/config.json` profiles.
 
 ## MCP Servers
 

@@ -11,6 +11,9 @@ pub struct AgentProfile {
     pub model: Option<String>,
     pub reasoning: Option<String>,
     pub mode: Option<String>,
+    pub provider: Option<String>,
+    pub endpoint: Option<String>,
+    pub local: bool,
     pub description: Option<String>,
     pub skills: Vec<String>,
     pub templates: Vec<String>,
@@ -28,6 +31,10 @@ pub(crate) struct RawAgentProfile {
     pub model: Option<String>,
     pub reasoning: Option<String>,
     pub mode: Option<String>,
+    pub provider: Option<String>,
+    pub endpoint: Option<String>,
+    #[serde(default)]
+    pub local: Option<bool>,
     pub description: Option<String>,
     #[serde(default)]
     pub skills: Vec<String>,

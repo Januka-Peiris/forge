@@ -11,3 +11,16 @@ pub fn list_workspace_agent_profiles(
 ) -> Result<Vec<AgentProfile>, String> {
     agent_profile_service::list_workspace_agent_profiles(&state, workspace_id.as_deref())
 }
+
+#[tauri::command]
+pub fn list_app_agent_profiles(state: State<'_, AppState>) -> Result<Vec<AgentProfile>, String> {
+    agent_profile_service::list_app_agent_profiles(&state)
+}
+
+#[tauri::command]
+pub fn save_app_agent_profiles(
+    state: State<'_, AppState>,
+    profiles: Vec<AgentProfile>,
+) -> Result<Vec<AgentProfile>, String> {
+    agent_profile_service::save_app_agent_profiles(&state, profiles)
+}

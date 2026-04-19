@@ -209,8 +209,8 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
       {
         id: 'action-check-environment',
         title: 'Check Environment',
-        subtitle: 'Validate git, tmux, Codex, Claude, and GitHub CLI',
-        keywords: 'environment setup dependencies git tmux codex claude gh check',
+        subtitle: 'Validate git, tmux, Codex, Claude, local LLM, and GitHub CLI',
+        keywords: 'environment setup dependencies git tmux codex claude ollama local llm gh check',
         icon: 'action' as const,
         run: onCheckEnvironment,
       },

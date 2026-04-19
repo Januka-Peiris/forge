@@ -42,6 +42,12 @@ const DEPENDENCIES: &[Dependency] = &[
         fix: "brew install gh",
         optional: true,
     },
+    Dependency {
+        name: "Ollama",
+        binary: "ollama",
+        fix: "Install Ollama from https://ollama.com or use a custom local profile command",
+        optional: true,
+    },
 ];
 
 pub fn check_environment() -> Vec<EnvironmentCheckItem> {
@@ -191,11 +197,14 @@ mod tests {
     #[test]
     fn environment_check_shape_is_stable() {
         let items = check_environment();
-        assert_eq!(items.len(), 5);
+        assert_eq!(items.len(), 6);
         assert!(items.iter().any(|item| item.binary == "git"));
         assert!(items
             .iter()
             .any(|item| item.binary == "gh" && item.optional));
+        assert!(items
+            .iter()
+            .any(|item| item.binary == "ollama" && item.optional));
     }
 
     #[test]

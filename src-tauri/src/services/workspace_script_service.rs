@@ -471,7 +471,7 @@ mod tests {
         fs::create_dir_all(dir.join(".forge")).expect("forge dir");
         fs::write(
             dir.join(CONFIG_RELATIVE_PATH),
-            r#"{"setup":[" npm install ", ""],"run":["npm run dev"],"teardown":["kill-port 3000"],"mcpServers":{"linear":{"command":"npx","args":["-y","linear-mcp"],"env":{"LINEAR_API_KEY":"test"}}}}"#,
+            r#"{"setup":[" npm install ", ""],"run":["npm run dev"],"teardown":["kill-port 3000"],"agentProfiles":[{"id":"ollama-qwen","agent":"ollama","provider":"ollama","endpoint":"http://localhost:11434","command":"ollama","args":["run","qwen2.5-coder"],"model":"qwen2.5-coder"}],"mcpServers":{"linear":{"command":"npx","args":["-y","linear-mcp"],"env":{"LINEAR_API_KEY":"test"}}}}"#,
         )
         .expect("write config");
 
@@ -480,6 +480,10 @@ mod tests {
         assert_eq!(config.setup, vec!["npm install"]);
         assert_eq!(config.run, vec!["npm run dev"]);
         assert_eq!(config.teardown, vec!["kill-port 3000"]);
+        assert_eq!(config.agent_profiles.len(), 1);
+        assert_eq!(config.agent_profiles[0].agent, "local_llm");
+        assert!(config.agent_profiles[0].local);
+        assert_eq!(config.agent_profiles[0].provider.as_deref(), Some("ollama"));
         assert_eq!(config.mcp_servers.len(), 1);
         assert_eq!(config.mcp_servers[0].id, "linear");
         assert_eq!(config.mcp_servers[0].command.as_deref(), Some("npx"));

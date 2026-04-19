@@ -12,6 +12,7 @@ pub mod workspace_service;
 
 pub mod git_review_service;
 pub mod git_worktree_service;
+pub mod local_llm_service;
 pub mod merge_readiness_service;
 pub mod pr_draft_service;
 pub mod prompt_template_service;

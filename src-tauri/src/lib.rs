@@ -10,11 +10,11 @@ use std::sync::atomic::Ordering;
 
 use commands::{
     activity, agent_chat, agent_context, agent_memory, agent_profiles, agent_runs, checkpoints,
-    deep_links, environment, git_review, merge_readiness, orchestrator as orchestrator_commands,
-    pr_draft, prompt_templates, repositories as repository_commands, review_cockpit,
-    review_summary, reviews, settings, terminal, workspace_attention, workspace_cleanup,
-    workspace_health, workspace_ports, workspace_readiness, workspace_scripts, workspace_templates,
-    workspaces,
+    deep_links, environment, git_review, local_llms, merge_readiness,
+    orchestrator as orchestrator_commands, pr_draft, prompt_templates,
+    repositories as repository_commands, review_cockpit, review_summary, reviews, settings,
+    terminal, workspace_attention, workspace_cleanup, workspace_health, workspace_ports,
+    workspace_readiness, workspace_scripts, workspace_templates, workspaces,
 };
 use services::{orchestrator_service, rebase_service};
 use state::AppState;
@@ -103,8 +103,12 @@ pub fn run() {
             agent_chat::interrupt_agent_chat_session,
             agent_chat::close_agent_chat_session,
             agent_profiles::list_workspace_agent_profiles,
+            agent_profiles::list_app_agent_profiles,
+            agent_profiles::save_app_agent_profiles,
             deep_links::open_deep_link,
             environment::check_environment,
+            local_llms::list_local_llm_models,
+            local_llms::diagnose_local_llm_profile,
             repository_commands::scan_repositories,
             repository_commands::remove_repository,
             repository_commands::add_repository,

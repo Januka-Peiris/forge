@@ -12,6 +12,7 @@ pub mod reviews;
 pub mod workspaces;
 
 pub mod git_review;
+pub mod local_llms;
 pub mod merge_readiness;
 pub mod perf;
 pub mod pr_draft;

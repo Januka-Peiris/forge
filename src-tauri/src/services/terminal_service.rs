@@ -9,7 +9,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 
 use crate::models::{
-    AgentPromptEntry, AttachWorkspaceTerminalInput, CommandApprovalEvent,
+    AgentProfile, AgentPromptEntry, AttachWorkspaceTerminalInput, CommandApprovalEvent,
     CreateWorkspaceTerminalInput, QueueAgentPromptInput, StartTerminalSessionInput,
     TerminalOutputChunk, TerminalOutputEvent, TerminalOutputResponse, TerminalSession,
     TerminalSessionState,
@@ -104,6 +104,21 @@ pub fn create_workspace_terminal(
         .unwrap_or_else(|| default_terminal_title(&kind, &profile.name));
     let command_spec =
         TerminalCommandSpec::from_input(&profile, input.command.as_deref(), input.args.clone())?;
+    let launch_command = command_spec.command.clone();
+    let launch_args = command_spec.args.clone();
+    let launch_preview = command_preview(&launch_command, &launch_args);
+    if command_safety_service::is_risky_command(&launch_preview) {
+        record_blocked_terminal_launch_activity(
+            state,
+            &input.workspace_id,
+            &resolved_profile,
+            &launch_preview,
+        );
+        return Err(format!(
+            "Refusing to launch terminal profile {} because the command looks risky: {}",
+            resolved_profile.label, launch_preview
+        ));
+    }
 
     let rows = input.rows.unwrap_or(30).max(5);
     let cols = input.cols.unwrap_or(100).max(20);
@@ -164,6 +179,13 @@ pub fn create_workspace_terminal(
         last_captured_seq: 0,
     };
     terminal_repository::insert_session(&state.db, &session)?;
+    record_terminal_start_activity(
+        state,
+        &session,
+        &resolved_profile,
+        &launch_command,
+        &launch_args,
+    );
 
     let next_seq = Arc::new(AtomicU64::new(0));
     let last_output_at_secs = Arc::new(AtomicU64::new(0));
@@ -185,7 +207,10 @@ pub fn create_workspace_terminal(
         &input.workspace_id,
         &session_id,
         "system",
-        "[forge] Terminal started\r\n",
+        &format!(
+            "[forge] Terminal started · profile: {} · command: {}\r\n",
+            resolved_profile.label, launch_preview
+        ),
     );
 
     spawn_terminal_reader(
@@ -540,6 +565,109 @@ fn record_terminal_lifecycle_activity(state: &AppState, session: &TerminalSessio
     );
 }
 
+fn record_terminal_start_activity(
+    state: &AppState,
+    session: &TerminalSession,
+    profile: &AgentProfile,
+    command: &str,
+    args: &[String],
+) {
+    let workspace = match workspace_repository::get_detail(&state.db, &session.workspace_id) {
+        Ok(Some(workspace)) => workspace,
+        _ => return,
+    };
+    let details = format_terminal_start_activity_details(session, profile, command, args);
+    let _ = activity_repository::record(
+        &state.db,
+        &session.workspace_id,
+        &workspace.summary.repo,
+        Some(&workspace.summary.branch),
+        "Terminal session started",
+        "info",
+        Some(&details),
+    );
+}
+
+fn record_blocked_terminal_launch_activity(
+    state: &AppState,
+    workspace_id: &str,
+    profile: &AgentProfile,
+    command_preview: &str,
+) {
+    let workspace = match workspace_repository::get_detail(&state.db, workspace_id) {
+        Ok(Some(workspace)) => workspace,
+        _ => return,
+    };
+    let details = format_blocked_terminal_launch_details(profile, command_preview);
+    let _ = activity_repository::record(
+        &state.db,
+        workspace_id,
+        &workspace.summary.repo,
+        Some(&workspace.summary.branch),
+        "Terminal launch blocked",
+        "warning",
+        Some(&details),
+    );
+}
+
+fn format_blocked_terminal_launch_details(profile: &AgentProfile, command_preview: &str) -> String {
+    let mut details = vec![
+        format!("profile: {} ({})", profile.label, profile.id),
+        format!("command: {command_preview}"),
+    ];
+    if profile.local {
+        details.push("runtime: local".to_string());
+    }
+    if let Some(provider) = profile
+        .provider
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
+        details.push(format!("provider: {provider}"));
+    }
+    format!(
+        "{}. Command matched Forge risky-command patterns.",
+        details.join("; ")
+    )
+}
+
+fn format_terminal_start_activity_details(
+    session: &TerminalSession,
+    profile: &AgentProfile,
+    command: &str,
+    args: &[String],
+) -> String {
+    let mut parts = vec![
+        format!("Session {}", session.id),
+        format!("role: {}", session.session_role),
+        format!("kind: {}", session.terminal_kind),
+        format!("profile: {} ({})", profile.label, profile.id),
+        format!("command: {}", command_preview(command, args)),
+    ];
+    if profile.local {
+        parts.push("runtime: local".to_string());
+    }
+    if let Some(provider) = profile
+        .provider
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
+        parts.push(format!("provider: {provider}"));
+    }
+    if let Some(model) = profile.model.as_deref().filter(|value| !value.is_empty()) {
+        parts.push(format!("model: {model}"));
+    }
+    if let Some(endpoint) = profile
+        .endpoint
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
+        parts.push(format!("endpoint: {endpoint}"));
+    }
+    parts.push(format!("cwd: {}", session.cwd));
+    format!("{}.", parts.join("; "))
+}
+
 fn format_terminal_lifecycle_activity_details(session: &TerminalSession) -> String {
     let pid = session
         .pid
@@ -555,6 +683,27 @@ fn format_terminal_lifecycle_activity_details(session: &TerminalSession) -> Stri
         pid,
         session.cwd
     )
+}
+
+fn command_preview(command: &str, args: &[String]) -> String {
+    std::iter::once(command)
+        .chain(args.iter().map(String::as_str))
+        .map(quote_arg_if_needed)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn quote_arg_if_needed(arg: &str) -> String {
+    if arg.is_empty() {
+        return "''".to_string();
+    }
+    if !arg
+        .chars()
+        .any(|ch| ch.is_whitespace() || matches!(ch, '\'' | '"' | '\\'))
+    {
+        return arg.to_string();
+    }
+    format!("'{}'", arg.replace('\'', "'\\''"))
 }
 
 pub fn list_workspace_visible_terminal_sessions(
@@ -1584,5 +1733,86 @@ mod tests {
         assert!(details.contains("profile: codex"));
         assert!(details.contains("pid: 42"));
         assert!(details.contains("/tmp/forge-workspace"));
+    }
+
+    #[test]
+    fn formats_local_terminal_start_activity_details() {
+        let session = TerminalSession {
+            id: "term-local".to_string(),
+            workspace_id: "ws-123".to_string(),
+            session_role: "agent".to_string(),
+            profile: "ollama-local".to_string(),
+            cwd: "/tmp/forge-workspace".to_string(),
+            status: "running".to_string(),
+            started_at: "now".to_string(),
+            ended_at: None,
+            command: "ollama".to_string(),
+            args: vec!["run".to_string(), "qwen coder".to_string()],
+            pid: None,
+            stale: false,
+            closed_at: None,
+            backend: "pty".to_string(),
+            title: "Ollama Local".to_string(),
+            terminal_kind: "agent".to_string(),
+            display_order: 0,
+            is_visible: true,
+            last_attached_at: None,
+            last_captured_seq: 0,
+        };
+        let profile = AgentProfile {
+            id: "ollama-local".to_string(),
+            label: "Ollama Local".to_string(),
+            agent: "local_llm".to_string(),
+            command: "ollama".to_string(),
+            args: vec!["run".to_string(), "qwen coder".to_string()],
+            model: Some("qwen coder".to_string()),
+            reasoning: None,
+            mode: Some("act".to_string()),
+            provider: Some("ollama".to_string()),
+            endpoint: Some("http://localhost:11434".to_string()),
+            local: true,
+            description: None,
+            skills: vec![],
+            templates: vec![],
+        };
+
+        let details = format_terminal_start_activity_details(
+            &session,
+            &profile,
+            "ollama",
+            &["run".to_string(), "qwen coder".to_string()],
+        );
+
+        assert!(details.contains("runtime: local"));
+        assert!(details.contains("provider: ollama"));
+        assert!(details.contains("model: qwen coder"));
+        assert!(details.contains("endpoint: http://localhost:11434"));
+        assert!(details.contains("ollama run 'qwen coder'"));
+    }
+
+    #[test]
+    fn formats_blocked_terminal_launch_details() {
+        let profile = AgentProfile {
+            id: "risky-local".to_string(),
+            label: "Risky Local".to_string(),
+            agent: "local_llm".to_string(),
+            command: "rm".to_string(),
+            args: vec!["-rf".to_string(), "/tmp/example".to_string()],
+            model: None,
+            reasoning: None,
+            mode: Some("act".to_string()),
+            provider: Some("custom".to_string()),
+            endpoint: None,
+            local: true,
+            description: None,
+            skills: vec![],
+            templates: vec![],
+        };
+
+        let details = format_blocked_terminal_launch_details(&profile, "rm -rf /tmp/example");
+        assert!(details.contains("Risky Local"));
+        assert!(details.contains("runtime: local"));
+        assert!(details.contains("provider: custom"));
+        assert!(details.contains("risky-command patterns"));
     }
 }
