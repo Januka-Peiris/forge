@@ -626,7 +626,13 @@ export default function App() {
   const handleDeleteWorkspace = async (workspaceId: string) => {
     const candidate = workspaces.find((workspace) => workspace.id === workspaceId);
     const label = candidate?.name ?? workspaceId;
-    if (!window.confirm(`Delete workspace "${label}"? This cannot be undone.`)) return;
+    if (!window.confirm([
+      `Delete workspace "${label}"?`,
+      '',
+      'This removes the Forge workspace record and managed local workspace state.',
+      'Use Archive or Safe cleanup first if you want to keep it inspectable.',
+      'This cannot be undone.',
+    ].join('\n'))) return;
     forgeLog('deleteWorkspace', 'user confirmed; invoking delete_workspace', { workspaceId, label });
     setError(null);
     try {
@@ -801,6 +807,10 @@ export default function App() {
                       isArchived={selected ? archivedWorkspaceIds.includes(selected.id) : false}
                       onArchiveWorkspace={handleArchiveWorkspace}
                       onDeleteWorkspace={selected ? () => void handleDeleteWorkspace(selected.id) : undefined}
+                      onOpenReviewFile={(path) => {
+                        setSelectedReviewPath(path ?? null);
+                        setView('reviews');
+                      }}
                       activityItems={selected ? activityItems.filter((item) => item.workspaceId === selected.id) : []}
                       repositories={settingsState?.discoveredRepositories ?? []}
                       linkedWorktrees={selected ? linkedWorktreesByWorkspaceId[selected.id] ?? [] : []}

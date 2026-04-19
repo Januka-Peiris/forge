@@ -3,8 +3,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{params, OptionalExtension};
 
-use crate::models::{TerminalSession, WorkspaceHealth, WorkspaceTerminalHealth};
-use crate::repositories::{terminal_repository, workspace_repository};
+use crate::models::{
+    TerminalSession, WorkspaceHealth, WorkspaceSessionRecoveryResult, WorkspaceTerminalHealth,
+};
+use crate::repositories::{activity_repository, terminal_repository, workspace_repository};
+use crate::services::terminal_service;
 use crate::state::AppState;
 
 /// Agent sessions are flagged as stuck if they produce no PTY output for this long.
@@ -43,7 +46,10 @@ pub fn get_workspace_health(
             ));
         }
         if stuck_since.is_some() {
-            warnings.push(format!("{} appears stuck — no output for >2 minutes", terminal_label(&session)));
+            warnings.push(format!(
+                "{} appears stuck — no output for >2 minutes",
+                terminal_label(&session)
+            ));
         }
         terminals.push(WorkspaceTerminalHealth {
             session_id: session.id,
@@ -75,6 +81,63 @@ pub fn get_workspace_health(
     })
 }
 
+pub fn recover_workspace_sessions(
+    state: &AppState,
+    workspace_id: &str,
+) -> Result<WorkspaceSessionRecoveryResult, String> {
+    let workspace = workspace_repository::get_detail(&state.db, workspace_id)?
+        .ok_or_else(|| format!("Workspace {workspace_id} was not found"))?;
+    let health = get_workspace_health(state, workspace_id)?;
+    let mut closed_sessions = 0u32;
+    let mut skipped_sessions = 0u32;
+    let mut warnings = Vec::new();
+
+    for terminal in health.terminals {
+        let should_close = terminal.stale
+            || terminal.stuck_since.is_some()
+            || matches!(terminal.status.as_str(), "failed" | "interrupted")
+            || (terminal.status == "running" && !terminal.attached);
+        if !should_close {
+            skipped_sessions += 1;
+            continue;
+        }
+        match terminal_service::close_workspace_terminal_session_by_id(state, &terminal.session_id)
+        {
+            Ok(_) => closed_sessions += 1,
+            Err(err) => warnings.push(format!("Could not close {}: {err}", terminal.title)),
+        }
+    }
+
+    let details = if warnings.is_empty() {
+        format!("Closed {closed_sessions} stale/unhealthy session(s); skipped {skipped_sessions}.")
+    } else {
+        format!(
+            "Closed {closed_sessions} stale/unhealthy session(s); skipped {skipped_sessions}; {} warning(s).",
+            warnings.len()
+        )
+    };
+    let _ = activity_repository::record(
+        &state.db,
+        workspace_id,
+        &workspace.summary.repo,
+        Some(&workspace.summary.branch),
+        "Workspace sessions recovered",
+        if warnings.is_empty() {
+            "info"
+        } else {
+            "warning"
+        },
+        Some(&details),
+    );
+
+    Ok(WorkspaceSessionRecoveryResult {
+        workspace_id: workspace_id.to_string(),
+        closed_sessions,
+        skipped_sessions,
+        warnings,
+    })
+}
+
 fn is_attached(state: &AppState, session_id: &str) -> bool {
     state
         .terminals
@@ -89,11 +152,11 @@ fn detect_stuck(state: &AppState, session: &TerminalSession, now_secs: u64) -> O
     if session.status != "running" || session.session_role != "agent" {
         return None;
     }
-    let last_secs = state
-        .terminals
-        .lock()
-        .ok()
-        .and_then(|registry| registry.get(&session.id).map(|a| a.last_output_at_secs.load(Ordering::Relaxed)))?;
+    let last_secs = state.terminals.lock().ok().and_then(|registry| {
+        registry
+            .get(&session.id)
+            .map(|a| a.last_output_at_secs.load(Ordering::Relaxed))
+    })?;
     // 0 means no output yet — session just started, not stuck.
     if last_secs == 0 {
         return None;
@@ -133,11 +196,7 @@ fn terminal_label(session: &TerminalSession) -> String {
     }
 }
 
-pub fn recommend_terminal_action(
-    session: &TerminalSession,
-    attached: bool,
-    stale: bool,
-) -> String {
+pub fn recommend_terminal_action(session: &TerminalSession, attached: bool, stale: bool) -> String {
     if session.closed_at.is_some() {
         return "history only".to_string();
     }

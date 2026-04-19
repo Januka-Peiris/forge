@@ -67,7 +67,13 @@ fn extract_python_doc(content: &str) -> Option<String> {
     }
     if let Some(line) = lines.next() {
         let t = line.trim();
-        let quote = if t.starts_with("\"\"\"") { "\"\"\"" } else if t.starts_with("'''") { "'''" } else { return None; };
+        let quote = if t.starts_with("\"\"\"") {
+            "\"\"\""
+        } else if t.starts_with("'''") {
+            "'''"
+        } else {
+            return None;
+        };
         let rest = t.strip_prefix(quote).unwrap_or("").trim();
         // Single line docstring
         if let Some(end) = rest.rfind(quote) {
@@ -110,7 +116,11 @@ fn extract_js_doc(content: &str) -> Option<String> {
         .filter(|l| !l.starts_with('@') && !l.is_empty())
         .collect::<Vec<_>>()
         .join(" ");
-    if cleaned.is_empty() { None } else { Some(first_sentence(&cleaned)) }
+    if cleaned.is_empty() {
+        None
+    } else {
+        Some(first_sentence(&cleaned))
+    }
 }
 
 fn infer_from_path_and_symbols(path: &str, symbols: &[RepoSymbol]) -> String {
@@ -121,7 +131,11 @@ fn infer_from_path_and_symbols(path: &str, symbols: &[RepoSymbol]) -> String {
     let dir = parts.iter().rev().skip(1).next().copied().unwrap_or("");
 
     // Test file
-    if stem.starts_with("test") || stem.ends_with("_test") || filename.contains(".test.") || filename.contains(".spec.") {
+    if stem.starts_with("test")
+        || stem.ends_with("_test")
+        || filename.contains(".test.")
+        || filename.contains(".spec.")
+    {
         return format!("Tests for {} module.", dir_to_phrase(dir));
     }
 
@@ -165,8 +179,11 @@ fn infer_from_path_and_symbols(path: &str, symbols: &[RepoSymbol]) -> String {
 }
 
 fn dir_to_phrase(dir: &str) -> String {
-    if dir.is_empty() { return "Root module.".to_string(); }
-    let words: Vec<String> = dir.split(|c: char| c == '_' || c == '-')
+    if dir.is_empty() {
+        return "Root module.".to_string();
+    }
+    let words: Vec<String> = dir
+        .split(|c: char| c == '_' || c == '-')
         .map(|w| {
             let mut chars = w.chars();
             match chars.next() {
@@ -179,11 +196,10 @@ fn dir_to_phrase(dir: &str) -> String {
 }
 
 fn stem_to_phrase(stem: &str) -> String {
-    let clean = stem
-        .replace('_', " ")
-        .replace('-', " ");
+    let clean = stem.replace('_', " ").replace('-', " ");
     // Title case
-    clean.split_whitespace()
+    clean
+        .split_whitespace()
         .map(|w| {
             let mut chars = w.chars();
             match chars.next() {
@@ -234,7 +250,9 @@ mod tests {
     #[test]
     fn infers_service_role() {
         let result = infer_from_path_and_symbols("src/pricing/pricing_service.rs", &[]);
-        assert!(result.contains("service") || result.contains("Service") || result.contains("Pricing"));
+        assert!(
+            result.contains("service") || result.contains("Service") || result.contains("Pricing")
+        );
     }
 
     #[test]

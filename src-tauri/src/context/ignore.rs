@@ -44,16 +44,32 @@ impl IgnoreSet {
                 "out/".into(),
             ],
             hard_extensions: vec![
-                "png".into(), "jpg".into(), "jpeg".into(), "gif".into(),
-                "webp".into(), "svg".into(), "pdf".into(), "zip".into(),
-                "gz".into(), "tar".into(), "woff".into(), "woff2".into(),
-                "ttf".into(), "ico".into(), "lock".into(), "icns".into(),
-                "mp4".into(), "mov".into(), "avi".into(), "pem".into(),
-                "key".into(), "crt".into(), "p12".into(), "der".into(),
+                "png".into(),
+                "jpg".into(),
+                "jpeg".into(),
+                "gif".into(),
+                "webp".into(),
+                "svg".into(),
+                "pdf".into(),
+                "zip".into(),
+                "gz".into(),
+                "tar".into(),
+                "woff".into(),
+                "woff2".into(),
+                "ttf".into(),
+                "ico".into(),
+                "lock".into(),
+                "icns".into(),
+                "mp4".into(),
+                "mov".into(),
+                "avi".into(),
+                "pem".into(),
+                "key".into(),
+                "crt".into(),
+                "p12".into(),
+                "der".into(),
             ],
-            hard_exact: vec![
-                ".env".into(),
-            ],
+            hard_exact: vec![".env".into()],
             conditional_prefixes: vec![
                 "tests/".into(),
                 "test/".into(),
@@ -66,9 +82,9 @@ impl IgnoreSet {
                 "static/".into(),
             ],
             conditional_patterns: vec![
-                "test_".into(),    // file starts with test_
-                ".test.".into(),   // contains .test.
-                ".spec.".into(),   // contains .spec.
+                "test_".into(),  // file starts with test_
+                ".test.".into(), // contains .test.
+                ".spec.".into(), // contains .spec.
             ],
         }
     }
@@ -77,7 +93,11 @@ impl IgnoreSet {
         let norm = path.replace('\\', "/");
         // Check hard exact matches
         let filename = norm.split('/').last().unwrap_or("");
-        if self.hard_exact.iter().any(|e| filename == e.as_str() || norm == e.as_str()) {
+        if self
+            .hard_exact
+            .iter()
+            .any(|e| filename == e.as_str() || norm == e.as_str())
+        {
             return true;
         }
         // Check .env.* pattern
@@ -125,28 +145,68 @@ impl IgnoreSet {
         let norm = path.replace('\\', "/");
         let filename = norm.split('/').last().unwrap_or("").to_lowercase();
         let is_test = self.is_conditional_exclude(path)
-            && (filename.starts_with("test") || filename.contains(".test.") || filename.contains(".spec.") || norm.contains("/tests/") || norm.contains("/test/"));
+            && (filename.starts_with("test")
+                || filename.contains(".test.")
+                || filename.contains(".spec.")
+                || norm.contains("/tests/")
+                || norm.contains("/test/"));
         let is_config = matches!(
             filename.as_str(),
-            "package.json" | "cargo.toml" | "pyproject.toml" | "setup.py" | "setup.cfg"
-            | "tsconfig.json" | "vite.config.ts" | "vite.config.js" | "tailwind.config.js"
-            | "tailwind.config.ts" | "eslint.config.js" | ".eslintrc" | ".prettierrc"
-            | "jest.config.js" | "jest.config.ts" | "webpack.config.js" | "rollup.config.js"
-            | "babel.config.js" | ".babelrc" | "dockerfile" | "docker-compose.yml"
-            | "docker-compose.yaml" | "makefile" | "justfile"
-        ) || filename.ends_with(".toml") || filename.ends_with(".yaml") || filename.ends_with(".yml")
-          || filename.ends_with(".json") || filename.ends_with(".ini") || filename.ends_with(".cfg");
-        let is_generated = filename.contains(".generated.") || filename.contains(".gen.")
-            || norm.contains("/generated/") || norm.contains("/gen/") || norm.contains("/__generated__/");
+            "package.json"
+                | "cargo.toml"
+                | "pyproject.toml"
+                | "setup.py"
+                | "setup.cfg"
+                | "tsconfig.json"
+                | "vite.config.ts"
+                | "vite.config.js"
+                | "tailwind.config.js"
+                | "tailwind.config.ts"
+                | "eslint.config.js"
+                | ".eslintrc"
+                | ".prettierrc"
+                | "jest.config.js"
+                | "jest.config.ts"
+                | "webpack.config.js"
+                | "rollup.config.js"
+                | "babel.config.js"
+                | ".babelrc"
+                | "dockerfile"
+                | "docker-compose.yml"
+                | "docker-compose.yaml"
+                | "makefile"
+                | "justfile"
+        ) || filename.ends_with(".toml")
+            || filename.ends_with(".yaml")
+            || filename.ends_with(".yml")
+            || filename.ends_with(".json")
+            || filename.ends_with(".ini")
+            || filename.ends_with(".cfg");
+        let is_generated = filename.contains(".generated.")
+            || filename.contains(".gen.")
+            || norm.contains("/generated/")
+            || norm.contains("/gen/")
+            || norm.contains("/__generated__/");
         let is_binary = matches!(
-            Path::new(&norm).extension().and_then(|e| e.to_str()).unwrap_or(""),
+            Path::new(&norm)
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or(""),
             "png" | "jpg" | "gif" | "ico" | "woff" | "woff2" | "ttf" | "pdf" | "zip" | "gz" | "tar"
         );
-        crate::context::schema::RepoFlags { is_test, is_config, is_generated, is_binary }
+        crate::context::schema::RepoFlags {
+            is_test,
+            is_config,
+            is_generated,
+            is_binary,
+        }
     }
 
     pub fn detect_language(path: &str) -> String {
-        let ext = Path::new(path).extension().and_then(|e| e.to_str()).unwrap_or("");
+        let ext = Path::new(path)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("");
         match ext {
             "rs" => "rust",
             "ts" | "tsx" => "typescript",
@@ -170,7 +230,8 @@ impl IgnoreSet {
             "yaml" | "yml" => "yaml",
             "md" | "mdx" => "markdown",
             _ => "unknown",
-        }.to_string()
+        }
+        .to_string()
     }
 }
 

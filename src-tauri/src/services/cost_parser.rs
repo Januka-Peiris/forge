@@ -44,7 +44,7 @@ fn strip_ansi(input: &str) -> String {
             match chars.peek() {
                 Some('[') => {
                     chars.next(); // consume '['
-                    // CSI sequence: consume until a letter (the final byte).
+                                  // CSI sequence: consume until a letter (the final byte).
                     for nc in chars.by_ref() {
                         if nc.is_ascii_alphabetic() {
                             break;
@@ -53,7 +53,7 @@ fn strip_ansi(input: &str) -> String {
                 }
                 Some(']') => {
                     chars.next(); // consume ']'
-                    // OSC sequence: consume until BEL (0x07) or ESC.
+                                  // OSC sequence: consume until BEL (0x07) or ESC.
                     for nc in chars.by_ref() {
                         if nc == '\x07' || nc == '\x1b' {
                             break;

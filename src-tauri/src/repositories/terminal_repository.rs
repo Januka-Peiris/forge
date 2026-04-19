@@ -30,16 +30,17 @@ pub fn search_output(
                  WHERE ts.workspace_id = ?1 AND LOWER(toc.data) LIKE ?2 \
                  ORDER BY toc.timestamp DESC LIMIT 100",
             )?;
-            let results = stmt.query_map(params![ws_id, like], |row| {
-                Ok(TerminalSearchResult {
-                    session_id: row.get(0)?,
-                    timestamp: row.get(1)?,
-                    line: row.get(2)?,
-                    workspace_id: row.get(3)?,
-                    workspace_name: row.get(4)?,
-                })
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
+            let results = stmt
+                .query_map(params![ws_id, like], |row| {
+                    Ok(TerminalSearchResult {
+                        session_id: row.get(0)?,
+                        timestamp: row.get(1)?,
+                        line: row.get(2)?,
+                        workspace_id: row.get(3)?,
+                        workspace_name: row.get(4)?,
+                    })
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
             Ok(results)
         } else {
             let mut stmt = connection.prepare(
@@ -50,16 +51,17 @@ pub fn search_output(
                  WHERE LOWER(toc.data) LIKE ?1 \
                  ORDER BY toc.timestamp DESC LIMIT 100",
             )?;
-            let results = stmt.query_map(params![like], |row| {
-                Ok(TerminalSearchResult {
-                    session_id: row.get(0)?,
-                    timestamp: row.get(1)?,
-                    line: row.get(2)?,
-                    workspace_id: row.get(3)?,
-                    workspace_name: row.get(4)?,
-                })
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
+            let results = stmt
+                .query_map(params![like], |row| {
+                    Ok(TerminalSearchResult {
+                        session_id: row.get(0)?,
+                        timestamp: row.get(1)?,
+                        line: row.get(2)?,
+                        workspace_id: row.get(3)?,
+                        workspace_name: row.get(4)?,
+                    })
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
             Ok(results)
         }
     })
@@ -556,7 +558,10 @@ pub fn count_sent_prompts_for_session(db: &Database, session_id: &str) -> Result
     })
 }
 
-pub fn get_active_session_id_for_workspace(db: &Database, workspace_id: &str) -> Result<Option<String>, String> {
+pub fn get_active_session_id_for_workspace(
+    db: &Database,
+    workspace_id: &str,
+) -> Result<Option<String>, String> {
     db.with_connection(|conn| {
         conn.query_row(
             "SELECT id FROM terminal_sessions WHERE workspace_id = ?1 AND status = 'running' AND closed_at IS NULL ORDER BY started_at DESC LIMIT 1",

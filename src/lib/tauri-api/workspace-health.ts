@@ -1,4 +1,8 @@
-import type { WorkspaceConflicts, WorkspaceHealth } from '../../types/workspace-health';
+import type {
+  WorkspaceConflicts,
+  WorkspaceHealth,
+  WorkspaceSessionRecoveryResult,
+} from '../../types/workspace-health';
 import { invokeCommand } from './client';
 
 export function getWorkspaceHealth(workspaceId: string): Promise<WorkspaceHealth> {
@@ -7,4 +11,8 @@ export function getWorkspaceHealth(workspaceId: string): Promise<WorkspaceHealth
 
 export function getWorkspaceConflicts(): Promise<WorkspaceConflicts> {
   return invokeCommand<WorkspaceConflicts>('get_workspace_conflicts', {});
+}
+
+export function recoverWorkspaceSessions(workspaceId: string): Promise<WorkspaceSessionRecoveryResult> {
+  return invokeCommand<WorkspaceSessionRecoveryResult>('recover_workspace_sessions', { workspaceId });
 }

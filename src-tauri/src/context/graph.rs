@@ -34,7 +34,11 @@ impl FileGraph {
             edges.insert(entry.path.clone(), out);
         }
 
-        Self { nodes, edges, reverse_edges }
+        Self {
+            nodes,
+            edges,
+            reverse_edges,
+        }
     }
 
     /// Weighted PageRank with standard power iteration.
@@ -45,10 +49,15 @@ impl FileGraph {
             return HashMap::new();
         }
         let base = (1.0 - damping) / n as f32;
-        let mut rank: HashMap<String, f32> = self.nodes.iter().map(|p| (p.clone(), 1.0 / n as f32)).collect();
+        let mut rank: HashMap<String, f32> = self
+            .nodes
+            .iter()
+            .map(|p| (p.clone(), 1.0 / n as f32))
+            .collect();
 
         for _ in 0..iterations {
-            let mut new_rank: HashMap<String, f32> = self.nodes.iter().map(|p| (p.clone(), base)).collect();
+            let mut new_rank: HashMap<String, f32> =
+                self.nodes.iter().map(|p| (p.clone(), base)).collect();
 
             for path in &self.nodes {
                 let out = self.edges.get(path).map(|v| v.as_slice()).unwrap_or(&[]);
@@ -70,7 +79,11 @@ impl FileGraph {
             }
 
             // Check convergence
-            let delta: f32 = self.nodes.iter().map(|p| (new_rank[p] - rank[p]).abs()).sum();
+            let delta: f32 = self
+                .nodes
+                .iter()
+                .map(|p| (new_rank[p] - rank[p]).abs())
+                .sum();
             rank = new_rank;
             if delta < 1e-6 {
                 break;
@@ -97,11 +110,19 @@ impl FileGraph {
             let mut seed_neighbours: Vec<String> = Vec::new();
             // Outgoing (seed imports these)
             if let Some(out) = self.edges.get(seed) {
-                seed_neighbours.extend(out.iter().filter(|p| !seed_set.contains(p.as_str())).cloned());
+                seed_neighbours.extend(
+                    out.iter()
+                        .filter(|p| !seed_set.contains(p.as_str()))
+                        .cloned(),
+                );
             }
             // Incoming (these import seed)
             if let Some(inc) = self.reverse_edges.get(seed) {
-                seed_neighbours.extend(inc.iter().filter(|p| !seed_set.contains(p.as_str())).cloned());
+                seed_neighbours.extend(
+                    inc.iter()
+                        .filter(|p| !seed_set.contains(p.as_str()))
+                        .cloned(),
+                );
             }
             seed_neighbours.dedup();
             for n in seed_neighbours.into_iter().take(limit_per_seed) {
@@ -109,7 +130,10 @@ impl FileGraph {
             }
         }
 
-        neighbours.into_iter().filter(|p| !seed_set.contains(p.as_str())).collect()
+        neighbours
+            .into_iter()
+            .filter(|p| !seed_set.contains(p.as_str()))
+            .collect()
     }
 
     pub fn edge_count(&self) -> usize {

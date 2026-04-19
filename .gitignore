@@ -33,3 +33,6 @@ src-tauri/gen/
 
 # Forge generated repo context
 .forge/context/
+
+# Forge-managed local workspaces
+forge/

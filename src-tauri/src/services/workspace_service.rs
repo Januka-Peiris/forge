@@ -6,7 +6,9 @@ use crate::models::{
     CreateWorkspaceInput, DiscoveredRepository, LinkedWorktreeRef, RepositoryWorkspaceOptions,
     WorkspaceDetail, WorkspaceSummary,
 };
-use crate::repositories::{activity_repository, repository_repository, workspace_repository};
+use crate::repositories::{
+    activity_repository, repository_repository, settings_repository, workspace_repository,
+};
 use crate::services::{
     git_worktree_service, repo_scanner_service, terminal_service, workspace_script_service,
 };
@@ -211,7 +213,13 @@ pub fn create_workspace(
         repo_scanner_service::refresh_repository_by_id(state, repository_id)?;
     }
 
-    if detail.summary.worktree_managed_by_forge {
+    let auto_setup_enabled = settings_repository::get_value(&state.db, "auto_run_setup_enabled")
+        .ok()
+        .flatten()
+        .map(|value| value == "true")
+        .unwrap_or(false);
+
+    if detail.summary.worktree_managed_by_forge && auto_setup_enabled {
         match workspace_script_service::run_workspace_setup(state, &detail.summary.id) {
             Ok(sessions) if !sessions.is_empty() => {
                 let _ = activity_repository::insert(
@@ -248,6 +256,23 @@ pub fn create_workspace(
                 );
             }
         }
+    } else if detail.summary.worktree_managed_by_forge {
+        let _ = activity_repository::insert(
+            &state.db,
+            &crate::models::ActivityItem {
+                id: format!("act-setup-skipped-{}", detail.summary.id),
+                workspace_id: Some(detail.summary.id.clone()),
+                repo: detail.summary.repo.clone(),
+                branch: Some(detail.summary.branch.clone()),
+                event: "Workspace setup waiting".to_string(),
+                level: "info".to_string(),
+                details: Some(
+                    "Automatic setup is disabled. Run setup manually from the workspace commands panel."
+                        .to_string(),
+                ),
+                timestamp: "just now".to_string(),
+            },
+        );
     }
 
     Ok(detail)

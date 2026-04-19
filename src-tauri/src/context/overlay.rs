@@ -3,8 +3,8 @@ use crate::services::git_review_service;
 use crate::state::AppState;
 
 pub fn build_workspace_overlay(state: &AppState, workspace_id: &str) -> WorkspaceOverlay {
-    let files = git_review_service::get_workspace_changed_files(state, workspace_id)
-        .unwrap_or_default();
+    let files =
+        git_review_service::get_workspace_changed_files(state, workspace_id).unwrap_or_default();
 
     let mut changed = Vec::new();
     let mut new_files = Vec::new();
@@ -18,11 +18,16 @@ pub fn build_workspace_overlay(state: &AppState, workspace_id: &str) -> Workspac
             }
             status if status.starts_with('R') || status == "renamed" => {
                 if let Some(old_path) = &file.old_path {
-                    renamed.push(RenamePair { old: old_path.clone(), new: file.path.clone() });
+                    renamed.push(RenamePair {
+                        old: old_path.clone(),
+                        new: file.path.clone(),
+                    });
                 }
                 // Also add new path as a changed file
-                let diff = git_review_service::get_workspace_file_diff(state, workspace_id, &file.path)
-                    .map(|d| d.diff).unwrap_or_default();
+                let diff =
+                    git_review_service::get_workspace_file_diff(state, workspace_id, &file.path)
+                        .map(|d| d.diff)
+                        .unwrap_or_default();
                 changed.push(OverlayFile {
                     path: file.path.clone(),
                     diff,
@@ -31,8 +36,10 @@ pub fn build_workspace_overlay(state: &AppState, workspace_id: &str) -> Workspac
                 });
             }
             "added" | "A" | "untracked" => {
-                let diff = git_review_service::get_workspace_file_diff(state, workspace_id, &file.path)
-                    .map(|d| d.diff).unwrap_or_default();
+                let diff =
+                    git_review_service::get_workspace_file_diff(state, workspace_id, &file.path)
+                        .map(|d| d.diff)
+                        .unwrap_or_default();
                 new_files.push(OverlayFile {
                     path: file.path.clone(),
                     diff,
@@ -42,8 +49,10 @@ pub fn build_workspace_overlay(state: &AppState, workspace_id: &str) -> Workspac
             }
             _ => {
                 // modified or anything else
-                let diff = git_review_service::get_workspace_file_diff(state, workspace_id, &file.path)
-                    .map(|d| d.diff).unwrap_or_default();
+                let diff =
+                    git_review_service::get_workspace_file_diff(state, workspace_id, &file.path)
+                        .map(|d| d.diff)
+                        .unwrap_or_default();
                 changed.push(OverlayFile {
                     path: file.path.clone(),
                     diff,
@@ -54,5 +63,10 @@ pub fn build_workspace_overlay(state: &AppState, workspace_id: &str) -> Workspac
         }
     }
 
-    WorkspaceOverlay { changed, new_files, deleted, renamed }
+    WorkspaceOverlay {
+        changed,
+        new_files,
+        deleted,
+        renamed,
+    }
 }

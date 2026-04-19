@@ -31,7 +31,12 @@ pub fn insert_session(db: &Database, session: &AgentChatSession) -> Result<(), S
     })
 }
 
-pub fn update_session_status(db: &Database, session_id: &str, status: &str, ended_at: Option<&str>) -> Result<(), String> {
+pub fn update_session_status(
+    db: &Database,
+    session_id: &str,
+    status: &str,
+    ended_at: Option<&str>,
+) -> Result<(), String> {
     db.with_connection(|connection| {
         connection.execute(
             r#"
@@ -94,7 +99,10 @@ pub fn get_session(db: &Database, session_id: &str) -> Result<Option<AgentChatSe
     })
 }
 
-pub fn list_sessions_for_workspace(db: &Database, workspace_id: &str) -> Result<Vec<AgentChatSession>, String> {
+pub fn list_sessions_for_workspace(
+    db: &Database,
+    workspace_id: &str,
+) -> Result<Vec<AgentChatSession>, String> {
     db.with_connection(|connection| {
         let mut statement = connection.prepare(
             r#"
@@ -112,7 +120,10 @@ pub fn list_sessions_for_workspace(db: &Database, workspace_id: &str) -> Result<
     })
 }
 
-pub fn latest_status_for_workspace(db: &Database, workspace_id: &str) -> Result<Option<String>, String> {
+pub fn latest_status_for_workspace(
+    db: &Database,
+    workspace_id: &str,
+) -> Result<Option<String>, String> {
     db.with_connection(|connection| {
         connection
             .query_row(
@@ -166,7 +177,10 @@ pub fn next_event_seq(db: &Database, session_id: &str) -> Result<i64, String> {
     })
 }
 
-pub fn list_events_for_session(db: &Database, session_id: &str) -> Result<Vec<AgentChatEvent>, String> {
+pub fn list_events_for_session(
+    db: &Database,
+    session_id: &str,
+) -> Result<Vec<AgentChatEvent>, String> {
     db.with_connection(|connection| {
         let mut statement = connection.prepare(
             r#"
@@ -231,14 +245,41 @@ mod tests {
             Ok(())
         }).unwrap();
         let session = AgentChatSession {
-            id: "chat-1".into(), workspace_id: "ws".into(), provider: "claude_code".into(), status: "idle".into(), title: "Claude".into(), provider_session_id: None, cwd: "/tmp".into(), raw_output: String::new(), created_at: "1".into(), updated_at: "1".into(), ended_at: None, closed_at: None,
+            id: "chat-1".into(),
+            workspace_id: "ws".into(),
+            provider: "claude_code".into(),
+            status: "idle".into(),
+            title: "Claude".into(),
+            provider_session_id: None,
+            cwd: "/tmp".into(),
+            raw_output: String::new(),
+            created_at: "1".into(),
+            updated_at: "1".into(),
+            ended_at: None,
+            closed_at: None,
         };
         insert_session(&db, &session).unwrap();
-        let mut event = AgentChatEvent { id: "e2".into(), session_id: "chat-1".into(), seq: 1, event_type: "assistant_message".into(), role: Some("assistant".into()), title: None, body: "two".into(), status: None, metadata: None, created_at: "2".into() };
+        let mut event = AgentChatEvent {
+            id: "e2".into(),
+            session_id: "chat-1".into(),
+            seq: 1,
+            event_type: "assistant_message".into(),
+            role: Some("assistant".into()),
+            title: None,
+            body: "two".into(),
+            status: None,
+            metadata: None,
+            created_at: "2".into(),
+        };
         insert_event(&db, &event).unwrap();
-        event.id = "e1".into(); event.seq = 0; event.body = "one".into();
+        event.id = "e1".into();
+        event.seq = 0;
+        event.body = "one".into();
         insert_event(&db, &event).unwrap();
         let events = list_events_for_session(&db, "chat-1").unwrap();
-        assert_eq!(events.iter().map(|e| e.body.as_str()).collect::<Vec<_>>(), vec!["one", "two"]);
+        assert_eq!(
+            events.iter().map(|e| e.body.as_str()).collect::<Vec<_>>(),
+            vec!["one", "two"]
+        );
     }
 }

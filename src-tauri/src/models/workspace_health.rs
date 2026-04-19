@@ -29,3 +29,12 @@ pub struct WorkspaceHealth {
     pub ports: Vec<WorkspacePort>,
     pub warnings: Vec<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceSessionRecoveryResult {
+    pub workspace_id: String,
+    pub closed_sessions: u32,
+    pub skipped_sessions: u32,
+    pub warnings: Vec<String>,
+}

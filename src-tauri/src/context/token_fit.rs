@@ -1,6 +1,6 @@
 use crate::context::schema::{
-    ContextCandidate, ContextSegment, RepoMapV2, RenderMode, SelectConfig, WorkspaceOverlay,
-    estimate_tokens,
+    estimate_tokens, ContextCandidate, ContextSegment, RenderMode, RepoMapV2, SelectConfig,
+    WorkspaceOverlay,
 };
 
 pub fn fit_to_budget(
@@ -26,7 +26,11 @@ pub fn fit_to_budget(
                 used += tokens;
                 included.push(ContextSegment {
                     path: candidate.path.clone(),
-                    tier: if candidate.mandatory { "mandatory".to_string() } else { "related".to_string() },
+                    tier: if candidate.mandatory {
+                        "mandatory".to_string()
+                    } else {
+                        "related".to_string()
+                    },
                     render_mode: candidate.render_mode.as_str().to_string(),
                     estimated_tokens: tokens,
                     content,
@@ -113,7 +117,16 @@ fn render_symbol_card(
         lines.push(format!("  {} {} (line {})", sym.kind, sig, sym.line_start));
     }
     if !entry.imports_internal.is_empty() {
-        lines.push(format!("  imports: {}", entry.imports_internal.iter().take(4).cloned().collect::<Vec<_>>().join(", ")));
+        lines.push(format!(
+            "  imports: {}",
+            entry
+                .imports_internal
+                .iter()
+                .take(4)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
     }
     lines.join("\n")
 }

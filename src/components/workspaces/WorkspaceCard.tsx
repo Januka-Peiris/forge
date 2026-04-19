@@ -2,6 +2,7 @@ import { GitBranch, FileCode, Clock, GitPullRequest, ChevronRight, Play, Eye } f
 import type { Workspace, WorkspaceStep } from '../../types';
 import { StatusBadge, AgentBadge } from './StatusBadge';
 import { Button } from '../ui/button';
+import { cockpitToneClass, deriveWorkspaceCockpit } from '../../lib/workspace-cockpit';
 
 interface WorkspaceCardProps {
   workspace: Workspace;
@@ -73,6 +74,7 @@ function FileStrip({ files }: { files: Workspace['changedFiles'] }) {
 export function WorkspaceCard({ workspace, isSelected, onSelect }: WorkspaceCardProps) {
   const totalAdds = workspace.changedFiles.reduce((s, f) => s + f.additions, 0);
   const totalDels = workspace.changedFiles.reduce((s, f) => s + f.deletions, 0);
+  const cockpit = deriveWorkspaceCockpit(workspace);
 
   return (
     <div
@@ -110,6 +112,18 @@ export function WorkspaceCard({ workspace, isSelected, onSelect }: WorkspaceCard
         <div className="flex items-center gap-2 mb-3">
           <StatusBadge status={workspace.status} />
           <AgentBadge agent={workspace.agent} />
+          <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${cockpitToneClass(cockpit.nextActionTone)}`}>
+            {cockpit.nextAction}
+          </span>
+        </div>
+
+        <div className="mb-3 grid grid-cols-2 gap-1.5 text-xs">
+          <span className="truncate rounded border border-forge-border bg-white/5 px-2 py-1 text-forge-muted" title={cockpit.agentState}>
+            Agent: <span className="text-forge-text/85">{cockpit.agentState}</span>
+          </span>
+          <span className="truncate rounded border border-forge-border bg-white/5 px-2 py-1 text-forge-muted" title={cockpit.checkSummary}>
+            Checks: <span className="text-forge-text/85">{cockpit.checkSummary}</span>
+          </span>
         </div>
 
         <div className="mb-3">

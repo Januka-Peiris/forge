@@ -1,7 +1,11 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::models::{WorkspacePrDraft, WorkspacePrResult};
-use crate::repositories::{activity_repository, agent_run_repository, pr_draft_repository, workspace_repository};
+use serde_json::Value;
+
+use crate::models::{WorkspacePrCheck, WorkspacePrDraft, WorkspacePrResult, WorkspacePrStatus};
+use crate::repositories::{
+    activity_repository, agent_run_repository, pr_draft_repository, workspace_repository,
+};
 use crate::services::{git_review_service, review_summary_service};
 use crate::state::AppState;
 
@@ -204,6 +208,182 @@ pub fn create_workspace_pr(
         pr_number,
         title: draft.title,
     })
+}
+
+pub fn get_workspace_pr_status(
+    state: &AppState,
+    workspace_id: &str,
+) -> Result<WorkspacePrStatus, String> {
+    let workspace = workspace_repository::get_detail(&state.db, workspace_id)?
+        .ok_or_else(|| format!("Workspace {workspace_id} not found"))?;
+    let work_dir = if !workspace.worktree_path.is_empty() {
+        workspace.worktree_path.clone()
+    } else {
+        workspace
+            .summary
+            .workspace_root_path
+            .clone()
+            .ok_or_else(|| "Workspace has no worktree path".to_string())?
+    };
+
+    let output = std::process::Command::new("gh")
+        .args([
+            "pr",
+            "view",
+            "--json",
+            "number,title,url,state,isDraft,reviewDecision,statusCheckRollup",
+        ])
+        .current_dir(&work_dir)
+        .output();
+
+    let output = match output {
+        Ok(output) => output,
+        Err(err) => {
+            return Ok(pr_status_warning(
+                workspace_id,
+                format!("GitHub CLI unavailable: {err}"),
+            ));
+        }
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Ok(WorkspacePrStatus {
+            workspace_id: workspace_id.to_string(),
+            found: false,
+            number: None,
+            title: None,
+            url: None,
+            state: None,
+            is_draft: false,
+            review_decision: None,
+            checks_summary: "No PR found for this branch".to_string(),
+            checks: vec![],
+            warning: if stderr.is_empty() {
+                None
+            } else {
+                Some(stderr)
+            },
+        });
+    }
+
+    let value = serde_json::from_slice::<Value>(&output.stdout)
+        .map_err(|err| format!("Failed to parse gh pr view output: {err}"))?;
+    let checks = parse_status_checks(value.get("statusCheckRollup"));
+    let checks_summary = summarize_checks(&checks);
+
+    Ok(WorkspacePrStatus {
+        workspace_id: workspace_id.to_string(),
+        found: true,
+        number: value.get("number").and_then(Value::as_i64),
+        title: value
+            .get("title")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        url: value.get("url").and_then(Value::as_str).map(str::to_string),
+        state: value
+            .get("state")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        is_draft: value
+            .get("isDraft")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        review_decision: value
+            .get("reviewDecision")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        checks_summary,
+        checks,
+        warning: None,
+    })
+}
+
+fn pr_status_warning(workspace_id: &str, warning: String) -> WorkspacePrStatus {
+    WorkspacePrStatus {
+        workspace_id: workspace_id.to_string(),
+        found: false,
+        number: None,
+        title: None,
+        url: None,
+        state: None,
+        is_draft: false,
+        review_decision: None,
+        checks_summary: "PR status unavailable".to_string(),
+        checks: vec![],
+        warning: Some(warning),
+    }
+}
+
+fn parse_status_checks(value: Option<&Value>) -> Vec<WorkspacePrCheck> {
+    value
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .map(|item| {
+                    let name = item
+                        .get("name")
+                        .or_else(|| item.get("context"))
+                        .or_else(|| item.get("workflowName"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("check")
+                        .to_string();
+                    let status = item
+                        .get("status")
+                        .and_then(Value::as_str)
+                        .unwrap_or("UNKNOWN")
+                        .to_string();
+                    let conclusion = item
+                        .get("conclusion")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                    let url = item
+                        .get("targetUrl")
+                        .or_else(|| item.get("detailsUrl"))
+                        .or_else(|| item.get("url"))
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                    WorkspacePrCheck {
+                        name,
+                        status,
+                        conclusion,
+                        url,
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn summarize_checks(checks: &[WorkspacePrCheck]) -> String {
+    if checks.is_empty() {
+        return "No CI checks reported".to_string();
+    }
+    let failed = checks
+        .iter()
+        .filter(|check| {
+            check.conclusion.as_deref().is_some_and(|value| {
+                matches!(
+                    value,
+                    "FAILURE" | "CANCELLED" | "TIMED_OUT" | "ACTION_REQUIRED"
+                )
+            })
+        })
+        .count();
+    let pending = checks
+        .iter()
+        .filter(|check| {
+            check.conclusion.is_none() && !matches!(check.status.as_str(), "COMPLETED" | "SUCCESS")
+        })
+        .count();
+    if failed > 0 {
+        format!("{failed} failing of {} checks", checks.len())
+    } else if pending > 0 {
+        format!("{pending} pending of {} checks", checks.len())
+    } else {
+        format!("{} checks passing", checks.len())
+    }
 }
 
 fn timestamp() -> String {

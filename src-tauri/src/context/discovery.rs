@@ -22,12 +22,23 @@ pub struct DefaultRef {
 
 /// Check whether the cached map is up-to-date.
 pub fn is_stale(root: &Path, _db: &Database) -> bool {
-    let meta_path = root.join(".forge").join("context").join("repo_map.meta.json");
-    let Ok(raw) = fs::read_to_string(&meta_path) else { return true; };
-    let Ok(meta) = serde_json::from_str::<RepoMapMetaV2>(&raw) else { return true; };
-    if meta.version != REPO_MAP_VERSION { return true; }
+    let meta_path = root
+        .join(".forge")
+        .join("context")
+        .join("repo_map.meta.json");
+    let Ok(raw) = fs::read_to_string(&meta_path) else {
+        return true;
+    };
+    let Ok(meta) = serde_json::from_str::<RepoMapMetaV2>(&raw) else {
+        return true;
+    };
+    if meta.version != REPO_MAP_VERSION {
+        return true;
+    }
     // Check if default branch HEAD changed
-    let Ok(current_ref) = resolve_default_ref(root) else { return true; };
+    let Ok(current_ref) = resolve_default_ref(root) else {
+        return true;
+    };
     meta.base_commit != current_ref.commit_hash
 }
 
@@ -86,7 +97,9 @@ fn run_build_pipeline(
     let mut languages_seen: HashSet<String> = HashSet::new();
 
     for line in ls_output.lines() {
-        let Some((blob_oid, size_bytes, path)) = parse_ls_tree_line(line) else { continue; };
+        let Some((blob_oid, size_bytes, path)) = parse_ls_tree_line(line) else {
+            continue;
+        };
         stats.files_scanned += 1;
 
         if ignore.should_exclude(&path) {
@@ -106,30 +119,50 @@ fn run_build_pipeline(
         }
 
         // Try cache first
-        let (symbols, imports_internal, file_summary, engine) = if let Some(cached) = cache::get(db, &blob_oid, PARSER_VERSION) {
-            (cached.symbols, cached.imports_internal, cached.summary, "cache".to_string())
-        } else if should_extract(&language, size_bytes) {
-            // Read file content via git show
-            match git(root, &["show", &format!("{}:{}", default_ref.ref_name, path)]) {
-                Ok(content) if content.len() < 200_000 => {
-                    let result = extract::extract(&path, &content, &all_paths);
-                    let file_summary = summary::generate_summary(&path, &content, &result.symbols, 140);
-                    let engine = result.engine.clone();
-                    engines_used.insert(engine.clone());
-                    let entry_cache = cache::CachedEntry {
-                        symbols: result.symbols.clone(),
-                        imports_internal: result.imports_internal.clone(),
-                        summary: file_summary.clone(),
-                    };
-                    cache::put(db, &blob_oid, PARSER_VERSION, &entry_cache);
-                    (result.symbols, result.imports_internal, file_summary, engine)
+        let (symbols, imports_internal, file_summary, engine) =
+            if let Some(cached) = cache::get(db, &blob_oid, PARSER_VERSION) {
+                (
+                    cached.symbols,
+                    cached.imports_internal,
+                    cached.summary,
+                    "cache".to_string(),
+                )
+            } else if should_extract(&language, size_bytes) {
+                // Read file content via git show
+                match git(
+                    root,
+                    &["show", &format!("{}:{}", default_ref.ref_name, path)],
+                ) {
+                    Ok(content) if content.len() < 200_000 => {
+                        let result = extract::extract(&path, &content, &all_paths);
+                        let file_summary =
+                            summary::generate_summary(&path, &content, &result.symbols, 140);
+                        let engine = result.engine.clone();
+                        engines_used.insert(engine.clone());
+                        let entry_cache = cache::CachedEntry {
+                            symbols: result.symbols.clone(),
+                            imports_internal: result.imports_internal.clone(),
+                            summary: file_summary.clone(),
+                        };
+                        cache::put(db, &blob_oid, PARSER_VERSION, &entry_cache);
+                        (
+                            result.symbols,
+                            result.imports_internal,
+                            file_summary,
+                            engine,
+                        )
+                    }
+                    _ => (
+                        vec![],
+                        vec![],
+                        summary::generate_summary(&path, "", &[], 140),
+                        "skip".to_string(),
+                    ),
                 }
-                _ => (vec![], vec![], summary::generate_summary(&path, "", &[], 140), "skip".to_string()),
-            }
-        } else {
-            let file_summary = summary::generate_summary(&path, "", &[], 140);
-            (vec![], vec![], file_summary, "skip".to_string())
-        };
+            } else {
+                let file_summary = summary::generate_summary(&path, "", &[], 140);
+                (vec![], vec![], file_summary, "skip".to_string())
+            };
 
         if engine != "skip" {
             engines_used.insert(engine);
@@ -161,7 +194,11 @@ fn run_build_pipeline(
     // Compute neighbours (top-3 in+out per file)
     for entry in &mut entries {
         let out = graph.edges.get(&entry.path).cloned().unwrap_or_default();
-        let inc = graph.reverse_edges.get(&entry.path).cloned().unwrap_or_default();
+        let inc = graph
+            .reverse_edges
+            .get(&entry.path)
+            .cloned()
+            .unwrap_or_default();
         let mut neighbours: Vec<String> = out.into_iter().chain(inc).collect();
         neighbours.sort();
         neighbours.dedup();
@@ -175,9 +212,16 @@ fn run_build_pipeline(
     stats.languages = languages_seen.into_iter().collect();
     stats.languages.sort();
 
-    let engine_name = if engines_used.contains("tree-sitter") { "tree-sitter" } else { "regex-fallback" };
+    let engine_name = if engines_used.contains("tree-sitter") {
+        "tree-sitter"
+    } else {
+        "regex-fallback"
+    };
 
-    let map = RepoMapV2 { version: REPO_MAP_VERSION, entries };
+    let map = RepoMapV2 {
+        version: REPO_MAP_VERSION,
+        entries,
+    };
     let meta = RepoMapMetaV2 {
         version: REPO_MAP_VERSION,
         default_branch: default_ref.branch.clone(),
@@ -188,16 +232,18 @@ fn run_build_pipeline(
             forge_version: "0.1.0".to_string(),
         },
         exclusions: vec![
-            "node_modules/**".into(), "target/**".into(), "dist/**".into(),
-            ".git/**".into(), ".venv/**".into(),
+            "node_modules/**".into(),
+            "target/**".into(),
+            "dist/**".into(),
+            ".git/**".into(),
+            ".venv/**".into(),
         ],
         stats,
         quality,
     };
 
     // Write to disk
-    fs::create_dir_all(context_dir)
-        .map_err(|e| format!("Failed to create context dir: {e}"))?;
+    fs::create_dir_all(context_dir).map_err(|e| format!("Failed to create context dir: {e}"))?;
     write_json(map_path, &map)?;
     write_json(meta_path, &meta)?;
 
@@ -205,8 +251,10 @@ fn run_build_pipeline(
 }
 
 fn should_extract(language: &str, size_bytes: u64) -> bool {
-    matches!(language, "rust" | "typescript" | "javascript" | "python" | "go")
-        && size_bytes < 200_000
+    matches!(
+        language,
+        "rust" | "typescript" | "javascript" | "python" | "go"
+    ) && size_bytes < 200_000
 }
 
 /// Parse a line from `git ls-tree -r --long`:
@@ -214,7 +262,9 @@ fn should_extract(language: &str, size_bytes: u64) -> bool {
 fn parse_ls_tree_line(line: &str) -> Option<(String, u64, String)> {
     let (meta, path) = line.split_once('\t')?;
     let parts: Vec<&str> = meta.split_whitespace().collect();
-    if parts.len() < 4 { return None; }
+    if parts.len() < 4 {
+        return None;
+    }
     let blob_oid = parts[2].to_string();
     let size_bytes: u64 = parts[3].parse().unwrap_or(0);
     Some((blob_oid, size_bytes, path.trim().to_string()))
@@ -222,24 +272,51 @@ fn parse_ls_tree_line(line: &str) -> Option<(String, u64, String)> {
 
 pub fn resolve_default_ref(root: &Path) -> Result<DefaultRef, String> {
     let candidates = [
-        git(root, &["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"])
-            .ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty()),
+        git(
+            root,
+            &[
+                "symbolic-ref",
+                "--quiet",
+                "--short",
+                "refs/remotes/origin/HEAD",
+            ],
+        )
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty()),
         Some("main".to_string()),
         Some("master".to_string()),
-        git(root, &["branch", "--show-current"]).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty()),
+        git(root, &["branch", "--show-current"])
+            .ok()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty()),
     ];
     for candidate in candidates.into_iter().flatten() {
         if let Ok(hash) = git(root, &["rev-parse", "--verify", &candidate]) {
-            let branch = candidate.strip_prefix("origin/").unwrap_or(&candidate).to_string();
-            return Ok(DefaultRef { branch, ref_name: candidate, commit_hash: hash.trim().to_string() });
+            let branch = candidate
+                .strip_prefix("origin/")
+                .unwrap_or(&candidate)
+                .to_string();
+            return Ok(DefaultRef {
+                branch,
+                ref_name: candidate,
+                commit_hash: hash.trim().to_string(),
+            });
         }
     }
     let hash = git(root, &["rev-parse", "HEAD"])?;
-    Ok(DefaultRef { branch: "HEAD".to_string(), ref_name: "HEAD".to_string(), commit_hash: hash.trim().to_string() })
+    Ok(DefaultRef {
+        branch: "HEAD".to_string(),
+        ref_name: "HEAD".to_string(),
+        commit_hash: hash.trim().to_string(),
+    })
 }
 
 fn git(root: &Path, args: &[&str]) -> Result<String, String> {
-    let out = Command::new("git").current_dir(root).args(args).output()
+    let out = Command::new("git")
+        .current_dir(root)
+        .args(args)
+        .output()
         .map_err(|e| format!("git error: {e}"))?;
     if out.status.success() {
         Ok(String::from_utf8_lossy(&out.stdout).to_string())
@@ -250,7 +327,8 @@ fn git(root: &Path, args: &[&str]) -> Result<String, String> {
 
 fn write_json<T: serde::Serialize>(path: &Path, value: &T) -> Result<(), String> {
     let raw = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
-    fs::write(path, format!("{raw}\n")).map_err(|e| format!("Failed to write {}: {e}", path.display()))
+    fs::write(path, format!("{raw}\n"))
+        .map_err(|e| format!("Failed to write {}: {e}", path.display()))
 }
 
 fn unix_now() -> String {

@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link2, ListChecks, RefreshCw, Settings2, Zap } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import type { AgentChatSession, WorkspaceAgentContext, WorkspaceContextPreview } from '../../types';
+import type { PromptTemplate } from '../../types/prompt-template';
 import { getWorkspaceContextPreview, refreshWorkspaceRepoContext } from '../../lib/tauri-api/agent-context';
 import { formatSessionError } from '../../lib/ui-errors';
 import {
@@ -57,6 +58,7 @@ interface WorkspaceComposerProps {
   focusedChatSession: AgentChatSession | null;
   busy: boolean;
   promptTemplateWarning: string | null;
+  promptTemplates: PromptTemplate[];
   agentContext: WorkspaceAgentContext | null;
   settings: ComposerSettings;
   onSettingsChange: (patch: Partial<ComposerSettings>) => void;
@@ -70,6 +72,7 @@ export function WorkspaceComposer({
   focusedChatSession,
   busy,
   promptTemplateWarning,
+  promptTemplates,
   agentContext,
   settings,
   onSettingsChange,
@@ -95,6 +98,51 @@ export function WorkspaceComposer({
     if (!promptInput.trim()) return null;
     return { sessionEstTokens: roughTokenEstimateFromChars(promptInput.length) };
   }, [promptInput]);
+
+  const workflowOptions = useMemo(() => {
+    const builtIns = [
+      {
+        id: 'preset-plan-act',
+        title: 'Plan → Act',
+        source: 'Forge workflow',
+        body: 'Create a concise implementation plan for this workspace. Do not edit files yet.',
+        preset: 'plan-act' as const,
+      },
+      {
+        id: 'preset-plan-codex-review',
+        title: 'Plan → Codex → Review',
+        source: 'Forge workflow',
+        body: 'Plan the implementation. After the plan is accepted, Forge will route implementation/review follow-up.',
+        preset: 'plan-codex-review' as const,
+      },
+      {
+        id: 'preset-implement-review-pr',
+        title: 'Implement → Review → PR',
+        source: 'Forge workflow',
+        body: 'Implement the requested change, then summarize changed files, tests, and PR readiness.',
+        preset: 'implement-review-pr' as const,
+      },
+    ];
+    return [
+      ...builtIns,
+      ...promptTemplates.map((template) => ({
+        id: `template-${template.id}`,
+        title: template.title,
+        source: template.source,
+        body: template.body,
+        preset: null,
+      })),
+    ];
+  }, [promptTemplates]);
+
+  const slashQuery = promptInput.trimStart().startsWith('/')
+    ? promptInput.trimStart().slice(1).toLowerCase()
+    : null;
+  const slashMatches = slashQuery === null
+    ? []
+    : workflowOptions
+      .filter((option) => option.title.toLowerCase().includes(slashQuery))
+      .slice(0, 7);
 
   const startComposerResize = (event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -161,8 +209,16 @@ export function WorkspaceComposer({
   };
 
   const applyPreset = (preset: 'plan-act' | 'plan-codex-review' | 'implement-review-pr', defaultPrompt: string) => {
-    setPromptInput((current) => current || defaultPrompt);
+    setPromptInput((current) => current.trimStart().startsWith('/') || !current ? defaultPrompt : current);
     onApplyWorkflowPreset(preset, defaultPrompt);
+  };
+
+  const applyWorkflowOption = (option: (typeof workflowOptions)[number]) => {
+    if (option.preset) {
+      applyPreset(option.preset, option.body);
+      return;
+    }
+    setPromptInput(option.body);
   };
 
   return (
@@ -378,7 +434,34 @@ export function WorkspaceComposer({
           {promptTemplateWarning && (
             <span className="text-xs text-forge-yellow">{promptTemplateWarning}</span>
           )}
+          <span className="text-xs text-forge-muted">Type <span className="font-mono text-forge-text/80">/</span> for workflows</span>
         </div>
+
+        {slashMatches.length > 0 && (
+          <div className="shrink-0 rounded-lg border border-forge-border bg-forge-card/95 p-1 shadow-xl">
+            <div className="mb-1 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-forge-muted">
+              Workflows & prompt templates
+            </div>
+            <div className="grid gap-1">
+              {slashMatches.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => applyWorkflowOption(option)}
+                  className="flex min-w-0 items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left hover:bg-white/10"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-semibold text-forge-text">{option.title}</span>
+                    <span className="block truncate text-[10px] text-forge-muted">{option.source}</span>
+                  </span>
+                  <span className="shrink-0 rounded border border-forge-border/70 bg-black/20 px-1.5 py-0.5 font-mono text-[10px] text-forge-muted">
+                    /{option.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="flex min-h-0 flex-1 gap-2">
           <textarea

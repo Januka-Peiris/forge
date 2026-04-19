@@ -24,7 +24,7 @@ export function useContextPreview(workspaceId: string | null, promptHint?: strin
   useEffect(() => {
     setPreview(null);
     load();
-  }, [workspaceId]);
+  }, [load, workspaceId]);
 
   return { preview, loading, error, refresh: load };
 }

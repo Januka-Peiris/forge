@@ -24,7 +24,10 @@ pub fn list_repositories(state: State<'_, AppState>) -> Result<Vec<DiscoveredRep
 /// Add a single repository by its resolved git root path (no directory walking).
 /// Returns the full updated list of repositories.
 #[tauri::command]
-pub fn add_repository(state: State<'_, AppState>, path: String) -> Result<Vec<DiscoveredRepository>, String> {
+pub fn add_repository(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<Vec<DiscoveredRepository>, String> {
     use std::path::Path;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

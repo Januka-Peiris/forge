@@ -69,8 +69,8 @@ fn run_orchestrator_pass(state: &AppState) -> Result<(), String> {
     let workspace_ids: Vec<String> = active.iter().map(|w| w.id.clone()).collect();
 
     for ws in &active {
-        let sessions = terminal_repository::list_for_workspace(&state.db, &ws.id)
-            .unwrap_or_default();
+        let sessions =
+            terminal_repository::list_for_workspace(&state.db, &ws.id).unwrap_or_default();
 
         // Find the agent session (if running).
         let agent_session = sessions
@@ -88,7 +88,10 @@ fn run_orchestrator_pass(state: &AppState) -> Result<(), String> {
             } else {
                 "running".to_string()
             }
-        } else if sessions.iter().any(|s| s.status == "running" && s.closed_at.is_none()) {
+        } else if sessions
+            .iter()
+            .any(|s| s.status == "running" && s.closed_at.is_none())
+        {
             "running (non-agent session)".to_string()
         } else {
             "idle".to_string()
@@ -126,8 +129,15 @@ fn run_orchestrator_pass(state: &AppState) -> Result<(), String> {
 
         let mut block = format!(
             "[WORKSPACE {}]\nName: {}\nRepo: {} | Branch: {}\nTask: {}\nSession: {}\nFiles: {}",
-            ws.id, ws.name, ws.repo, ws.branch,
-            if ws.current_task.is_empty() { "(no task set)" } else { &ws.current_task },
+            ws.id,
+            ws.name,
+            ws.repo,
+            ws.branch,
+            if ws.current_task.is_empty() {
+                "(no task set)"
+            } else {
+                &ws.current_task
+            },
             stuck_label,
             files_summary,
         );
@@ -240,7 +250,8 @@ Rules:
     }
 
     // Persist log + update state.
-    let _ = orchestrator_repository::insert_log(&state.db, &run_at, &model, &workspace_ids, &actions);
+    let _ =
+        orchestrator_repository::insert_log(&state.db, &run_at, &model, &workspace_ids, &actions);
 
     if let Ok(mut last_run) = state.orchestrator_last_run.lock() {
         *last_run = Some(run_at);
@@ -253,7 +264,10 @@ Rules:
 }
 
 fn is_openai_model(model: &str) -> bool {
-    model.starts_with("gpt-") || model.starts_with("o1") || model.starts_with("o3") || model.starts_with("o4")
+    model.starts_with("gpt-")
+        || model.starts_with("o1")
+        || model.starts_with("o3")
+        || model.starts_with("o4")
 }
 
 fn call_openai_api(model: &str, prompt: &str) -> Result<String, String> {
@@ -279,7 +293,9 @@ fn call_openai_api(model: &str, prompt: &str) -> Result<String, String> {
         return Err(format!("OpenAI API error {status}: {text}"));
     }
 
-    let json: serde_json::Value = resp.json().map_err(|e| format!("OpenAI response parse error: {e}"))?;
+    let json: serde_json::Value = resp
+        .json()
+        .map_err(|e| format!("OpenAI response parse error: {e}"))?;
     let content = json["choices"][0]["message"]["content"]
         .as_str()
         .ok_or_else(|| "OpenAI response missing content".to_string())?

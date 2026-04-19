@@ -1,4 +1,4 @@
-import type { WorkspacePrDraft, WorkspacePrResult } from '../../types/pr-draft';
+import type { WorkspacePrDraft, WorkspacePrResult, WorkspacePrStatus } from '../../types/pr-draft';
 import { invokeCommand } from './client';
 
 export function getWorkspacePrDraft(workspaceId: string): Promise<WorkspacePrDraft> {
@@ -11,4 +11,8 @@ export function refreshWorkspacePrDraft(workspaceId: string): Promise<WorkspaceP
 
 export function createWorkspacePr(workspaceId: string): Promise<WorkspacePrResult> {
   return invokeCommand<WorkspacePrResult>('create_workspace_pr', { workspaceId });
+}
+
+export function getWorkspacePrStatus(workspaceId: string): Promise<WorkspacePrStatus> {
+  return invokeCommand<WorkspacePrStatus>('get_workspace_pr_status', { workspaceId });
 }

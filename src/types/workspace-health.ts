@@ -34,3 +34,10 @@ export interface WorkspaceHealth {
   ports: WorkspacePort[];
   warnings: string[];
 }
+
+export interface WorkspaceSessionRecoveryResult {
+  workspaceId: string;
+  closedSessions: number;
+  skippedSessions: number;
+  warnings: string[];
+}

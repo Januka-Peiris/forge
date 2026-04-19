@@ -12,7 +12,7 @@ use crate::models::{
     SendAgentChatMessageInput,
 };
 use crate::repositories::{agent_chat_repository, workspace_repository};
-use crate::services::{environment_service, terminal_service};
+use crate::services::{checkpoint_service, environment_service, terminal_service};
 use crate::state::AppState;
 
 pub fn create_agent_chat_session(
@@ -38,7 +38,11 @@ pub fn create_agent_chat_session(
         provider: provider.clone(),
         status: "idle".to_string(),
         title,
-        provider_session_id: if provider == "claude_code" { Some(pseudo_uuid()) } else { None },
+        provider_session_id: if provider == "claude_code" {
+            Some(pseudo_uuid())
+        } else {
+            None
+        },
         cwd,
         raw_output: String::new(),
         created_at: now.clone(),
@@ -71,7 +75,10 @@ pub fn send_agent_chat_message(
     let session = agent_chat_repository::get_session(&state.db, &input.session_id)?
         .ok_or_else(|| format!("Agent chat session {} was not found", input.session_id))?;
     if session.status == "running" {
-        return Err("Agent chat session is already running. Interrupt it or wait for completion.".to_string());
+        return Err(
+            "Agent chat session is already running. Interrupt it or wait for completion."
+                .to_string(),
+        );
     }
     let prompt = input.prompt.trim().to_string();
     if prompt.is_empty() {
@@ -84,9 +91,10 @@ pub fn send_agent_chat_message(
         "model": input.model.clone(),
         "reasoning": input.reasoning.clone(),
     });
-    let should_resume_provider_session = agent_chat_repository::list_events_for_session(&state.db, &session.id)?
-        .iter()
-        .any(|event| event.event_type == "user_message");
+    let should_resume_provider_session =
+        agent_chat_repository::list_events_for_session(&state.db, &session.id)?
+            .iter()
+            .any(|event| event.event_type == "user_message");
     let user_event = append_event(
         state,
         &session,
@@ -97,8 +105,20 @@ pub fn send_agent_chat_message(
         None,
         Some(user_metadata),
     )?;
+    if let Err(err) = checkpoint_service::create_checkpoint_if_dirty(
+        state,
+        &session.workspace_id,
+        "before agent chat run",
+    ) {
+        log::warn!(
+            target: "forge_lib",
+            "failed to create pre-chat checkpoint for workspace {}: {err}",
+            session.workspace_id
+        );
+    }
     agent_chat_repository::update_session_status(&state.db, &session.id, "running", None)?;
-    let running_session = agent_chat_repository::get_session(&state.db, &session.id)?.unwrap_or(session);
+    let running_session =
+        agent_chat_repository::get_session(&state.db, &session.id)?.unwrap_or(session);
     let _ = append_event(
         state,
         &running_session,
@@ -109,11 +129,20 @@ pub fn send_agent_chat_message(
         Some("running"),
         None,
     );
-    start_adapter_process(state.clone(), running_session, prompt, input, should_resume_provider_session)?;
+    start_adapter_process(
+        state.clone(),
+        running_session,
+        prompt,
+        input,
+        should_resume_provider_session,
+    )?;
     Ok(user_event)
 }
 
-pub fn interrupt_agent_chat_session(state: &AppState, session_id: &str) -> Result<AgentChatSession, String> {
+pub fn interrupt_agent_chat_session(
+    state: &AppState,
+    session_id: &str,
+) -> Result<AgentChatSession, String> {
     if let Ok(mut processes) = state.processes.lock() {
         if let Some(process) = processes.remove(session_id) {
             if let Ok(mut child_slot) = process.lock() {
@@ -125,7 +154,12 @@ pub fn interrupt_agent_chat_session(state: &AppState, session_id: &str) -> Resul
         }
     }
     let ended = timestamp();
-    agent_chat_repository::update_session_status(&state.db, session_id, "interrupted", Some(&ended))?;
+    agent_chat_repository::update_session_status(
+        &state.db,
+        session_id,
+        "interrupted",
+        Some(&ended),
+    )?;
     let session = agent_chat_repository::get_session(&state.db, session_id)?
         .ok_or_else(|| format!("Agent chat session {session_id} was not found"))?;
     let _ = append_event(
@@ -141,7 +175,10 @@ pub fn interrupt_agent_chat_session(state: &AppState, session_id: &str) -> Resul
     Ok(session)
 }
 
-pub fn close_agent_chat_session(state: &AppState, session_id: &str) -> Result<AgentChatSession, String> {
+pub fn close_agent_chat_session(
+    state: &AppState,
+    session_id: &str,
+) -> Result<AgentChatSession, String> {
     if let Ok(Some(session)) = agent_chat_repository::get_session(&state.db, session_id) {
         if session.status == "running" {
             let _ = interrupt_agent_chat_session(state, session_id);
@@ -218,13 +255,25 @@ fn command_for_session(
             if let Some(reasoning) = input.reasoning.as_deref().and_then(normalize_reasoning) {
                 command.args(["--effort", reasoning]);
             }
-            if let Some(model) = input.model.as_deref().filter(|model| !model.trim().is_empty()) {
+            if let Some(model) = input
+                .model
+                .as_deref()
+                .filter(|model| !model.trim().is_empty())
+            {
                 command.args(["--model", model.trim()]);
             }
-            if let Some(agent) = input.claude_agent.as_deref().and_then(normalize_claude_agent) {
+            if let Some(agent) = input
+                .claude_agent
+                .as_deref()
+                .and_then(normalize_claude_agent)
+            {
                 command.args(["--agent", agent]);
             }
-            if input.task_mode.as_deref().is_some_and(|mode| mode.eq_ignore_ascii_case("plan")) {
+            if input
+                .task_mode
+                .as_deref()
+                .is_some_and(|mode| mode.eq_ignore_ascii_case("plan"))
+            {
                 command.args(["--permission-mode", "plan"]);
             }
             command.arg(prompt);
@@ -234,7 +283,11 @@ fn command_for_session(
             let command_path = resolve_binary("codex")?;
             let mut command = Command::new(command_path);
             command.args(["exec", "--json", "--cd", &session.cwd]);
-            if let Some(reasoning) = input.reasoning.as_deref().and_then(normalize_codex_reasoning) {
+            if let Some(reasoning) = input
+                .reasoning
+                .as_deref()
+                .and_then(normalize_codex_reasoning)
+            {
                 command.args(["-c", &format!("model_reasoning_effort=\"{reasoning}\"")]);
             }
             command.arg(prompt);
@@ -285,7 +338,11 @@ fn read_stderr(state: AppState, session: AgentChatSession, stderr: impl Read) {
     }
 }
 
-fn wait_for_process(state: AppState, session: AgentChatSession, child_slot: Arc<Mutex<Option<std::process::Child>>>) {
+fn wait_for_process(
+    state: AppState,
+    session: AgentChatSession,
+    child_slot: Arc<Mutex<Option<std::process::Child>>>,
+) {
     let status = loop {
         let maybe_status = {
             match child_slot.lock() {
@@ -307,17 +364,34 @@ fn wait_for_process(state: AppState, session: AgentChatSession, child_slot: Arc<
     if let Ok(mut processes) = state.processes.lock() {
         processes.remove(&session.id);
     }
-    let final_status = if status.success() { "succeeded" } else { "failed" };
+    let final_status = if status.success() {
+        "succeeded"
+    } else {
+        "failed"
+    };
     let ended = timestamp();
-    let _ = agent_chat_repository::update_session_status(&state.db, &session.id, final_status, Some(&ended));
+    let _ = agent_chat_repository::update_session_status(
+        &state.db,
+        &session.id,
+        final_status,
+        Some(&ended),
+    );
     if let Ok(Some(updated)) = agent_chat_repository::get_session(&state.db, &session.id) {
         let _ = append_event(
             &state,
             &updated,
             if status.success() { "result" } else { "error" },
             None,
-            Some(if status.success() { "Run result" } else { "Run failed" }),
-            if status.success() { "Agent run completed successfully." } else { "Agent run failed. Open diagnostics for details." },
+            Some(if status.success() {
+                "Run result"
+            } else {
+                "Run failed"
+            }),
+            if status.success() {
+                "Agent run completed successfully."
+            } else {
+                "Agent run failed. Open diagnostics for details."
+            },
             Some(final_status),
             Some(serde_json::json!({ "exitCode": status.code() })),
         );
@@ -327,7 +401,11 @@ fn wait_for_process(state: AppState, session: AgentChatSession, child_slot: Arc<
             "status",
             None,
             Some(if status.success() { "Done" } else { "Failed" }),
-            if status.success() { "Agent finished." } else { "Agent exited with an error." },
+            if status.success() {
+                "Agent finished."
+            } else {
+                "Agent exited with an error."
+            },
             Some(final_status),
             Some(serde_json::json!({ "exitCode": status.code() })),
         );
@@ -388,7 +466,11 @@ fn parse_claude_json_line(value: &Value) -> Vec<ParsedAgentEvent> {
         for item in content {
             match item.get("type").and_then(Value::as_str).unwrap_or("") {
                 "text" => {
-                    if let Some(text) = item.get("text").and_then(Value::as_str).filter(|s| !s.trim().is_empty()) {
+                    if let Some(text) = item
+                        .get("text")
+                        .and_then(Value::as_str)
+                        .filter(|s| !s.trim().is_empty())
+                    {
                         out.push(assistant_text(text));
                     }
                 }
@@ -398,7 +480,8 @@ fn parse_claude_json_line(value: &Value) -> Vec<ParsedAgentEvent> {
                         event_type: tool_event_type(name),
                         role: None,
                         title: Some(name.to_string()),
-                        body: summarize_json(item.get("input")).unwrap_or_else(|| "Tool started.".to_string()),
+                        body: summarize_json(item.get("input"))
+                            .unwrap_or_else(|| "Tool started.".to_string()),
                         status: Some("running".to_string()),
                         metadata: Some(item.clone()),
                     });
@@ -408,7 +491,11 @@ fn parse_claude_json_line(value: &Value) -> Vec<ParsedAgentEvent> {
                         event_type: "tool_result".to_string(),
                         role: None,
                         title: Some("Tool result".to_string()),
-                        body: item.get("content").and_then(Value::as_str).unwrap_or("Tool completed.").to_string(),
+                        body: item
+                            .get("content")
+                            .and_then(Value::as_str)
+                            .unwrap_or("Tool completed.")
+                            .to_string(),
                         status: Some("done".to_string()),
                         metadata: Some(item.clone()),
                     });
@@ -458,14 +545,33 @@ fn parse_claude_stream_event(value: &Value) -> Vec<ParsedAgentEvent> {
 
 fn parse_codex_json_line(value: &Value) -> Vec<ParsedAgentEvent> {
     let mut out = Vec::new();
-    let typ = value.get("type").or_else(|| value.get("event")).and_then(Value::as_str).unwrap_or("");
-    if let Some(text) = value.get("message").or_else(|| value.get("text")).or_else(|| value.get("content")).and_then(Value::as_str).filter(|s| !s.trim().is_empty()) {
+    let typ = value
+        .get("type")
+        .or_else(|| value.get("event"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if let Some(text) = value
+        .get("message")
+        .or_else(|| value.get("text"))
+        .or_else(|| value.get("content"))
+        .and_then(Value::as_str)
+        .filter(|s| !s.trim().is_empty())
+    {
         out.push(assistant_text(text));
     } else if typ.contains("command") || typ.contains("exec") || typ.contains("tool") {
         out.push(ParsedAgentEvent {
-            event_type: if typ.contains("command") || typ.contains("exec") { "command" } else { "tool_call" }.to_string(),
+            event_type: if typ.contains("command") || typ.contains("exec") {
+                "command"
+            } else {
+                "tool_call"
+            }
+            .to_string(),
             role: None,
-            title: Some(if typ.is_empty() { "Codex event".to_string() } else { typ.to_string() }),
+            title: Some(if typ.is_empty() {
+                "Codex event".to_string()
+            } else {
+                typ.to_string()
+            }),
             body: summarize_json(Some(value)).unwrap_or_else(|| "Codex event.".to_string()),
             status: None,
             metadata: Some(value.clone()),
@@ -498,7 +604,8 @@ fn append_event(
         created_at: timestamp(),
     };
     agent_chat_repository::insert_event(&state.db, &event)?;
-    let latest_session = agent_chat_repository::get_session(&state.db, &session.id)?.unwrap_or_else(|| session.clone());
+    let latest_session = agent_chat_repository::get_session(&state.db, &session.id)?
+        .unwrap_or_else(|| session.clone());
     let _ = state.app_handle.emit(
         "forge://agent-chat-event",
         AgentChatEventEnvelope {
@@ -529,9 +636,17 @@ fn tool_event_type(name: &str) -> String {
         "test_run".to_string()
     } else if lower.contains("todo") {
         "todo".to_string()
-    } else if lower.contains("read") || lower.contains("view") || lower.contains("grep") || lower.contains("glob") {
+    } else if lower.contains("read")
+        || lower.contains("view")
+        || lower.contains("grep")
+        || lower.contains("glob")
+    {
         "file_read".to_string()
-    } else if lower.contains("edit") || lower.contains("write") || lower.contains("file") || lower.contains("notebook") {
+    } else if lower.contains("edit")
+        || lower.contains("write")
+        || lower.contains("file")
+        || lower.contains("notebook")
+    {
         "file_change".to_string()
     } else {
         "tool_call".to_string()
@@ -543,10 +658,16 @@ fn summarize_json(value: Option<&Value>) -> Option<String> {
     if let Some(command) = value.get("command").and_then(Value::as_str) {
         return Some(command.to_string());
     }
-    if let Some(path) = value.get("file_path").or_else(|| value.get("path")).and_then(Value::as_str) {
+    if let Some(path) = value
+        .get("file_path")
+        .or_else(|| value.get("path"))
+        .and_then(Value::as_str)
+    {
         return Some(path.to_string());
     }
-    serde_json::to_string_pretty(value).ok().map(|raw| raw.chars().take(1200).collect())
+    serde_json::to_string_pretty(value)
+        .ok()
+        .map(|raw| raw.chars().take(1200).collect())
 }
 
 fn strip_ansi(input: &str) -> String {
@@ -710,7 +831,8 @@ mod tests {
     fn parses_codex_jsonl_message_and_command() {
         let events = parse_adapter_line("codex", r#"{"type":"message","message":"done"}"#);
         assert_eq!(events[0].body, "done");
-        let events = parse_adapter_line("codex", r#"{"type":"exec_command","command":"cargo test"}"#);
+        let events =
+            parse_adapter_line("codex", r#"{"type":"exec_command","command":"cargo test"}"#);
         assert_eq!(events[0].event_type, "command");
     }
 }

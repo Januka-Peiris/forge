@@ -3,9 +3,7 @@ use std::path::Path;
 use crate::context::discovery;
 use crate::context::graph::FileGraph;
 use crate::context::overlay;
-use crate::context::schema::{
-    ContextPreview, ContextSegment, SelectConfig, WorkspaceOverlay,
-};
+use crate::context::schema::{ContextPreview, ContextSegment, SelectConfig, WorkspaceOverlay};
 use crate::context::select;
 use crate::context::token_fit;
 use crate::repositories::workspace_repository;
@@ -20,7 +18,10 @@ pub fn build_context_preview(
     // Get workspace root
     let workspace = workspace_repository::get_detail(&state.db, workspace_id)?
         .ok_or_else(|| format!("Workspace {workspace_id} not found"))?;
-    let primary_path = workspace.summary.workspace_root_path.clone()
+    let primary_path = workspace
+        .summary
+        .workspace_root_path
+        .clone()
         .unwrap_or_else(|| workspace.worktree_path.clone());
     let root = Path::new(&primary_path);
 
@@ -46,7 +47,9 @@ pub fn build_context_preview(
                 stale_map: true,
                 low_signal: true,
                 signal_score: 0.0,
-                warning: Some(format!("Repo map unavailable: {err}. Using changed-file diffs only.")),
+                warning: Some(format!(
+                    "Repo map unavailable: {err}. Using changed-file diffs only."
+                )),
             });
         }
     };
@@ -85,7 +88,9 @@ pub fn build_context_preview(
 
     let mut warning = None;
     if stale_map {
-        warning = Some("Repo map is stale (default branch has new commits). Consider refreshing.".to_string());
+        warning = Some(
+            "Repo map is stale (default branch has new commits). Consider refreshing.".to_string(),
+        );
     }
 
     Ok(ContextPreview {
@@ -101,10 +106,7 @@ pub fn build_context_preview(
 }
 
 /// Builds a formatted session context string for injection into the first prompt.
-pub fn build_session_context_string(
-    state: &AppState,
-    workspace_id: &str,
-) -> Option<String> {
+pub fn build_session_context_string(state: &AppState, workspace_id: &str) -> Option<String> {
     let cfg = SelectConfig::default();
     let preview = build_context_preview(state, workspace_id, None, &cfg).ok()?;
 
@@ -115,20 +117,28 @@ pub fn build_session_context_string(
     let branch_info = {
         let root = workspace_root(state, workspace_id)?;
         discovery::resolve_default_ref(&root)
-            .map(|r| format!("{}@{}", r.branch, &r.commit_hash[..8.min(r.commit_hash.len())]))
+            .map(|r| {
+                format!(
+                    "{}@{}",
+                    r.branch,
+                    &r.commit_hash[..8.min(r.commit_hash.len())]
+                )
+            })
             .unwrap_or_else(|_| "unknown".to_string())
     };
 
-    let mut parts: Vec<String> = vec![
-        format!("[FORGE CONTEXT — {}]", branch_info),
-    ];
+    let mut parts: Vec<String> = vec![format!("[FORGE CONTEXT — {}]", branch_info)];
 
     if let Some(warn) = &preview.warning {
         parts.push(format!("⚠ {}", warn));
     }
 
     // Mandatory section
-    let mandatory: Vec<&ContextSegment> = preview.included.iter().filter(|s| s.tier == "mandatory").collect();
+    let mandatory: Vec<&ContextSegment> = preview
+        .included
+        .iter()
+        .filter(|s| s.tier == "mandatory")
+        .collect();
     if !mandatory.is_empty() {
         parts.push("Mandatory context:".to_string());
         for seg in &mandatory {
@@ -137,7 +147,11 @@ pub fn build_session_context_string(
     }
 
     // Related section
-    let related: Vec<&ContextSegment> = preview.included.iter().filter(|s| s.tier == "related").collect();
+    let related: Vec<&ContextSegment> = preview
+        .included
+        .iter()
+        .filter(|s| s.tier == "related")
+        .collect();
     if !related.is_empty() {
         parts.push("Related files:".to_string());
         for seg in &related {
@@ -154,7 +168,10 @@ fn overlay_only_segments(overlay: &WorkspaceOverlay) -> Vec<ContextSegment> {
     use crate::context::schema::estimate_tokens;
     let mut segs = Vec::new();
     for f in &overlay.changed {
-        let content = format!("### {} (changed: +{} -{} lines)\n```diff\n{}\n```", f.path, f.additions, f.deletions, f.diff);
+        let content = format!(
+            "### {} (changed: +{} -{} lines)\n```diff\n{}\n```",
+            f.path, f.additions, f.deletions, f.diff
+        );
         segs.push(ContextSegment {
             path: f.path.clone(),
             tier: "mandatory".to_string(),
@@ -178,7 +195,10 @@ fn overlay_only_segments(overlay: &WorkspaceOverlay) -> Vec<ContextSegment> {
 
 fn workspace_root(state: &AppState, workspace_id: &str) -> Option<std::path::PathBuf> {
     let workspace = workspace_repository::get_detail(&state.db, workspace_id).ok()??;
-    let path = workspace.summary.workspace_root_path.clone()
+    let path = workspace
+        .summary
+        .workspace_root_path
+        .clone()
         .unwrap_or_else(|| workspace.worktree_path.clone());
     Some(std::path::PathBuf::from(path))
 }

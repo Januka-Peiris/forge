@@ -25,8 +25,7 @@ pub fn extract(
     }
 
     let symbols = extract_symbols_from_tree(root, content, &queries.symbol_query);
-    let imports =
-        extract_imports_from_tree(root, content, path, &queries.import_query, repo_files);
+    let imports = extract_imports_from_tree(root, content, path, &queries.import_query, repo_files);
 
     Some((symbols, imports))
 }
@@ -72,8 +71,7 @@ fn language_and_queries(ext: &str) -> Option<(Language, LangQueries)> {
                 "#,
             )
             .ok()?;
-            let iq =
-                Query::new(&lang, r#"(import_statement source: (string) @import_path)"#).ok();
+            let iq = Query::new(&lang, r#"(import_statement source: (string) @import_path)"#).ok();
             Some((
                 lang,
                 LangQueries {
@@ -95,8 +93,7 @@ fn language_and_queries(ext: &str) -> Option<(Language, LangQueries)> {
                 "#,
             )
             .ok()?;
-            let iq =
-                Query::new(&lang, r#"(import_statement source: (string) @import_path)"#).ok();
+            let iq = Query::new(&lang, r#"(import_statement source: (string) @import_path)"#).ok();
             Some((
                 lang,
                 LangQueries {
@@ -115,8 +112,7 @@ fn language_and_queries(ext: &str) -> Option<(Language, LangQueries)> {
                 "#,
             )
             .ok()?;
-            let iq =
-                Query::new(&lang, r#"(import_statement source: (string) @import_path)"#).ok();
+            let iq = Query::new(&lang, r#"(import_statement source: (string) @import_path)"#).ok();
             Some((
                 lang,
                 LangQueries {

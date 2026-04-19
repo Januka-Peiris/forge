@@ -17,6 +17,12 @@ export type {
 export { toWorkspace } from './workspace';
 export type { AgentContextWorktree, WorkspaceAgentContext, WorkspaceContextItem, WorkspaceContextPreview } from './agent-context';
 export type { AgentProfile } from './agent-profile';
+export type {
+  WorkspaceCheckpoint,
+  WorkspaceCheckpointDiff,
+  WorkspaceCheckpointRestorePlan,
+  WorkspaceCheckpointRestoreResult,
+} from './checkpoint';
 export type { AgentChatEvent, AgentChatEventEnvelope, AgentChatSession } from './agent-chat';
 export type { ReviewItem } from './review';
 export type { MarkWorkspaceFileReviewedInput, QueueReviewAgentPromptInput, QueueReviewAgentPromptResult, ReviewCockpitFile, WorkspaceFileReviewState, WorkspacePrComment, WorkspaceReviewCockpit } from './review-cockpit';
@@ -24,7 +30,7 @@ export type { FileReviewInsight, ReviewRiskLevel, WorkspaceReviewSummary } from 
 export type { ActivityItem } from './activity';
 export type { OpenDeepLinkInput, OpenDeepLinkResult } from './deep-link';
 export type { MergeReadinessLevel, WorkspaceMergeReadiness } from './merge-readiness';
-export type { WorkspacePrDraft } from './pr-draft';
+export type { WorkspacePrCheck, WorkspacePrDraft, WorkspacePrStatus } from './pr-draft';
 export type { PromptTemplate, WorkspacePromptTemplates } from './prompt-template';
 export type { ReviewFileStatus, WorkspaceChangedFile, WorkspaceFileDiff } from './git-review';
 export type { AgentRunStatus, AgentRunStreamType, AgentRunType, StartWorkspaceRunInput, WorkspaceRun, WorkspaceRunLog } from './agent-run';
@@ -32,7 +38,11 @@ export type { DiscoveredRepository, DiscoveredWorktree, ScanRepositoriesResult }
 export type { AppSettings, SaveRepoRootsInput } from './settings';
 export type { EnvironmentCheckItem, EnvironmentCheckStatus } from './environment';
 export type { WorkspaceAttention, WorkspaceAttentionStatus } from './workspace-attention';
-export type { WorkspaceHealth, WorkspaceTerminalHealth } from './workspace-health';
+export type {
+  WorkspaceHealth,
+  WorkspaceSessionRecoveryResult,
+  WorkspaceTerminalHealth,
+} from './workspace-health';
 export type { WorkspaceReadiness } from './workspace-readiness';
 export type { CleanupWorkspaceInput, CleanupWorkspaceResult } from './workspace-cleanup';
 export type { WorkspacePort } from './workspace-ports';

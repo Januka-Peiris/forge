@@ -1,8 +1,8 @@
 pub mod regex;
 pub mod tree_sitter;
 
-use std::collections::HashSet;
 use crate::context::schema::RepoSymbol;
+use std::collections::HashSet;
 
 pub struct ExtractResult {
     pub symbols: Vec<RepoSymbol>,
