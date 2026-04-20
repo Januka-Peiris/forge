@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Terminal as TerminalIcon } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Terminal as TerminalIcon } from 'lucide-react';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { AgentProfile, ForgeWorkspaceConfig, TerminalOutputChunk, TerminalOutputEvent, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
+import type { AgentProfile, ForgeWorkspaceConfig, TerminalOutputEvent, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
 import type { AgentChatEvent, AgentChatEventEnvelope, AgentChatNextAction, AgentChatSession } from '../../types/agent-chat';
 import type { WorkspaceChangedFile } from '../../types/git-review';
 import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
@@ -37,7 +37,6 @@ import { getWorkspaceReadiness } from '../../lib/tauri-api/workspace-readiness';
 import { getWorkspaceChangedFiles } from '../../lib/tauri-api/git-review';
 import { getWorkspaceReviewCockpit, refreshWorkspacePrComments } from '../../lib/tauri-api/review-cockpit';
 import { createWorkspacePr } from '../../lib/tauri-api/pr-draft';
-import { getContextStatus } from '../../lib/tauri-api/context';
 import {
   createAgentChatSession,
   closeAgentChatSession,
@@ -60,16 +59,15 @@ import {
   deriveWorkbenchSummary,
   latestPlanEvent,
 } from '../../lib/agent-workbench';
-import {
-  OUTPUT_RETENTION_CHUNKS,
-  type OutputMap,
-} from './workspace-terminal-constants';
 import { TerminalPane } from './WorkspaceTerminalPane';
 import { AgentChatPanel } from '../agent/AgentChatPanel';
 import { WorkspaceHeader } from './WorkspaceHeader';
 import { WorkspaceComposer, type ComposerSettings } from './WorkspaceComposer';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import type { PromptTemplate } from '../../types/prompt-template';
+import { useSyncedRef } from '../../lib/hooks/useSyncedRef';
+import { useWorkspaceTerminalOutput } from './useWorkspaceTerminalOutput';
+import { WorkspaceTerminalEmptyState } from './WorkspaceTerminalEmptyState';
+import { WorkspaceContextFooter } from './WorkspaceContextFooter';
 
 interface WorkspaceTerminalProps {
   workspace: Workspace | null;
@@ -82,7 +80,6 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   const [chatSessions, setChatSessions] = useState<AgentChatSession[]>([]);
   const [chatEvents, setChatEvents] = useState<Record<string, AgentChatEvent[]>>({});
   const [focusedChatId, setFocusedChatId] = useState<string | null>(null);
-  const [outputs, setOutputs] = useState<OutputMap>({});
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [commandBusy, setCommandBusy] = useState<string | null>(null);
@@ -108,13 +105,20 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   });
   const [error, setError] = useState<string | null>(null);
   const [pendingCommand, setPendingCommand] = useState<PendingCommand | null>(null);
-  const nextSeqRef = useRef<Record<string, number>>({});
-  const pendingOutputRef = useRef<Record<string, TerminalOutputChunk[]>>({});
-  const outputFlushRafRef = useRef<number | null>(null);
-  const focusedIdRef = useRef<string | null>(null);
-  const focusedChatIdRef = useRef<string | null>(null);
-  const visibleSessionsRef = useRef<TerminalSession[]>([]);
-  const chatSessionsRef = useRef<AgentChatSession[]>([]);
+  const {
+    outputs,
+    appendOutput,
+    enqueueOutput,
+    getNextSeq,
+    setNextSeq,
+    bumpNextSeqFromChunk,
+    removeSessionOutput,
+    resetOutputState,
+  } = useWorkspaceTerminalOutput();
+  const focusedIdRef = useSyncedRef(focusedId);
+  const focusedChatIdRef = useSyncedRef(focusedChatId);
+  const visibleSessionsRef = useSyncedRef(visibleSessions);
+  const chatSessionsRef = useSyncedRef(chatSessions);
   const metadataPollTickRef = useRef(0);
   /** Serializes agent prompt writes so rapid Enter / Send do not race attach + PTY. */
   const promptSendChainRef = useRef(Promise.resolve());
@@ -170,53 +174,6 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     return allSessions.filter((s) => !s.closedAt && !visibleIds.has(s.id));
   }, [allSessions, visibleSessions]);
 
-  useEffect(() => {
-    focusedIdRef.current = focusedId;
-  }, [focusedId]);
-
-  useEffect(() => {
-    focusedChatIdRef.current = focusedChatId;
-  }, [focusedChatId]);
-
-  useEffect(() => {
-    visibleSessionsRef.current = visibleSessions;
-  }, [visibleSessions]);
-
-  useEffect(() => {
-    chatSessionsRef.current = chatSessions;
-  }, [chatSessions]);
-
-  const appendOutput = useCallback((sessionId: string, chunks: TerminalOutputChunk[], reset = false) => {
-    if (chunks.length === 0 && !reset) return;
-    setOutputs((current) => ({
-      ...current,
-      [sessionId]: reset ? chunks : [...(current[sessionId] ?? []), ...chunks].slice(-OUTPUT_RETENTION_CHUNKS),
-    }));
-  }, []);
-
-  const enqueueOutput = useCallback((sessionId: string, chunks: TerminalOutputChunk[]) => {
-    if (chunks.length === 0) return;
-    pendingOutputRef.current[sessionId] = [
-      ...(pendingOutputRef.current[sessionId] ?? []),
-      ...chunks,
-    ];
-    if (outputFlushRafRef.current !== null) return;
-    outputFlushRafRef.current = window.requestAnimationFrame(() => {
-      outputFlushRafRef.current = null;
-      const pending = pendingOutputRef.current;
-      pendingOutputRef.current = {};
-      setOutputs((current) => {
-        let next = current;
-        for (const [pendingSessionId, pendingChunks] of Object.entries(pending)) {
-          if (pendingChunks.length === 0) continue;
-          if (next === current) next = { ...current };
-          next[pendingSessionId] = [...(next[pendingSessionId] ?? []), ...pendingChunks].slice(-OUTPUT_RETENTION_CHUNKS);
-        }
-        return next;
-      });
-    });
-  }, []);
-
   const refreshSessions = useCallback(async (fetchOutput = false, preferredFocusId?: string | null) => {
     if (!workspaceId) return;
     setError(null);
@@ -240,15 +197,15 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         const output = await getWorkspaceTerminalOutputForSession(
           workspaceId,
           focused.id,
-          nextSeqRef.current[focused.id] ?? 0,
+          getNextSeq(focused.id),
         );
-        nextSeqRef.current[focused.id] = output.nextSeq;
+        setNextSeq(focused.id, output.nextSeq);
         appendOutput(focused.id, output.chunks);
       }
     } catch (err) {
       setActionError(err);
     }
-  }, [appendOutput, setActionError, workspaceId]);
+  }, [appendOutput, focusedIdRef, getNextSeq, setActionError, setNextSeq, workspaceId]);
 
   const refreshChatSessions = useCallback(async (
     preferredFocusId?: string | null,
@@ -280,7 +237,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     } catch (err) {
       setActionError(err);
     }
-  }, [setActionError, workspaceId]);
+  }, [chatSessionsRef, focusedChatIdRef, setActionError, workspaceId]);
 
   const refreshForgeConfig = useCallback(async () => {
     if (!workspaceId) return;
@@ -421,16 +378,10 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   }, []);
 
   const resetWorkspaceState = useCallback(() => {
-    nextSeqRef.current = {};
-    pendingOutputRef.current = {};
-    if (outputFlushRafRef.current !== null) {
-      window.cancelAnimationFrame(outputFlushRafRef.current);
-      outputFlushRafRef.current = null;
-    }
+    resetOutputState();
     promptSendChainRef.current = Promise.resolve();
     focusedIdRef.current = null;
     focusedChatIdRef.current = null;
-    setOutputs({});
     setVisibleSessions([]);
     setAllSessions([]);
     setChatSessions([]);
@@ -448,7 +399,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     setFocusedId(null);
     setError(null);
     setComposerSettings((current) => ({ ...current, selectedClaudeAgent: 'general-purpose' }));
-  }, []);
+  }, [focusedChatIdRef, focusedIdRef, resetOutputState]);
 
   useEffect(() => {
     resetWorkspaceState();
@@ -499,7 +450,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       }
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [refreshChatSessions, refreshHealth, refreshReadiness, refreshSessions, refreshWorkbenchState, workspaceId]);
+  }, [chatSessionsRef, refreshChatSessions, refreshHealth, refreshReadiness, refreshSessions, refreshWorkbenchState, visibleSessionsRef, workspaceId]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -517,7 +468,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       if (disposed || event.payload.workspaceId !== workspaceId) return;
       const chunk = event.payload.chunk;
       enqueueOutput(chunk.sessionId, [chunk]);
-      nextSeqRef.current[chunk.sessionId] = Math.max(nextSeqRef.current[chunk.sessionId] ?? 0, chunk.seq + 1);
+      bumpNextSeqFromChunk(chunk.sessionId, chunk.seq);
     }).then((fn) => {
       if (disposed) fn(); else unlisten = fn;
     }).catch(() => undefined);
@@ -553,7 +504,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       if (unlistenApproval) unlistenApproval();
       if (unlistenAgentChat) unlistenAgentChat();
     };
-  }, [enqueueOutput, refreshChatSessions, refreshReadiness, refreshWorkbenchState, workspaceId]);
+  }, [bumpNextSeqFromChunk, enqueueOutput, refreshChatSessions, refreshReadiness, refreshWorkbenchState, workspaceId]);
 
   const createTerminal = async (kind: 'agent' | 'shell', profile: TerminalProfile, title?: string, profileId?: string) => {
     if (!workspaceId) return;
@@ -562,7 +513,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     try {
       const session = await createWorkspaceTerminal({ workspaceId, kind, profile, profileId, title });
       if (session.terminalKind === 'agent') setSelectedProfileId(session.profile);
-      nextSeqRef.current[session.id] = 0;
+      setNextSeq(session.id, 0);
       focusedIdRef.current = session.id;
       setFocusedId(session.id);
       focusedChatIdRef.current = null;
@@ -628,7 +579,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     try {
       const sessions = await runWorkspaceSetup(workspaceId);
       if (sessions[0]) {
-        nextSeqRef.current[sessions[0].id] = 0;
+      setNextSeq(sessions[0].id, 0);
         focusedIdRef.current = sessions[0].id;
         setFocusedId(sessions[0].id);
       }
@@ -650,7 +601,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       const session = restart
         ? await restartWorkspaceRunCommand(workspaceId, index)
         : await startWorkspaceRunCommand(workspaceId, index);
-      nextSeqRef.current[session.id] = 0;
+      setNextSeq(session.id, 0);
       focusedIdRef.current = session.id;
       setFocusedId(session.id);
       await refreshSessions(true, session.id);
@@ -731,9 +682,9 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       focusedIdRef.current = session.id;
       setFocusedId(session.id);
       if (session.terminalKind === 'agent') setSelectedProfileId(session.profile);
-      nextSeqRef.current[session.id] = 0;
+      setNextSeq(session.id, 0);
       const output = await getWorkspaceTerminalOutputForSession(workspaceId, session.id, 0);
-      nextSeqRef.current[session.id] = output.nextSeq;
+      setNextSeq(session.id, output.nextSeq);
       appendOutput(session.id, output.chunks, true);
       await refreshSessions(false, session.id);
       await refreshHealth();
@@ -766,12 +717,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     setError(null);
     try {
       await closeWorkspaceTerminalSessionById(sessionId);
-      delete nextSeqRef.current[sessionId];
-      setOutputs((current) => {
-        const next = { ...current };
-        delete next[sessionId];
-        return next;
-      });
+      removeSessionOutput(sessionId);
       await refreshSessions(false);
       await refreshHealth();
       await refreshReadiness();
@@ -1021,39 +967,14 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         {/* Main content area */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
           {visibleSessions.length === 0 && chatSessions.length === 0 ? (
-            <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-forge-border bg-forge-bg p-8 text-center">
-              <div className="max-w-md">
-                <TerminalIcon className="mx-auto mb-3 h-9 w-9 text-forge-muted" />
-                <h2 className="text-base font-bold text-forge-text">Start a workspace terminal</h2>
-                <p className="mt-1 text-sm leading-relaxed text-forge-muted">Launch agents, shells, and dev servers for this workspace.</p>
-                <div className="mt-4 flex flex-wrap justify-center gap-2">
-                  <button disabled={busy} onClick={() => void createChatSession('claude_code', 'Claude Chat')} className="rounded-lg bg-forge-green px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Start Claude</button>
-                  <button disabled={busy} onClick={() => void createChatSession('codex', 'Codex Chat')} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">Start Codex</button>
-                  {localAgentProfiles.length > 0 && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">
-                          Other agents
-                          <ChevronDown className="h-3.5 w-3.5 text-forge-muted" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="center">
-                        {localAgentProfiles.map((profile) => (
-                          <DropdownMenuItem
-                            key={profile.id}
-                            disabled={busy}
-                            onSelect={() => void createTerminal('agent', profile.agent as TerminalProfile, profile.label, profile.id)}
-                          >
-                            Start {profile.label}
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                  <button disabled={busy} onClick={() => void createTerminal('shell', 'shell', 'Shell')} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">New Shell</button>
-                </div>
-              </div>
-            </div>
+            <WorkspaceTerminalEmptyState
+              busy={busy}
+              localAgentProfiles={localAgentProfiles}
+              onStartClaude={() => void createChatSession('claude_code', 'Claude Chat')}
+              onStartCodex={() => void createChatSession('codex', 'Codex Chat')}
+              onStartLocalProfile={(profile) => void createTerminal('agent', profile.agent as TerminalProfile, profile.label, profile.id)}
+              onStartShell={() => void createTerminal('shell', 'shell', 'Shell')}
+            />
           ) : (
             <>
               {/* Content */}
@@ -1090,7 +1011,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         </div>
       </div>
 
-      <ContextFooter workspaceId={workspace.id} />
+      <WorkspaceContextFooter workspaceId={workspace.id} />
 
       {focusedIsAgent && (
         <WorkspaceComposer
@@ -1106,29 +1027,6 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
           onTogglePlanMode={togglePlanMode}
           onApplyWorkflowPreset={applyWorkflowPreset}
         />
-      )}
-    </div>
-  );
-}
-
-function ContextFooter({ workspaceId }: { workspaceId: string }) {
-  const [status, setStatus] = React.useState<{ stale: boolean; tokens: number; engine: string } | null>(null);
-
-  React.useEffect(() => {
-    getContextStatus(workspaceId)
-      .then((s) => {
-        setStatus({ stale: s.stale, tokens: (s.symbolCount ?? 0) * 3, engine: s.engine });
-      })
-      .catch(() => {});
-  }, [workspaceId]);
-
-  if (!status) return null;
-
-  return (
-    <div className="flex items-center gap-2 px-3 py-0.5 border-t border-white/5 text-xs text-white/30">
-      <span>ctx {status.engine}</span>
-      {status.stale && (
-        <span className="text-amber-400/70">[stale]</span>
       )}
     </div>
   );
