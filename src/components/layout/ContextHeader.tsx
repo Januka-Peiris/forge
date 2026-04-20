@@ -22,14 +22,17 @@ export function ContextHeader({ workspace }: ContextHeaderProps) {
         <span className="font-mono">{workspace.branch}</span>
       </div>
       
-      <ChevronRight className="h-3 w-3 text-forge-dim" />
-      
-      <div className="flex min-w-0 items-center gap-1.5 text-ui-label text-forge-muted">
-        <Layout className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate font-medium text-forge-green/90">
-          {workspace.currentTask || 'No task selected'}
-        </span>
-      </div>
+      {workspace.currentTask.trim() && (
+        <>
+          <ChevronRight className="h-3 w-3 text-forge-dim" />
+          <div className="flex min-w-0 items-center gap-1.5 text-ui-label text-forge-muted">
+            <Layout className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate font-medium text-forge-green/90">
+              {workspace.currentTask}
+            </span>
+          </div>
+        </>
+      )}
 
       <div className="ml-auto flex items-center gap-2">
         {workspace.status === 'Running' && (

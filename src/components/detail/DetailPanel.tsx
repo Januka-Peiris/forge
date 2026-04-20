@@ -41,7 +41,6 @@ import type { WorkspaceCheckpoint, WorkspaceCheckpointRestorePlan } from '../../
 import type { WorkspaceChangedFile } from '../../types/git-review';
 import type { WorkspaceHealth, WorkspaceSessionRecoveryResult } from '../../types/workspace-health';
 import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
-import { StatusBadge } from '../workspaces/StatusBadge';
 import { ContextPreviewPanel } from '../context/ContextPreviewPanel';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -1456,7 +1455,6 @@ export function DetailPanel({
       <div className="px-4 py-4 shrink-0">
         <div className="flex items-center gap-2 mb-1">
           <h2 className="text-sm font-bold text-forge-text truncate flex-1">{workspace.name}</h2>
-          <StatusBadge status={workspace.status} />
           {onCollapse && (
             <Button
               variant="outline"
@@ -1527,10 +1525,12 @@ export function DetailPanel({
             </div>
 
             {/* Current Task */}
-            <div className="px-4 pb-4">
-              <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest mb-1.5">Current Task</p>
-              <p className="text-sm text-forge-text/90 leading-relaxed">{workspace.currentTask || <span className="text-forge-muted italic">No task set</span>}</p>
-            </div>
+            {workspace.currentTask.trim() && (
+              <div className="px-4 pb-4">
+                <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest mb-1.5">Current Task</p>
+                <p className="text-sm text-forge-text/90 leading-relaxed">{workspace.currentTask}</p>
+              </div>
+            )}
 
             {statusDepth === 'simple' ? (
               <SimpleNextActionsPanel
