@@ -119,7 +119,7 @@ pub fn create_workspace(
     }
 
     let current_task = if input.task_prompt.trim().is_empty() {
-        "Workspace created and waiting for an agent instruction.".to_string()
+        "Workspace ready. Start an agent or send an instruction.".to_string()
     } else {
         format!("Queued: {}", input.task_prompt.trim())
     };

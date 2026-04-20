@@ -39,7 +39,7 @@ export function deriveWorkspaceCockpit(
     if (status === 'complete' || workspace.status === 'Review Ready') return 'Ready for review';
     return workspace.agentSession?.lastMessage && workspace.agentSession.lastMessage !== 'No terminal session started yet'
       ? workspace.agentSession.lastMessage
-      : 'Waiting for instruction';
+      : 'Ready for instruction';
   })();
 
   const changeSummary =
@@ -51,7 +51,7 @@ export function deriveWorkspaceCockpit(
     if (workspace.completedSteps.includes('Testing')) return 'Checks completed';
     if (workspace.currentStep === 'Testing') return 'Checks running';
     if (changedCount > 0) return 'Checks not run yet';
-    return 'Checks waiting for changes';
+    return 'No checks yet';
   })();
 
   const prSummary = workspace.prStatus && workspace.prNumber

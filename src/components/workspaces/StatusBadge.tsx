@@ -4,20 +4,22 @@ import { Badge, type BadgeProps } from '../ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 
 export function StatusBadge({ status, iconOnly = false }: { status: WorkspaceStatus; iconOnly?: boolean }) {
-  const config: { icon: LucideIcon; variant: BadgeProps['variant']; animate: boolean } = ({
+  const config: { icon: LucideIcon; variant: BadgeProps['variant']; animate: boolean; label?: string; description?: string } = ({
     Running: { icon: Play, variant: 'success' as const, animate: true },
-    Waiting: { icon: Pause, variant: 'warning' as const, animate: false },
+    Waiting: { icon: Pause, variant: 'warning' as const, animate: false, label: 'Ready', description: 'Ready for an agent instruction' },
     'Review Ready': { icon: CheckCircle2, variant: 'info' as const, animate: false },
     Blocked: { icon: AlertCircle, variant: 'destructive' as const, animate: false },
     Merged: { icon: GitMerge, variant: 'violet' as const, animate: false },
   } as const)[status] || { icon: HelpCircle, variant: 'default' as const, animate: false };
 
   const Icon = config.icon;
+  const label = config.label ?? status;
+  const description = config.description ?? `Status: ${status}`;
 
   const content = (
     <Badge variant={config.variant} dot animateDot={config.animate}>
       <Icon className="h-3 w-3 mr-1" />
-      {!iconOnly && status}
+      {!iconOnly && label}
     </Badge>
   );
 
@@ -32,7 +34,7 @@ export function StatusBadge({ status, iconOnly = false }: { status: WorkspaceSta
           </button>
         </PopoverTrigger>
         <PopoverContent align="center" className="w-auto p-2 text-ui-label font-semibold">
-          Status: {status}
+          {description}
         </PopoverContent>
       </Popover>
     );
