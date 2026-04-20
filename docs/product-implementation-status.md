@@ -37,12 +37,28 @@ Forge is being shaped as a **local-first agent conductor**: simple by default, i
   - ship flow
   - lifecycle
   - safe iteration
+- Workspace detail defaults to a simple status view with one Next Actions panel, with the fuller cockpit available through a Deep toggle.
+- Simple Next Actions also shows PR draft readiness with lightweight preview/refresh/copy actions.
+- Workspace cards were simplified around task, next action, agent/changes/checks, and PR/trust state; no-op card buttons were removed.
+- Workspace search now includes current task text, and status/repo/agent/recent sorting is applied.
+- Workspace list header now includes compact attention summaries for needs-action, running, review, and PR workspaces, backed by matching Review/PR filters.
+- Needs-action now has its own filter so blocked/waiting/unread workspaces remain visible when drilling into the attention summary.
+- Workspace list filters now show the narrowed count, active attention filter state, clear/reset actions, and a more useful empty state.
+- Workspace list filtering, sorting, status counts, and attention summaries are memoized to keep keyboard navigation and long-list triage responsive.
+- Workspace list supports keyboard-first search focus with `/` and clears the narrowed view with `Escape`.
+- Workspace list supports keyboard navigation with `j`/`ArrowDown` and `k`/`ArrowUp` across the currently visible workspaces.
+- Workspace list header shows subtle shortcut hints for search, movement, and reset on larger screens.
+- Selected workspace cards scroll into view during keyboard navigation, keeping long-list triage usable.
 
 ### Checks and Shipping
 
 - `.forge/config.json` setup/run/teardown commands are surfaced in the cockpit.
 - Setup and check commands can be started from the cockpit.
 - Running check terminals can be stopped from the cockpit.
+- The deep Ship Flow now previews the deterministic PR draft title, summary, key-change count, risk count, and top changes before PR creation.
+- PR draft previews can be refreshed from the cockpit before opening the PR.
+- PR draft markdown can be copied from the cockpit for manual review or reuse before opening the PR.
+- Linked PRs now expose an Open PR action in both Simple Next Actions and deep Checks & Shipping when GitHub metadata includes a URL.
 - A guided ship flow now walks through:
   - review changes
   - run checks
@@ -55,6 +71,9 @@ Forge is being shaped as a **local-first agent conductor**: simple by default, i
 - Changed files link into the Review Cockpit.
 - The Review Cockpit remains the deeper path for diff inspection and review work.
 - The workspace cockpit now surfaces review blockers: merge-readiness reasons, local risk notes, cached/open PR comments, and quick PR-comment refresh.
+- Pending review cards now open the relevant workspace/review cockpit instead of showing non-functional approve/request-change actions, and they have a clearer empty state.
+- Pending reviews are sorted by risk/churn and show high/medium/low counts before the card grid.
+- Pending reviews show the top few items by default with an explicit show-more/show-fewer control to avoid cluttering the workspace list.
 
 ### GitHub and CI Visibility
 

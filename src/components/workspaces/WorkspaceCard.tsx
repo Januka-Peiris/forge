@@ -1,5 +1,5 @@
-import { GitBranch, FileCode, Clock, GitPullRequest, ChevronRight, Play, Eye } from 'lucide-react';
-import type { Workspace, WorkspaceStep } from '../../types';
+import { GitBranch, FileCode, Clock, GitPullRequest, ChevronRight, Eye } from 'lucide-react';
+import type { Workspace } from '../../types';
 import { StatusBadge, AgentBadge } from './StatusBadge';
 import { Button } from '../ui/button';
 import { cockpitToneClass, deriveWorkspaceCockpit } from '../../lib/workspace-cockpit';
@@ -8,42 +8,6 @@ interface WorkspaceCardProps {
   workspace: Workspace;
   isSelected: boolean;
   onSelect: () => void;
-}
-
-const steps: WorkspaceStep[] = ['Planning', 'Editing', 'Testing', 'Review'];
-
-function StepTracker({ current, completed }: { current: WorkspaceStep; completed: WorkspaceStep[] }) {
-  return (
-    <div className="flex items-center gap-1">
-      {steps.map((step, i) => {
-        const isDone = completed.includes(step);
-        const isActive = current === step && !isDone;
-        return (
-          <div key={step} className="flex items-center gap-1">
-            <div className="flex flex-col items-center gap-0.5">
-              <div
-                className={`w-1.5 h-1.5 rounded-full transition-colors ${
-                  isDone
-                    ? 'bg-forge-green'
-                    : isActive
-                    ? 'bg-forge-orange animate-pulse'
-                    : 'bg-forge-dim'
-                }`}
-              />
-              <span className={`text-xs font-medium whitespace-nowrap ${
-                isDone ? 'text-forge-green' : isActive ? 'text-forge-orange' : 'text-forge-muted'
-              }`}>
-                {step}
-              </span>
-            </div>
-            {i < steps.length - 1 && (
-              <div className={`w-4 h-px mb-3 ${isDone ? 'bg-forge-green/40' : 'bg-forge-dim/40'}`} />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 function FileStrip({ files }: { files: Workspace['changedFiles'] }) {
@@ -75,6 +39,7 @@ export function WorkspaceCard({ workspace, isSelected, onSelect }: WorkspaceCard
   const totalAdds = workspace.changedFiles.reduce((s, f) => s + f.additions, 0);
   const totalDels = workspace.changedFiles.reduce((s, f) => s + f.deletions, 0);
   const cockpit = deriveWorkspaceCockpit(workspace);
+  const task = workspace.currentTask?.trim();
 
   return (
     <div
@@ -109,7 +74,7 @@ export function WorkspaceCard({ workspace, isSelected, onSelect }: WorkspaceCard
           />
         </div>
 
-        <div className="flex items-center gap-2 mb-3">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
           <StatusBadge status={workspace.status} />
           <AgentBadge agent={workspace.agent} />
           <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${cockpitToneClass(cockpit.nextActionTone)}`}>
@@ -117,20 +82,24 @@ export function WorkspaceCard({ workspace, isSelected, onSelect }: WorkspaceCard
           </span>
         </div>
 
-        <div className="mb-3 grid grid-cols-2 gap-1.5 text-xs">
-          <span className="truncate rounded border border-forge-border bg-white/5 px-2 py-1 text-forge-muted" title={cockpit.agentState}>
-            Agent: <span className="text-forge-text/85">{cockpit.agentState}</span>
-          </span>
-          <span className="truncate rounded border border-forge-border bg-white/5 px-2 py-1 text-forge-muted" title={cockpit.checkSummary}>
-            Checks: <span className="text-forge-text/85">{cockpit.checkSummary}</span>
-          </span>
+        <div className="mb-3 rounded-lg border border-forge-border/70 bg-black/10 p-2">
+          <p className="line-clamp-2 text-xs leading-relaxed text-forge-text/85">
+            {task || <span className="text-forge-muted italic">No task set yet</span>}
+          </p>
+          <div className="mt-2 grid grid-cols-3 gap-1.5 text-[11px]">
+            <span className="truncate rounded border border-forge-border bg-white/5 px-1.5 py-1 text-forge-muted" title={cockpit.agentState}>
+              Agent <span className="text-forge-text/85">· {cockpit.agentState}</span>
+            </span>
+            <span className="truncate rounded border border-forge-border bg-white/5 px-1.5 py-1 text-forge-muted" title={cockpit.changeSummary}>
+              Changes <span className="text-forge-text/85">· {workspace.changedFiles.length}</span>
+            </span>
+            <span className="truncate rounded border border-forge-border bg-white/5 px-1.5 py-1 text-forge-muted" title={cockpit.checkSummary}>
+              Checks <span className="text-forge-text/85">· {cockpit.checkSummary.replace(/^Checks /, '')}</span>
+            </span>
+          </div>
         </div>
 
-        <div className="mb-3">
-          <StepTracker current={workspace.currentStep} completed={workspace.completedSteps} />
-        </div>
-
-        <FileStrip files={workspace.changedFiles} />
+        {workspace.changedFiles.length > 0 && <FileStrip files={workspace.changedFiles} />}
 
         <div className="mt-3 pt-3 border-t border-forge-border/60 flex items-center justify-between">
           <div className="flex items-center gap-3 text-sm text-forge-muted">
@@ -156,32 +125,19 @@ export function WorkspaceCard({ workspace, isSelected, onSelect }: WorkspaceCard
         </div>
       </div>
 
-      <div className="px-4 pb-3 flex items-center gap-1.5">
+      <div className="px-4 pb-3 flex items-center justify-between gap-2">
         <Button
           variant="default"
           size="sm"
           onClick={(e) => { e.stopPropagation(); onSelect(); }}
         >
           <Eye className="w-3 h-3" />
-          Open
+          Open cockpit
         </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={(e) => { e.stopPropagation(); }}
-        >
-          <FileCode className="w-3 h-3" />
-          Review Diff
-        </Button>
-        {(workspace.status === 'Waiting' || workspace.status === 'Blocked') && (
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={(e) => { e.stopPropagation(); }}
-          >
-            <Play className="w-3 h-3" />
-            Resume
-          </Button>
+        {(workspace.changedFiles.length > 0 || workspace.prStatus) && (
+          <span className="min-w-0 truncate text-xs text-forge-muted" title={`${cockpit.prSummary} · ${cockpit.trustSummary}`}>
+            {cockpit.prSummary} · {cockpit.trustSummary}
+          </span>
         )}
       </div>
     </div>

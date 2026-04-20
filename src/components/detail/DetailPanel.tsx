@@ -20,7 +20,7 @@ import {
 } from '../../lib/tauri-api/workspace-scripts';
 import { getWorkspaceReadiness } from '../../lib/tauri-api/workspace-readiness';
 import { listWorkspacePorts } from '../../lib/tauri-api/workspace-ports';
-import { getWorkspacePrStatus } from '../../lib/tauri-api/pr-draft';
+import { getWorkspacePrDraft, getWorkspacePrStatus, refreshWorkspacePrDraft } from '../../lib/tauri-api/pr-draft';
 import { cleanupWorkspace } from '../../lib/tauri-api/workspace-cleanup';
 import { getWorkspaceChangedFiles } from '../../lib/tauri-api/git-review';
 import { getWorkspaceHealth, recoverWorkspaceSessions } from '../../lib/tauri-api/workspace-health';
@@ -36,7 +36,7 @@ import {
 } from '../../lib/tauri-api/checkpoints';
 import type { ForgeWorkspaceConfig } from '../../types/workspace-scripts';
 import type { WorkspaceReadiness } from '../../types/workspace-readiness';
-import type { WorkspacePrStatus } from '../../types/pr-draft';
+import type { WorkspacePrDraft, WorkspacePrStatus } from '../../types/pr-draft';
 import type { WorkspaceCheckpoint, WorkspaceCheckpointRestorePlan } from '../../types/checkpoint';
 import type { WorkspaceChangedFile } from '../../types/git-review';
 import type { WorkspaceHealth, WorkspaceSessionRecoveryResult } from '../../types/workspace-health';
@@ -152,6 +152,22 @@ function ChecksShippingPanel({
           <CockpitLine label="CI" value={prStatus?.checksSummary ?? 'not checked'} />
           <CockpitLine label="Review" value={`${reviewLabel} · ${readiness?.prCommentCount ?? 0} comment(s)`} />
         </div>
+        {prStatus?.found && prStatus.url && (
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-forge-border/60 bg-black/10 px-2 py-1.5">
+            <div className="min-w-0">
+              <p className="truncate text-xs font-semibold text-forge-text/85" title={prStatus.title ?? prLabel}>
+                {prStatus.title ?? prLabel}
+              </p>
+              <p className="text-xs text-forge-muted">{prLabel} · {prStatus.checksSummary}</p>
+            </div>
+            <Button asChild variant="secondary" size="xs">
+              <a href={prStatus.url} target="_blank" rel="noreferrer">
+                <ExternalLink className="h-3 w-3" />
+                Open PR
+              </a>
+            </Button>
+          </div>
+        )}
         {prChecks.length > 0 && (
           <div className="mt-3 rounded-lg border border-forge-border/60 bg-black/10 p-2">
             <div className="mb-1.5 flex items-center justify-between gap-2">
@@ -247,20 +263,28 @@ function ShippingGuidePanel({
   changedFiles,
   runCount,
   prStatus,
+  prDraft,
+  draftRefreshing,
   prCreating,
   cleanupBusy,
   message,
   onCreatePr,
+  onRefreshDraft,
+  onCopyDraft,
   onRunFirstCheck,
   onCleanup,
 }: {
   changedFiles: number;
   runCount: number;
   prStatus: WorkspacePrStatus | null;
+  prDraft: WorkspacePrDraft | null;
+  draftRefreshing: boolean;
   prCreating: boolean;
   cleanupBusy: boolean;
   message: string | null;
   onCreatePr: () => void;
+  onRefreshDraft: () => void;
+  onCopyDraft: () => void;
   onRunFirstCheck: () => void;
   onCleanup: () => void;
 }) {
@@ -292,10 +316,42 @@ function ShippingGuidePanel({
             </div>
           ))}
         </div>
+        {prDraft && (
+          <div className="mt-3 rounded-lg border border-forge-border/60 bg-black/10 p-2">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <p className="min-w-0 truncate text-xs font-semibold text-forge-text/85" title={prDraft.title}>
+                Draft PR: {prDraft.title}
+              </p>
+              <Button variant="ghost" size="xs" disabled={draftRefreshing} onClick={onRefreshDraft}>
+                {draftRefreshing ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                Refresh draft
+              </Button>
+            </div>
+            <p className="line-clamp-3 text-xs leading-relaxed text-forge-muted">{prDraft.summary}</p>
+            <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+              <CockpitLine label="Key changes" value={`${prDraft.keyChanges.length}`} />
+              <CockpitLine label="Risks" value={`${prDraft.risks.length}`} />
+            </div>
+            <ul className="mt-2 list-disc space-y-0.5 pl-4 text-xs text-forge-muted">
+              {prDraft.keyChanges.slice(0, 3).map((change) => (
+                <li key={change} className="truncate" title={change}>{change}</li>
+              ))}
+            </ul>
+            <Button variant="secondary" size="xs" className="mt-2" onClick={onCopyDraft}>
+              Copy PR markdown
+            </Button>
+          </div>
+        )}
         <div className="mt-3 flex flex-wrap gap-2">
           <Button variant="secondary" size="xs" disabled={runCount === 0} onClick={onRunFirstCheck}>
             Run first check
           </Button>
+          {!prDraft && (
+            <Button variant="secondary" size="xs" disabled={!hasChanges || draftRefreshing} onClick={onRefreshDraft}>
+              {draftRefreshing ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+              Preview PR draft
+            </Button>
+          )}
           <Button variant="secondary" size="xs" disabled={prCreating || hasPr || !hasChanges} onClick={onCreatePr}>
             {prCreating ? <Loader2 className="h-3 w-3 animate-spin" /> : <GitPullRequest className="h-3 w-3" />}
             {hasPr ? 'PR linked' : 'Create PR'}
@@ -697,6 +753,157 @@ function WorkspaceConfigDepthPanel({ config }: { config: ForgeWorkspaceConfig | 
   );
 }
 
+function SimpleNextActionsPanel({
+  changedFiles,
+  checkCount,
+  prStatus,
+  prDraft,
+  draftRefreshing,
+  reviewCockpit,
+  workspaceHealth,
+  checkpoints,
+  busy,
+  onRunFirstCheck,
+  onOpenReviewFile,
+  onRefreshComments,
+  onRefreshDraft,
+  onCopyDraft,
+  onRecover,
+  onCreatePr,
+  onCleanup,
+}: {
+  changedFiles: number;
+  checkCount: number;
+  prStatus: WorkspacePrStatus | null;
+  prDraft: WorkspacePrDraft | null;
+  draftRefreshing: boolean;
+  reviewCockpit: WorkspaceReviewCockpit | null;
+  workspaceHealth: WorkspaceHealth | null;
+  checkpoints: WorkspaceCheckpoint[];
+  busy: boolean;
+  onRunFirstCheck: () => void;
+  onOpenReviewFile?: (path?: string) => void;
+  onRefreshComments: () => void;
+  onRefreshDraft: () => void;
+  onCopyDraft: () => void;
+  onRecover: () => void;
+  onCreatePr: () => void;
+  onCleanup: () => void;
+}) {
+  const openComments = reviewCockpit?.prComments.filter((comment) => !comment.resolvedAt && comment.state !== 'resolved') ?? [];
+  const reviewBlockers = [
+    ...(reviewCockpit?.mergeReadiness?.reasons ?? []),
+    ...(reviewCockpit?.mergeReadiness?.warnings ?? []),
+    ...(reviewCockpit?.reviewSummary?.riskReasons ?? []),
+  ].filter(Boolean);
+  const unhealthySessions = workspaceHealth?.terminals.filter((terminal) => (
+    terminal.stale
+    || terminal.status === 'failed'
+    || terminal.status === 'interrupted'
+    || (terminal.status === 'running' && !terminal.attached)
+  )) ?? [];
+  const hasPr = Boolean(prStatus?.found);
+  const readiness = reviewCockpit?.mergeReadiness?.readinessLevel ?? 'not checked';
+  const reviewRisk = reviewCockpit?.reviewSummary?.riskLevel ?? 'not summarized';
+  const nextItems = [
+    changedFiles === 0 ? 'Wait for or start agent work' : null,
+    changedFiles > 0 && reviewBlockers.length === 0 ? 'Review changed files' : null,
+    reviewBlockers.length > 0 ? 'Resolve review blockers' : null,
+    openComments.length > 0 ? 'Address PR comments' : null,
+    checkCount > 0 ? 'Run configured checks' : null,
+    unhealthySessions.length > 0 ? 'Recover stale sessions' : null,
+    changedFiles > 0 && !hasPr ? 'Prepare PR' : null,
+  ].filter((item): item is string => Boolean(item));
+
+  return (
+    <div className="px-4 pb-4">
+      <div className="rounded-xl border border-forge-border bg-forge-card/70 p-3">
+        <div className="mb-2">
+          <p className="text-xs font-semibold uppercase tracking-widest text-forge-muted">Next Actions</p>
+          <p className="mt-0.5 text-xs text-forge-muted">Simple path first. Use Deep view for full terminals, diffs, config, recovery, and checkpoint detail.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <CockpitLine label="Changes" value={`${changedFiles} file${changedFiles === 1 ? '' : 's'}`} />
+          <CockpitLine label="Review" value={`${readiness} · ${reviewRisk}`} />
+          <CockpitLine label="PR comments" value={`${openComments.length} open`} />
+          <CockpitLine label="Recovery" value={unhealthySessions.length > 0 ? `${unhealthySessions.length} need attention` : 'clear'} />
+          <CockpitLine label="Checks" value={checkCount > 0 ? `${checkCount} configured` : 'none configured'} />
+          <CockpitLine label="Checkpoints" value={`${checkpoints.length} saved`} />
+          <CockpitLine label="PR draft" value={prDraft ? 'ready to inspect' : hasPr ? 'PR already linked' : 'not previewed'} />
+        </div>
+        {nextItems.length > 0 && (
+          <div className="mt-3 space-y-1 rounded border border-forge-border/60 bg-black/10 p-2">
+            {nextItems.slice(0, 5).map((item, index) => (
+              <div key={item} className="flex items-center gap-2 text-xs">
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-forge-border bg-white/5 text-[10px] text-forge-muted">
+                  {index + 1}
+                </span>
+                <span className="text-forge-text/85">{item}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button variant="secondary" size="xs" disabled={changedFiles === 0} onClick={() => onOpenReviewFile?.()}>
+            Review changes
+          </Button>
+          <Button variant="secondary" size="xs" disabled={checkCount === 0 || busy} onClick={onRunFirstCheck}>
+            Run checks
+          </Button>
+          <Button variant="secondary" size="xs" disabled={busy} onClick={onRefreshComments}>
+            Refresh comments
+          </Button>
+          <Button variant="secondary" size="xs" disabled={hasPr || changedFiles === 0 || draftRefreshing} onClick={onRefreshDraft}>
+            {draftRefreshing ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+            {prDraft ? 'Refresh draft' : 'Preview draft'}
+          </Button>
+          {prDraft && (
+            <Button variant="secondary" size="xs" disabled={busy} onClick={onCopyDraft}>
+              Copy draft
+            </Button>
+          )}
+          <Button variant="secondary" size="xs" disabled={unhealthySessions.length === 0 || busy} onClick={onRecover}>
+            Recover
+          </Button>
+          <Button variant="secondary" size="xs" disabled={hasPr || changedFiles === 0 || busy} onClick={onCreatePr}>
+            {hasPr ? 'PR linked' : 'Create PR'}
+          </Button>
+          {prStatus?.found && prStatus.url && (
+            <Button asChild variant="secondary" size="xs">
+              <a href={prStatus.url} target="_blank" rel="noreferrer">
+                <ExternalLink className="h-3 w-3" />
+                Open PR
+              </a>
+            </Button>
+          )}
+          <Button variant="secondary" size="xs" disabled={busy} onClick={onCleanup}>
+            Cleanup
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatPrDraftMarkdown(draft: WorkspacePrDraft): string {
+  const list = (items: string[]) => items.map((item) => `- ${item}`).join('\n');
+  return [
+    `# ${draft.title}`,
+    '',
+    '## Summary',
+    draft.summary,
+    '',
+    '## Key changes',
+    list(draft.keyChanges),
+    '',
+    '## Risks',
+    list(draft.risks),
+    '',
+    '## Testing',
+    list(draft.testingNotes),
+  ].join('\n');
+}
+
 export function DetailPanel({
   workspace,
   isArchived = false,
@@ -716,6 +923,7 @@ export function DetailPanel({
   onCreateChildWorkspace,
 }: DetailPanelProps) {
   const [activeTab, setActiveTab] = useState<'status' | 'config'>('status');
+  const [statusDepth, setStatusDepth] = useState<'simple' | 'deep'>('simple');
   const [selectedLinkedWorktreeId, setSelectedLinkedWorktreeId] = useState('');
   const [prCreating, setPrCreating] = useState(false);
   const [prError, setPrError] = useState<string | null>(null);
@@ -731,6 +939,7 @@ export function DetailPanel({
   const [forgeConfig, setForgeConfig] = useState<ForgeWorkspaceConfig | null>(null);
   const [workspaceReadiness, setWorkspaceReadiness] = useState<WorkspaceReadiness | null>(null);
   const [workspacePrStatus, setWorkspacePrStatus] = useState<WorkspacePrStatus | null>(null);
+  const [workspacePrDraft, setWorkspacePrDraft] = useState<WorkspacePrDraft | null>(null);
   const [workspaceHealth, setWorkspaceHealth] = useState<WorkspaceHealth | null>(null);
   const [reviewCockpit, setReviewCockpit] = useState<WorkspaceReviewCockpit | null>(null);
   const [recoveryResult, setRecoveryResult] = useState<WorkspaceSessionRecoveryResult | null>(null);
@@ -745,6 +954,7 @@ export function DetailPanel({
   const [checkpointBusy, setCheckpointBusy] = useState(false);
   const [checkpointMessage, setCheckpointMessage] = useState<string | null>(null);
   const [cockpitLoading, setCockpitLoading] = useState(false);
+  const [prDraftRefreshing, setPrDraftRefreshing] = useState(false);
   const [reviewCommentsRefreshing, setReviewCommentsRefreshing] = useState(false);
   const [reviewMessage, setReviewMessage] = useState<string | null>(null);
   const workspaceId = workspace?.id;
@@ -764,6 +974,7 @@ export function DetailPanel({
       setForgeConfig(null);
       setWorkspaceReadiness(null);
       setWorkspacePrStatus(null);
+      setWorkspacePrDraft(null);
       setWorkspaceHealth(null);
       setReviewCockpit(null);
       setRecoveryResult(null);
@@ -784,17 +995,19 @@ export function DetailPanel({
       getWorkspaceReadiness(workspaceId),
       listWorkspacePorts(workspaceId),
       getWorkspacePrStatus(workspaceId),
+      getWorkspacePrDraft(workspaceId),
       getWorkspaceHealth(workspaceId),
       getWorkspaceReviewCockpit(workspaceId, null),
       listWorkspaceCheckpoints(workspaceId),
       getWorkspaceChangedFiles(workspaceId),
     ])
-      .then(([configResult, readinessResult, portsResult, prStatusResult, healthResult, reviewCockpitResult, checkpointsResult, changedFilesResult]) => {
+      .then(([configResult, readinessResult, portsResult, prStatusResult, prDraftResult, healthResult, reviewCockpitResult, checkpointsResult, changedFilesResult]) => {
         if (cancelled) return;
         setForgeConfig(configResult.status === 'fulfilled' ? configResult.value : null);
         setWorkspaceReadiness(readinessResult.status === 'fulfilled' ? readinessResult.value : null);
         setWorkspacePortCount(portsResult.status === 'fulfilled' ? portsResult.value.length : null);
         setWorkspacePrStatus(prStatusResult.status === 'fulfilled' ? prStatusResult.value : null);
+        setWorkspacePrDraft(prDraftResult.status === 'fulfilled' ? prDraftResult.value : null);
         setWorkspaceHealth(healthResult.status === 'fulfilled' ? healthResult.value : null);
         setReviewCockpit(reviewCockpitResult.status === 'fulfilled' ? reviewCockpitResult.value : null);
         setCheckpoints(checkpointsResult.status === 'fulfilled' ? checkpointsResult.value : []);
@@ -848,11 +1061,12 @@ export function DetailPanel({
 
   const refreshCockpitData = async () => {
     if (!workspaceId) return;
-    const [configResult, readinessResult, portsResult, prStatusResult, healthResult, reviewCockpitResult, checkpointsResult, changedFilesResult] = await Promise.allSettled([
+    const [configResult, readinessResult, portsResult, prStatusResult, prDraftResult, healthResult, reviewCockpitResult, checkpointsResult, changedFilesResult] = await Promise.allSettled([
       getWorkspaceForgeConfig(workspaceId),
       getWorkspaceReadiness(workspaceId),
       listWorkspacePorts(workspaceId),
       getWorkspacePrStatus(workspaceId),
+      getWorkspacePrDraft(workspaceId),
       getWorkspaceHealth(workspaceId),
       getWorkspaceReviewCockpit(workspaceId, null),
       listWorkspaceCheckpoints(workspaceId),
@@ -862,6 +1076,7 @@ export function DetailPanel({
     setWorkspaceReadiness(readinessResult.status === 'fulfilled' ? readinessResult.value : null);
     setWorkspacePortCount(portsResult.status === 'fulfilled' ? portsResult.value.length : null);
     setWorkspacePrStatus(prStatusResult.status === 'fulfilled' ? prStatusResult.value : null);
+    setWorkspacePrDraft(prDraftResult.status === 'fulfilled' ? prDraftResult.value : null);
     setWorkspaceHealth(healthResult.status === 'fulfilled' ? healthResult.value : null);
     setReviewCockpit(reviewCockpitResult.status === 'fulfilled' ? reviewCockpitResult.value : null);
     setCheckpoints(checkpointsResult.status === 'fulfilled' ? checkpointsResult.value : []);
@@ -913,6 +1128,34 @@ export function DetailPanel({
       setScriptActionMessage(err instanceof Error ? err.message : String(err));
     } finally {
       setScriptActionBusy(null);
+    }
+  };
+
+  const refreshPrDraftFromCockpit = async () => {
+    if (!workspaceId) return;
+    setPrDraftRefreshing(true);
+    setShippingMessage(null);
+    try {
+      const draft = await refreshWorkspacePrDraft(workspaceId);
+      setWorkspacePrDraft(draft);
+      setShippingMessage('PR draft refreshed from current changes.');
+      await refreshCockpitData();
+      onRefreshWorkspaceState?.();
+    } catch (err) {
+      setShippingMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPrDraftRefreshing(false);
+    }
+  };
+
+  const copyPrDraftFromCockpit = async () => {
+    if (!workspacePrDraft) return;
+    const markdown = formatPrDraftMarkdown(workspacePrDraft);
+    try {
+      await navigator.clipboard.writeText(markdown);
+      setShippingMessage('PR draft markdown copied to clipboard.');
+    } catch (err) {
+      setShippingMessage(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -1217,7 +1460,10 @@ export function DetailPanel({
             <div className="px-4 py-4">
               <div className="rounded-xl border border-forge-border bg-forge-card/70 p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-forge-muted">Workspace Cockpit</p>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-forge-muted">Workspace Cockpit</p>
+                    <p className="mt-0.5 text-xs text-forge-muted">Simple by default, deeper when needed.</p>
+                  </div>
                   <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-semibold ${cockpitToneClass(cockpit.nextActionTone)}`}>
                     {cockpit.nextAction}
                   </span>
@@ -1228,6 +1474,22 @@ export function DetailPanel({
                   <CockpitLine label="Checks" value={cockpit.checkSummary} />
                   <CockpitLine label="Git / PR" value={`${cockpit.prSummary} · ${cockpit.trustSummary}`} />
                 </div>
+                <div className="mt-3 inline-flex rounded-lg border border-forge-border bg-black/20 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setStatusDepth('simple')}
+                    className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${statusDepth === 'simple' ? 'bg-white/10 text-forge-text' : 'text-forge-muted hover:text-forge-text'}`}
+                  >
+                    Simple
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatusDepth('deep')}
+                    className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${statusDepth === 'deep' ? 'bg-white/10 text-forge-text' : 'text-forge-muted hover:text-forge-text'}`}
+                  >
+                    Deep
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1237,62 +1499,88 @@ export function DetailPanel({
               <p className="text-sm text-forge-text/90 leading-relaxed">{workspace.currentTask || <span className="text-forge-muted italic">No task set</span>}</p>
             </div>
 
-            <ChecksShippingPanel
-              config={forgeConfig}
-              readiness={workspaceReadiness}
-              prStatus={workspacePrStatus}
-              portCount={workspacePortCount}
-              loading={cockpitLoading}
-              actionBusy={scriptActionBusy}
-              actionMessage={scriptActionMessage}
-              onRunSetup={() => void runSetupFromCockpit()}
-              onRunCommand={(index) => void runCheckFromCockpit(index)}
-              onStopRuns={() => void stopChecksFromCockpit()}
-            />
+            {statusDepth === 'simple' ? (
+              <SimpleNextActionsPanel
+                changedFiles={changedFileCount}
+                checkCount={forgeConfig?.run.length ?? 0}
+                prStatus={workspacePrStatus}
+                prDraft={workspacePrDraft}
+                draftRefreshing={prDraftRefreshing}
+                reviewCockpit={reviewCockpit}
+                workspaceHealth={workspaceHealth}
+                checkpoints={checkpoints}
+                busy={cockpitLoading || Boolean(scriptActionBusy) || prCreating || cleanupBusy || recoveryBusy || reviewCommentsRefreshing}
+                onRunFirstCheck={() => void runCheckFromCockpit(0)}
+                onOpenReviewFile={onOpenReviewFile}
+                onRefreshComments={() => void refreshPrCommentsFromCockpit()}
+                onRefreshDraft={() => void refreshPrDraftFromCockpit()}
+                onCopyDraft={() => void copyPrDraftFromCockpit()}
+                onRecover={() => void recoverSessionsFromCockpit()}
+                onCreatePr={() => void createPrFromCockpit()}
+                onCleanup={() => void cleanupFromCockpit()}
+              />
+            ) : (
+              <>
+                <ChecksShippingPanel
+                  config={forgeConfig}
+                  readiness={workspaceReadiness}
+                  prStatus={workspacePrStatus}
+                  portCount={workspacePortCount}
+                  loading={cockpitLoading}
+                  actionBusy={scriptActionBusy}
+                  actionMessage={scriptActionMessage}
+                  onRunSetup={() => void runSetupFromCockpit()}
+                  onRunCommand={(index) => void runCheckFromCockpit(index)}
+                  onStopRuns={() => void stopChecksFromCockpit()}
+                />
 
-            <ChangeUnderstandingPanel
-              changedFiles={workspaceChangedFiles}
-              loading={cockpitLoading}
-              onOpenReviewFile={onOpenReviewFile}
-            />
+                <ChangeUnderstandingPanel
+                  changedFiles={workspaceChangedFiles}
+                  loading={cockpitLoading}
+                  onOpenReviewFile={onOpenReviewFile}
+                />
 
-            <ReviewBlockersPanel
-              cockpit={reviewCockpit}
-              loading={cockpitLoading}
-              refreshing={reviewCommentsRefreshing}
-              message={reviewMessage}
-              onRefreshComments={() => void refreshPrCommentsFromCockpit()}
-              onOpenReviewFile={onOpenReviewFile}
-            />
+                <ReviewBlockersPanel
+                  cockpit={reviewCockpit}
+                  loading={cockpitLoading}
+                  refreshing={reviewCommentsRefreshing}
+                  message={reviewMessage}
+                  onRefreshComments={() => void refreshPrCommentsFromCockpit()}
+                  onOpenReviewFile={onOpenReviewFile}
+                />
 
-            <ShippingGuidePanel
-              changedFiles={changedFileCount}
-              runCount={forgeConfig?.run.length ?? 0}
-              prStatus={workspacePrStatus}
-              prCreating={prCreating}
-              cleanupBusy={cleanupBusy}
-              message={shippingMessage}
-              onCreatePr={() => void createPrFromCockpit()}
-              onRunFirstCheck={() => void runCheckFromCockpit(0)}
-              onCleanup={() => void cleanupFromCockpit()}
-            />
+                <ShippingGuidePanel
+                  changedFiles={changedFileCount}
+                  runCount={forgeConfig?.run.length ?? 0}
+                  prStatus={workspacePrStatus}
+                  prDraft={workspacePrDraft}
+                  draftRefreshing={prDraftRefreshing}
+                  prCreating={prCreating}
+                  cleanupBusy={cleanupBusy}
+                  message={shippingMessage}
+                  onCreatePr={() => void createPrFromCockpit()}
+                  onRefreshDraft={() => void refreshPrDraftFromCockpit()}
+                  onCopyDraft={() => void copyPrDraftFromCockpit()}
+                  onRunFirstCheck={() => void runCheckFromCockpit(0)}
+                  onCleanup={() => void cleanupFromCockpit()}
+                />
 
-            <LifecyclePanel
-              isArchived={isArchived}
-              terminalHealth={workspaceReadiness?.terminalHealth}
-              workspaceHealth={workspaceHealth}
-              recoveryResult={recoveryResult}
-              cleanupBusy={cleanupBusy}
-              recoveryBusy={recoveryBusy}
-              message={shippingMessage}
-              onCleanup={() => void cleanupFromCockpit()}
-              onRecover={() => void recoverSessionsFromCockpit()}
-              onArchive={onArchiveWorkspace ? archiveFromCockpit : undefined}
-              onDelete={onDeleteWorkspace}
-            />
+                <LifecyclePanel
+                  isArchived={isArchived}
+                  terminalHealth={workspaceReadiness?.terminalHealth}
+                  workspaceHealth={workspaceHealth}
+                  recoveryResult={recoveryResult}
+                  cleanupBusy={cleanupBusy}
+                  recoveryBusy={recoveryBusy}
+                  message={shippingMessage}
+                  onCleanup={() => void cleanupFromCockpit()}
+                  onRecover={() => void recoverSessionsFromCockpit()}
+                  onArchive={onArchiveWorkspace ? archiveFromCockpit : undefined}
+                  onDelete={onDeleteWorkspace}
+                />
 
-            {/* Safe Iteration */}
-            <div className="px-4 pb-4">
+                {/* Safe Iteration */}
+                <div className="px-4 pb-4">
               <div className="rounded-xl border border-forge-border bg-forge-card/70 p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div>
@@ -1392,8 +1680,8 @@ export function DetailPanel({
               </div>
             </div>
 
-            {/* Pull Request — prominent, dev-flow first */}
-            <div className="px-4 pb-4">
+                {/* Pull Request — prominent, dev-flow first */}
+                <div className="px-4 pb-4">
               {workspace.prStatus && workspace.prNumber ? (
                 <div className="flex items-center gap-2.5 rounded-lg bg-forge-green/10 border border-forge-green/20 px-3 py-2.5">
                   <GitPullRequest className="w-4 h-4 text-forge-green shrink-0" />
@@ -1416,6 +1704,8 @@ export function DetailPanel({
                 </>
               )}
             </div>
+              </>
+            )}
 
             {/* Activity — collapsed by default */}
             <div className="px-4 pb-2">
