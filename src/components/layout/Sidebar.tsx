@@ -4,7 +4,6 @@ import {
   ClipboardCheck,
   Filter,
   FolderPlus,
-  GitBranch,
   LayoutGrid,
   Plus,
   Search,
@@ -26,8 +25,6 @@ import { getOrchestratorStatus, setOrchestratorEnabled } from '../../lib/tauri-a
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
-import { StatusBadge } from '../workspaces/StatusBadge';
-
 import {
   Select,
   SelectTrigger,
@@ -35,6 +32,7 @@ import {
   SelectContent,
   SelectItem,
 } from '../ui/select';
+import { WorkspaceListItem } from '../workspaces/WorkspaceListItem';
 
 export type NavView = 'workspaces' | 'reviews' | 'settings' | 'memory';
 
@@ -399,9 +397,12 @@ export function Sidebar({
                     const isArchived = archivedSet.has(workspace.id);
 
                     return (
-                      <div
+                      <WorkspaceListItem
                         key={workspace.id}
-                        className="relative group"
+                        workspace={workspace}
+                        isSelected={isSelected}
+                        isHovered={isHovered}
+                        showRepo={false}
                         onMouseEnter={() => {
                           if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
                           setHoveredId(workspace.id);
@@ -409,72 +410,43 @@ export function Sidebar({
                         onMouseLeave={() => {
                           hoverTimeoutRef.current = setTimeout(() => setHoveredId(null), 150);
                         }}
-                      >
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => {
-                            onNavigate('workspaces');
-                            onSelectWorkspace(workspace.id);
-                          }}
-                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { onNavigate('workspaces'); onSelectWorkspace(workspace.id); } }}
-                          className={`w-full cursor-pointer rounded-md px-2.5 py-2 text-left transition-colors relative overflow-hidden ${
-                            isSelected
-                              ? 'bg-forge-green/12 border border-forge-green/30'
-                              : 'border border-transparent hover:bg-forge-surface-overlay'
-                          } ${isHovered ? 'pr-8' : ''}`}
-                        >
-                          <div className="flex items-start gap-2">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); toggleBatchSelect(workspace.id); }}
-                              className={`mt-0.5 shrink-0 transition-opacity ${batchMode || isHovered ? 'opacity-100' : 'opacity-0'}`}
-                              title="Select for batch send"
-                            >
-                              {batchSelected.has(workspace.id)
-                                ? <CheckSquare className="w-3.5 h-3.5 text-forge-green" />
-                                : <SquareIcon className="w-3.5 h-3.5 text-forge-muted" />}
-                            </button>
-                            <div className="relative mt-0.5">
-                              <GitBranch className={`w-3.5 h-3.5 ${isSelected ? 'text-forge-green' : 'text-forge-muted'}`} />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex min-w-0 items-center gap-1.5">
-                                <p className={`truncate text-sm font-semibold ${isSelected ? 'text-forge-text' : 'text-forge-text/90'}`}>
-                                  {workspace.name}
-                                </p>
-                                
-                                <div className="ml-auto flex items-center gap-1">
-                                  {!!attention?.unreadCount && (
-                                    <span className="shrink-0 rounded-full bg-forge-orange px-1.5 py-0.5 text-[10px] font-bold text-white shadow-amber-glow">
-                                      {attention.unreadCount > 99 ? '99+' : attention.unreadCount}
-                                    </span>
-                                  )}
-                                  
-                                  <StatusBadge status={workspace.status} iconOnly />
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Archive button — shown on hover; preserves branch/worktree/files. */}
-                        {isHovered && (
-                          <div className={`absolute right-1 top-1/2 -translate-y-1/2 flex items-center pl-4 bg-gradient-to-l ${isSelected ? 'from-[#0d1a14] via-[#0d1a14]' : 'from-forge-surface via-forge-surface'} to-transparent h-[80%] rounded-r-md`}>
-                            <Button
-                              variant="ghost"
-                              size="icon-xs"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onArchiveWorkspace(workspace.id);
-                              }}
-                              className="text-forge-muted hover:bg-forge-green/15 hover:text-forge-green"
-                              title={`${isArchived ? 'Unarchive' : 'Archive'} workspace "${workspace.name}" — keeps branch/worktree/files`}
-                            >
-                              {isArchived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
-                            </Button>
-                          </div>
-                        )}
-                      </div>
+                        onClick={() => {
+                          onNavigate('workspaces');
+                          onSelectWorkspace(workspace.id);
+                        }}
+                        prefix={
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleBatchSelect(workspace.id); }}
+                            className={`mt-0.5 shrink-0 transition-opacity ${batchMode || isHovered ? 'opacity-100' : 'opacity-0'}`}
+                            title="Select for batch send"
+                          >
+                            {batchSelected.has(workspace.id)
+                              ? <CheckSquare className="w-3.5 h-3.5 text-forge-green" />
+                              : <SquareIcon className="w-3.5 h-3.5 text-forge-muted" />}
+                          </button>
+                        }
+                        suffix={
+                          !!attention?.unreadCount && (
+                            <span className="shrink-0 rounded-full bg-forge-orange px-1.5 py-0.5 text-[10px] font-bold text-white shadow-amber-glow">
+                              {attention.unreadCount > 99 ? '99+' : attention.unreadCount}
+                            </span>
+                          )
+                        }
+                        actions={
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onArchiveWorkspace(workspace.id);
+                            }}
+                            className="text-forge-muted hover:bg-forge-green/15 hover:text-forge-green"
+                            title={`${isArchived ? 'Unarchive' : 'Archive'} workspace "${workspace.name}" — keeps branch/worktree/files`}
+                          >
+                            {isArchived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
+                          </Button>
+                        }
+                      />
                     );
                   })
                 )}

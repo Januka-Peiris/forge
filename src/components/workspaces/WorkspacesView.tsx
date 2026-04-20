@@ -115,7 +115,7 @@ export function WorkspacesView({
                 <LayoutGrid className="h-4 w-4 text-forge-green" />
                 <h2 className="text-ui-subhead font-bold text-forge-text uppercase tracking-wider">All Workspaces</h2>
               </div>
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+              <div className="flex flex-col gap-2">
                 {workspaces.map((workspace) => (
                   <div
                     key={workspace.id}
