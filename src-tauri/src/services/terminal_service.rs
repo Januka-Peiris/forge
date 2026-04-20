@@ -891,11 +891,24 @@ pub fn queue_workspace_agent_prompt(
         input.profile.as_deref(),
     )?;
     if resolved_profile.agent == "local_llm" || resolved_profile.local {
-        prompt = agent_profile_service::local_llm_prompt_envelope(
-            &resolved_profile,
-            input.task_mode.as_deref(),
-            &prompt,
-        );
+        let should_send_envelope = terminal_repository::get_active_session_id_for_workspace(
+            &state.db,
+            &input.workspace_id,
+        )
+        .ok()
+        .flatten()
+        .and_then(|session_id| {
+            terminal_repository::count_sent_prompts_for_session(&state.db, &session_id).ok()
+        })
+        .map(|count| count == 0)
+        .unwrap_or(true);
+        if should_send_envelope {
+            prompt = agent_profile_service::local_llm_prompt_envelope(
+                &resolved_profile,
+                input.task_mode.as_deref(),
+                &prompt,
+            );
+        }
     } else {
         let metadata = agent_profile_service::prompt_metadata_preamble_for_workspace(
             state,
@@ -1497,7 +1510,7 @@ fn dispatch_prompt_entry(state: &AppState, entry: &mut AgentPromptEntry) -> Resu
     // Agent TUIs (claude, codex) run in raw terminal mode where Enter is \r (0x0D),
     // not \n (0x0A). Sending \r\n covers both raw-mode TUIs and cooked-mode shells.
     writer
-        .write_all(format!("{}\r\n", entry.prompt).as_bytes())
+        .write_all(terminal_prompt_payload_for_session(&session, &entry.prompt).as_bytes())
         .map_err(|err| format!("Failed to write prompt to terminal: {err}"))?;
     writer
         .flush()
@@ -1519,6 +1532,25 @@ fn dispatch_prompt_entry(state: &AppState, entry: &mut AgentPromptEntry) -> Resu
         &format!("\r\n[forge] queued prompt sent at {sent_at}\r\n"),
     );
     Ok(())
+}
+
+fn terminal_prompt_payload_for_session(session: &TerminalSession, prompt: &str) -> String {
+    if is_ollama_terminal_session(session) && prompt.contains('\n') {
+        return format!(
+            "\"\"\"\n{}\n\"\"\"\r\n",
+            escape_ollama_multiline_prompt(prompt)
+        );
+    }
+    format!("{prompt}\r\n")
+}
+
+fn is_ollama_terminal_session(session: &TerminalSession) -> bool {
+    let command = session.command.to_ascii_lowercase();
+    command.ends_with("/ollama") || command == "ollama" || command.contains("ollama")
+}
+
+fn escape_ollama_multiline_prompt(prompt: &str) -> String {
+    prompt.replace("\"\"\"", "\\\"\\\"\\\"")
 }
 
 fn append_log_line(
@@ -1741,6 +1773,34 @@ mod tests {
         assert!(details.contains("profile: codex"));
         assert!(details.contains("pid: 42"));
         assert!(details.contains("/tmp/forge-workspace"));
+    }
+
+    #[test]
+    fn formats_ollama_multiline_prompt_as_single_repl_message() {
+        let session = TerminalSession {
+            id: "term-local".to_string(),
+            workspace_id: "ws-123".to_string(),
+            session_role: "agent".to_string(),
+            profile: "qwen-local".to_string(),
+            cwd: "/tmp/forge-workspace".to_string(),
+            status: "running".to_string(),
+            started_at: "now".to_string(),
+            ended_at: None,
+            command: "/usr/local/bin/ollama".to_string(),
+            args: vec!["run".to_string(), "qwen2.5-coder:7b".to_string()],
+            pid: None,
+            stale: false,
+            closed_at: None,
+            backend: "pty".to_string(),
+            title: "Ollama qwen".to_string(),
+            terminal_kind: "agent".to_string(),
+            display_order: 0,
+            is_visible: true,
+            last_attached_at: None,
+            last_captured_seq: 0,
+        };
+        let payload = terminal_prompt_payload_for_session(&session, "line one\nline two");
+        assert_eq!(payload, "\"\"\"\nline one\nline two\n\"\"\"\r\n");
     }
 
     #[test]
