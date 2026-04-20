@@ -1,4 +1,4 @@
-use std::net::{TcpStream, ToSocketAddrs};
+use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::process::Command;
 use std::time::Duration;
 
@@ -137,35 +137,78 @@ fn endpoint_reachability_check(profile: &AgentProfile) -> Option<LocalLlmProfile
         return Some(diagnostic_check(
             "Endpoint reachability",
             "warning",
-            "Could not parse local endpoint host/port.",
+            "Could not parse local endpoint host/port. This metadata is optional for CLI launch profiles.",
         ));
     };
-    let addr = format!("{host}:{port}");
-    match addr
-        .to_socket_addrs()
-        .ok()
-        .and_then(|mut addrs| addrs.next())
-    {
-        Some(socket_addr) => {
-            match TcpStream::connect_timeout(&socket_addr, Duration::from_millis(500)) {
-                Ok(_) => Some(diagnostic_check(
-                    "Endpoint reachability",
-                    "ok",
-                    &format!("{addr} accepted a TCP connection."),
-                )),
-                Err(err) => Some(diagnostic_check(
-                    "Endpoint reachability",
-                    "warning",
-                    &format!("{addr} did not accept a TCP connection: {err}"),
-                )),
-            }
-        }
-        None => Some(diagnostic_check(
+
+    let addresses = endpoint_socket_addresses(&host, port);
+    if addresses.is_empty() {
+        return Some(diagnostic_check(
             "Endpoint reachability",
             "warning",
-            &format!("Could not resolve {addr}."),
-        )),
+            &format!(
+                "Could not resolve {host}:{port}. This HTTP endpoint is optional for CLI launch profiles."
+            ),
+        ));
     }
+
+    let mut errors = Vec::new();
+    for socket_addr in addresses {
+        match TcpStream::connect_timeout(&socket_addr, Duration::from_millis(500)) {
+            Ok(_) => {
+                return Some(diagnostic_check(
+                    "Endpoint reachability",
+                    "ok",
+                    &format!("{socket_addr} accepted a TCP connection."),
+                ));
+            }
+            Err(err) => errors.push(format!("{socket_addr}: {err}")),
+        }
+    }
+
+    Some(diagnostic_check(
+        "Endpoint reachability",
+        "warning",
+        &format!(
+            "Optional local HTTP endpoint {host}:{port} was not reachable over TCP. Forge can still launch this CLI profile if the command and model checks pass. Last error: {}",
+            errors
+                .last()
+                .cloned()
+                .unwrap_or_else(|| "unknown connection failure".to_string())
+        ),
+    ))
+}
+
+fn endpoint_socket_addresses(host: &str, port: u16) -> Vec<SocketAddr> {
+    let mut candidates = Vec::new();
+    let mut push_addrs = |host: &str| {
+        if let Ok(addrs) = (host, port).to_socket_addrs() {
+            for addr in addrs {
+                if !candidates.contains(&addr) {
+                    candidates.push(addr);
+                }
+            }
+        }
+    };
+
+    match host {
+        "localhost" => {
+            push_addrs("127.0.0.1");
+            push_addrs("::1");
+            push_addrs("localhost");
+        }
+        "127.0.0.1" => {
+            push_addrs("127.0.0.1");
+            push_addrs("localhost");
+        }
+        "::1" => {
+            push_addrs("::1");
+            push_addrs("localhost");
+        }
+        other => push_addrs(other),
+    }
+
+    candidates
 }
 
 fn ollama_model_check(profile: &AgentProfile) -> LocalLlmProfileDiagnosticCheck {
@@ -407,5 +450,37 @@ mod tests {
             Some(("localhost".to_string(), 443))
         );
         assert_eq!(parse_local_endpoint_host_port("https://example.com"), None);
+    }
+
+    #[test]
+    fn localhost_endpoint_addresses_include_ipv4_and_ipv6_loopbacks() {
+        let addresses = endpoint_socket_addresses("localhost", 11434);
+        assert!(addresses
+            .iter()
+            .any(|addr| addr.ip().is_loopback() && addr.port() == 11434));
+        assert!(addresses.len() >= 1);
+    }
+
+    #[test]
+    fn unreachable_local_endpoint_is_warning_not_error() {
+        let profile = AgentProfile {
+            id: "endpoint-warning".to_string(),
+            label: "Endpoint Warning".to_string(),
+            agent: "local_llm".to_string(),
+            command: "ollama".to_string(),
+            args: vec![],
+            model: None,
+            reasoning: None,
+            mode: None,
+            provider: Some("ollama".to_string()),
+            endpoint: Some("http://127.0.0.1:9".to_string()),
+            local: true,
+            description: None,
+            skills: vec![],
+            templates: vec![],
+        };
+        let check = endpoint_reachability_check(&profile).expect("endpoint check");
+        assert_eq!(check.status, "warning");
+        assert!(check.message.contains("optional") || check.message.contains("Optional"));
     }
 }

@@ -1,5 +1,5 @@
 export type WorkspaceStatus = 'Running' | 'Waiting' | 'Review Ready' | 'Blocked' | 'Merged';
-export type AgentType = 'Claude Code' | 'Codex';
+export type AgentType = 'Claude Code' | 'Codex' | 'Local LLM';
 export type WorkspaceStep = 'Planning' | 'Editing' | 'Testing' | 'Review';
 export type PRStatus = 'Open' | 'Draft' | 'Merged' | 'Closed' | null;
 export type RiskLevel = 'Low' | 'Medium' | 'High';

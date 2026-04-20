@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ChevronDown, Copy, ExternalLink, Globe2, MoreHorizontal, PlugZap, RefreshCw, RotateCcw, Square, Terminal as TerminalIcon, Wrench } from 'lucide-react';
 import { Button } from '../ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '../ui/dropdown-menu';
-import type { ForgeWorkspaceConfig, TerminalProfile, TerminalSession, Workspace, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
+import type { AgentProfile, ForgeWorkspaceConfig, TerminalProfile, TerminalSession, Workspace, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
 import { PROFILE_LABELS } from './workspace-terminal-constants';
 import {
   WorkspaceCommandsStrip,
@@ -27,9 +27,10 @@ interface WorkspaceHeaderProps {
   busy: boolean;
   error: string | null;
   focusedSession: TerminalSession | null;
+  agentProfiles: AgentProfile[];
   onOpenInCursor?: () => void;
   onCreateChatSession: (provider: 'claude_code' | 'codex', title?: string) => void;
-  onCreateTerminal: (kind: 'agent' | 'shell', profile: TerminalProfile, title?: string) => void;
+  onCreateTerminal: (kind: 'agent' | 'shell', profile: TerminalProfile, title?: string, profileId?: string) => void;
   onCopyFocusedOutput: () => void;
   onInterruptFocusedAgent: () => void;
   onRunSetup: () => void;
@@ -59,6 +60,7 @@ export function WorkspaceHeader({
   busy,
   error,
   focusedSession,
+  agentProfiles,
   onOpenInCursor,
   onCreateChatSession,
   onCreateTerminal,
@@ -83,6 +85,7 @@ export function WorkspaceHeader({
     setActiveTab((v) => (v === tab ? null : tab));
 
   const showStrips = forgeConfig !== null || workspaceReadiness !== null || workspaceHealth !== null;
+  const localAgentProfiles = agentProfiles.filter((profile) => profile.agent === 'local_llm' || profile.local);
 
   return (
     <div className="sticky top-0 z-10 shrink-0 border-b border-forge-border bg-forge-surface/95 px-4 py-2 backdrop-blur">
@@ -168,6 +171,20 @@ export function WorkspaceHeader({
               <DropdownMenuItem disabled={busy} onSelect={() => onCreateChatSession('claude_code', 'Claude Chat')}>
                 New Claude tab
               </DropdownMenuItem>
+              {localAgentProfiles.length > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  {localAgentProfiles.map((profile) => (
+                    <DropdownMenuItem
+                      key={profile.id}
+                      disabled={busy}
+                      onSelect={() => onCreateTerminal('agent', profile.agent as TerminalProfile, profile.label, profile.id)}
+                    >
+                      New {profile.label} tab
+                    </DropdownMenuItem>
+                  ))}
+                </>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem disabled={!focusedSession} onSelect={onCopyFocusedOutput}>
                 <Copy className="h-3.5 w-3.5" /> Copy output

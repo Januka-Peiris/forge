@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Plus, Terminal as TerminalIcon, X } from 'lucide-react';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { ForgeWorkspaceConfig, TerminalOutputChunk, TerminalOutputEvent, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
+import type { AgentProfile, ForgeWorkspaceConfig, TerminalOutputChunk, TerminalOutputEvent, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
 import type { AgentChatEvent, AgentChatEventEnvelope, AgentChatNextAction, AgentChatSession } from '../../types/agent-chat';
 import type { WorkspaceChangedFile } from '../../types/git-review';
 import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
@@ -98,6 +98,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   const [changedFiles, setChangedFiles] = useState<WorkspaceChangedFile[]>([]);
   const [reviewCockpit, setReviewCockpit] = useState<WorkspaceReviewCockpit | null>(null);
   const [acceptedPlans, setAcceptedPlans] = useState<Record<string, string>>({});
+  const [agentProfiles, setAgentProfiles] = useState<AgentProfile[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useAgentProfile();
   const [composerSettings, setComposerSettings] = useState<ComposerSettings>({
     selectedClaudeAgent: 'general-purpose',
@@ -327,7 +328,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         'Recover stale or unhealthy sessions?',
         '',
         'Forge will close stale, detached, stuck, failed, or interrupted terminal sessions in the active view while preserving their history.',
-        'After recovery, start a fresh Claude/Codex tab when you are ready.',
+        'After recovery, start a fresh agent tab when you are ready.',
       ].join('\n'),
     );
     if (!confirmed) return;
@@ -374,11 +375,13 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   const refreshAgentProfiles = useCallback(async () => {
     try {
       const profiles = await listWorkspaceAgentProfiles(workspaceId);
+      setAgentProfiles(profiles);
       setSelectedProfileId((current) =>
         profiles.some((profile) => profile.id === current) ? current : defaultWorkspaceAgentProfileId(profiles),
       );
     } catch (err) {
       forgeWarn('agent-profiles', 'load error', { err });
+      setAgentProfiles([]);
     }
   }, [setSelectedProfileId, workspaceId]);
 
@@ -943,9 +946,10 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         busy={busy}
         error={error}
         focusedSession={focusedSession}
+        agentProfiles={agentProfiles}
         onOpenInCursor={onOpenInCursor}
         onCreateChatSession={(provider, title) => void createChatSession(provider, title)}
-        onCreateTerminal={(kind, profile, title) => void createTerminal(kind, profile, title)}
+        onCreateTerminal={(kind, profile, title, profileId) => void createTerminal(kind, profile, title, profileId)}
         onCopyFocusedOutput={() => void copyFocusedOutput()}
         onInterruptFocusedAgent={() => void interruptFocusedAgent()}
         onRunSetup={() => void runSetup()}
@@ -1051,6 +1055,16 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                 <div className="mt-4 flex flex-wrap justify-center gap-2">
                   <button disabled={busy} onClick={() => void createChatSession('claude_code', 'Claude Chat')} className="rounded-lg bg-forge-orange px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Start Claude</button>
                   <button disabled={busy} onClick={() => void createChatSession('codex', 'Codex Chat')} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">Start Codex</button>
+                  {agentProfiles.filter((profile) => profile.agent === 'local_llm' || profile.local).slice(0, 2).map((profile) => (
+                    <button
+                      key={profile.id}
+                      disabled={busy}
+                      onClick={() => void createTerminal('agent', profile.agent as TerminalProfile, profile.label, profile.id)}
+                      className="rounded-lg border border-forge-green/30 bg-forge-green/10 px-3 py-2 text-sm font-semibold text-forge-green disabled:opacity-50"
+                    >
+                      Start {profile.label}
+                    </button>
+                  ))}
                   <button disabled={busy} onClick={() => void createTerminal('shell', 'shell', 'Shell')} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">New Shell</button>
                 </div>
               </div>
