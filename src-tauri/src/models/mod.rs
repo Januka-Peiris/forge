@@ -48,7 +48,7 @@ pub use deep_link::{OpenDeepLinkInput, OpenDeepLinkResult};
 pub use environment::EnvironmentCheckItem;
 pub use git_review::{WorkspaceChangedFile, WorkspaceFileDiff};
 pub use local_llm::{LocalLlmModel, LocalLlmProfileDiagnostic, LocalLlmProfileDiagnosticCheck};
-pub use merge_readiness::WorkspaceMergeReadiness;
+pub use merge_readiness::{PreFlightCheck, WorkspaceMergeReadiness};
 pub use orchestrator::{OrchestratorAction, OrchestratorStatus};
 pub use pr_draft::{WorkspacePrCheck, WorkspacePrDraft, WorkspacePrResult, WorkspacePrStatus};
 pub use prompt_template::{PromptTemplate, WorkspacePromptTemplates};

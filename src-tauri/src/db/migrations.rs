@@ -195,6 +195,7 @@ pub fn run(connection: &Connection) -> Result<(), String> {
                 behind_count INTEGER,
                 active_run_status TEXT,
                 review_risk_level TEXT,
+                pre_flight_checks TEXT NOT NULL DEFAULT '[]',
                 generated_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
@@ -475,6 +476,12 @@ pub fn run(connection: &Connection) -> Result<(), String> {
     )?;
     add_column_if_missing(connection, "workspaces", "cost_limit_usd", "REAL")?;
     add_column_if_missing(connection, "agent_chat_sessions", "closed_at", "TEXT")?;
+    add_column_if_missing(
+        connection,
+        "merge_readiness",
+        "pre_flight_checks",
+        "TEXT NOT NULL DEFAULT '[]'",
+    )?;
 
     // Workspace templates table
     connection

@@ -54,7 +54,7 @@ pub fn check_command_safety(command: &str) -> CommandSafetyResult {
 
     // 1. Check for blocked/extremely risky patterns
     for (pattern, desc) in DESTRUCTIVE_PATTERNS {
-        if command.contains(pattern) {
+        if lower.contains(pattern) {
             safety_level = SafetyLevel::Risky;
             category = "destructive".to_string();
             explanation = format!("This command involves potentially destructive actions: {desc}.");
@@ -64,7 +64,7 @@ pub fn check_command_safety(command: &str) -> CommandSafetyResult {
 
     // 2. Check for risky Git operations
     for (pattern, desc) in GIT_RISKY_PATTERNS {
-        if command.contains(pattern) {
+        if lower.contains(pattern) {
             safety_level = SafetyLevel::Risky;
             category = "git_destructive".to_string();
             explanation = format!("This Git command is considered risky: {desc}.");
@@ -74,13 +74,13 @@ pub fn check_command_safety(command: &str) -> CommandSafetyResult {
 
     // 3. Detect category if not set
     if category == "general" {
-        if command.starts_with("git ") {
+        if lower.starts_with("git ") {
             category = "git".to_string();
-        } else if command.starts_with("npm ") || command.starts_with("pnpm ") || command.starts_with("yarn ") {
+        } else if lower.starts_with("npm ") || lower.starts_with("pnpm ") || lower.starts_with("yarn ") {
             category = "node".to_string();
             safety_level = SafetyLevel::Informational;
             explanation = "This command involves Node.js package management or scripts.".to_string();
-        } else if command.starts_with("cargo ") {
+        } else if lower.starts_with("cargo ") {
             category = "rust".to_string();
             safety_level = SafetyLevel::Informational;
             explanation = "This command involves Rust/Cargo operations.".to_string();
@@ -89,8 +89,8 @@ pub fn check_command_safety(command: &str) -> CommandSafetyResult {
 
     // 4. Override to Safe if it matches known safe patterns (and no risks found)
     if risks.is_empty() {
-        let cmd_start = command.split_whitespace().next().unwrap_or("");
-        if SAFE_PATTERNS.contains(&cmd_start) || (command.starts_with("git ") && SAFE_PATTERNS.contains(&command.split_whitespace().nth(1).unwrap_or(""))) {
+        let cmd_start = lower.split_whitespace().next().unwrap_or("");
+        if SAFE_PATTERNS.contains(&cmd_start) || (lower.starts_with("git ") && SAFE_PATTERNS.contains(&lower.split_whitespace().nth(1).unwrap_or(""))) {
             safety_level = SafetyLevel::Safe;
             explanation = "This is a recognized safe command for inspection or reporting.".to_string();
         }
