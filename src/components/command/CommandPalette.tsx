@@ -45,9 +45,10 @@ interface CommandPaletteProps {
   onOpenReviewFile: (path: string) => void;
   onOpenReviewComment: (commentId: string, path?: string | null) => void;
   onCheckEnvironment: () => void | Promise<void>;
+  onShowShortcuts: () => void;
 }
 
-export function CommandPalette({ open, workspaces, selectedWorkspace, changedFiles, onClose, onSelectWorkspace, onOpenWorkspace, onOpenReviewFile, onOpenReviewComment, onCheckEnvironment }: CommandPaletteProps) {
+export function CommandPalette({ open, workspaces, selectedWorkspace, changedFiles, onClose, onSelectWorkspace, onOpenWorkspace, onOpenReviewFile, onOpenReviewComment, onCheckEnvironment, onShowShortcuts }: CommandPaletteProps) {
   const [query, setQuery] = useState('');
   const [sessions, setSessions] = useState<TerminalSession[]>([]);
   const [comments, setComments] = useState<WorkspacePrComment[]>([]);
@@ -232,6 +233,14 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
         icon: 'action' as const,
         run: onCheckEnvironment,
       },
+      {
+        id: 'action-show-shortcuts',
+        title: 'Show keyboard shortcuts',
+        subtitle: 'Help · focus, navigation, review, and composer shortcuts',
+        keywords: 'keyboard shortcuts help focus navigation hotkeys',
+        icon: 'action' as const,
+        run: onShowShortcuts,
+      },
     ];
     const actionItems = selectedWorkspace ? [
       {
@@ -292,7 +301,7 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
       },
     ] : [];
     return [...directPromptItem, ...globalActionItems, ...agentItems, ...actionItems, ...workspaceItems, ...fileItems, ...terminalItems, ...commentItems];
-  }, [agentProfiles, changedFiles, comments, onCheckEnvironment, onOpenReviewComment, onOpenReviewFile, onOpenWorkspace, onSelectWorkspace, paletteChangedFiles, query, readiness, runCommands, selectedWorkspace, sessions, terminalSearchResults, workspaces]);
+  }, [agentProfiles, changedFiles, comments, onCheckEnvironment, onOpenReviewComment, onOpenReviewFile, onOpenWorkspace, onSelectWorkspace, onShowShortcuts, paletteChangedFiles, query, readiness, runCommands, selectedWorkspace, sessions, terminalSearchResults, workspaces]);
 
   useEffect(() => {
     if (!open || !openPerfMarkRef.current) return;

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link2, ListChecks, RefreshCw, Settings2, Zap } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
@@ -89,10 +89,17 @@ export function WorkspaceComposer({
   const [contextPreview, setContextPreview] = useState<WorkspaceContextPreview | null>(null);
   const [contextBusy, setContextBusy] = useState(false);
   const [contextError, setContextError] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     window.localStorage.setItem(AGENT_COMPOSER_HEIGHT_KEY, String(composerHeight));
   }, [composerHeight]);
+
+  useEffect(() => {
+    const onFocusComposer = () => textareaRef.current?.focus();
+    window.addEventListener('forge:focus-composer', onFocusComposer);
+    return () => window.removeEventListener('forge:focus-composer', onFocusComposer);
+  }, []);
 
   const promptMeter = useMemo(() => {
     if (!promptInput.trim()) return null;
@@ -465,6 +472,8 @@ export function WorkspaceComposer({
 
         <div className="flex min-h-0 flex-1 gap-2">
           <textarea
+            ref={textareaRef}
+            data-forge-composer="true"
             value={promptInput}
             onChange={(e) => setPromptInput(e.target.value)}
             rows={5}
@@ -475,6 +484,7 @@ export function WorkspaceComposer({
             }
             className="h-full min-h-0 w-0 flex-1 resize-none overflow-y-auto rounded border border-forge-border bg-forge-bg px-3 py-2 text-sm leading-relaxed text-forge-text placeholder:text-forge-muted focus:border-forge-green/40 focus:outline-none"
             onKeyDown={(e) => {
+              if (e.key === 'Escape') { e.currentTarget.blur(); return; }
               if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); onTogglePlanMode(); return; }
               if (e.key !== 'Enter' || e.shiftKey) return;
               if ('isComposing' in e.nativeEvent && e.nativeEvent.isComposing) return;

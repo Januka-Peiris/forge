@@ -75,12 +75,13 @@ export function AgentChatPanel({
           <div className="flex shrink-0 items-center gap-3">
             {tab === 'chat' && (
               <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-forge-bg/50 border border-forge-border/40">
-                <span className={`text-ui-tiny font-bold uppercase tracking-tighter ${chatMode === 'clean' ? 'text-forge-green' : 'text-forge-muted'}`}>Clean</span>
+                <span title="Conversation-first view: hides compact tool, file, and command timeline events." className={`text-ui-tiny font-bold uppercase tracking-tighter ${chatMode === 'clean' ? 'text-forge-green' : 'text-forge-muted'}`}>Chat</span>
                 <Switch 
+                  title="Toggle between Chat and Activity views"
                   checked={chatMode === 'full'} 
                   onCheckedChange={(full) => setChatMode(full ? 'full' : 'clean')} 
                 />
-                <span className={`text-ui-tiny font-bold uppercase tracking-tighter ${chatMode === 'full' ? 'text-forge-green' : 'text-forge-muted'}`}>Log</span>
+                <span title="Activity view: includes compact tool, file, command, and test timeline events." className={`text-ui-tiny font-bold uppercase tracking-tighter ${chatMode === 'full' ? 'text-forge-green' : 'text-forge-muted'}`}>Activity</span>
               </div>
             )}
             <TabsList>
