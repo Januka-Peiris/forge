@@ -240,6 +240,35 @@ pub fn prompt_metadata_preamble(
     lines.join("\n")
 }
 
+pub fn local_llm_prompt_envelope(
+    profile: &AgentProfile,
+    task_mode: Option<&str>,
+    prompt: &str,
+) -> String {
+    let mode = task_mode.or(profile.mode.as_deref()).unwrap_or("act");
+    let model = profile.model.as_deref().unwrap_or("local model");
+    let provider = profile.provider.as_deref().unwrap_or("local");
+    let instruction = match mode.to_ascii_lowercase().as_str() {
+        "plan" => "Plan first. Be explicit about assumptions and ask before suggesting risky changes.",
+        "review" => "Review for correctness, risks, tests, and actionable issues. Do not invent repository facts.",
+        "fix" => "Suggest the smallest safe fix and include validation steps.",
+        _ => "Help with the user's software-development task. Be concise, practical, and honest about uncertainty.",
+    };
+    format!(
+        "You are a local Forge coding assistant running via {provider} using model {model}.
+
+Important:
+- Treat the text after `User request:` as the task.
+- Do not explain this profile/configuration unless the user asks.
+- You do not have automatic file or shell tool access in this terminal; when code changes are needed, provide exact commands or patches the user can run.
+- {instruction}
+
+User request:
+{}",
+        prompt.trim()
+    )
+}
+
 pub fn prompt_metadata_preamble_for_workspace(
     state: &AppState,
     workspace_id: Option<&str>,
@@ -470,6 +499,34 @@ mod tests {
         assert!(preamble.contains("Runtime: local"));
         assert!(preamble.contains("Provider: ollama"));
         assert!(preamble.contains("Endpoint: http://localhost:11434"));
+    }
+
+    #[test]
+    fn local_llm_prompt_envelope_avoids_generic_profile_metadata() {
+        let profile = AgentProfile {
+            id: "qwen-local".to_string(),
+            label: "Qwen Local".to_string(),
+            agent: "local_llm".to_string(),
+            command: "ollama".to_string(),
+            args: vec!["run".to_string(), "qwen2.5-coder:7b".to_string()],
+            model: Some("qwen2.5-coder:7b".to_string()),
+            reasoning: None,
+            mode: Some("act".to_string()),
+            provider: Some("ollama".to_string()),
+            endpoint: Some("http://localhost:11434".to_string()),
+            local: true,
+            description: None,
+            skills: vec![],
+            templates: vec![],
+        };
+        let envelope = local_llm_prompt_envelope(&profile, Some("Act"), "fix the failing test");
+        assert!(envelope.contains(
+            "User request:
+fix the failing test"
+        ));
+        assert!(!envelope.contains("Forge agent profile:"));
+        assert!(!envelope.contains("- Profile:"));
+        assert!(envelope.contains("Do not explain this profile/configuration"));
     }
 
     #[test]

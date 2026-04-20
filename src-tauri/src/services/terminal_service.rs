@@ -890,15 +890,23 @@ pub fn queue_workspace_agent_prompt(
         input.profile_id.as_deref(),
         input.profile.as_deref(),
     )?;
-    let metadata = agent_profile_service::prompt_metadata_preamble_for_workspace(
-        state,
-        Some(&input.workspace_id),
-        &resolved_profile,
-        input.task_mode.as_deref(),
-        input.reasoning.as_deref(),
-    );
-    if !prompt.contains("Forge agent profile:") {
-        prompt = format!("{metadata}\n\nUser request:\n{prompt}");
+    if resolved_profile.agent == "local_llm" || resolved_profile.local {
+        prompt = agent_profile_service::local_llm_prompt_envelope(
+            &resolved_profile,
+            input.task_mode.as_deref(),
+            &prompt,
+        );
+    } else {
+        let metadata = agent_profile_service::prompt_metadata_preamble_for_workspace(
+            state,
+            Some(&input.workspace_id),
+            &resolved_profile,
+            input.task_mode.as_deref(),
+            input.reasoning.as_deref(),
+        );
+        if !prompt.contains("Forge agent profile:") {
+            prompt = format!("{metadata}\n\nUser request:\n{prompt}");
+        }
     }
     let profile = resolved_profile.id.clone();
     let mut entry = AgentPromptEntry {
