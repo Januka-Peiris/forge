@@ -13,17 +13,13 @@ import {
   Search,
   Terminal,
   XCircle,
-  Play,
-  AlertCircle,
 } from 'lucide-react';
 import type { AgentChatEvent, AgentChatNextAction, AgentChatSession } from '../../types/agent-chat';
 import type { AgentRunSection, AgentWorkbenchSummary } from '../../lib/agent-workbench';
 import { latestPlanEvent } from '../../lib/agent-workbench';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
 import { Button } from '../ui/button';
-import { Badge } from '../ui/badge';
 import { Switch } from '../ui/switch';
-import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 
 const TIMELINE_EVENT_TYPES = new Set(['file_change', 'file_read', 'command', 'test_run', 'tool_call', 'tool_result']);
 
@@ -34,7 +30,6 @@ export function AgentChatPanel({
   summary,
   nextActions,
   acceptedPlanId,
-  onInterrupt,
   onAction,
 }: {
   session: AgentChatSession;
@@ -43,7 +38,6 @@ export function AgentChatPanel({
   summary?: AgentWorkbenchSummary | null;
   nextActions?: AgentChatNextAction[];
   acceptedPlanId?: string | null;
-  onInterrupt: () => void;
   onAction?: (action: AgentChatNextAction, event?: AgentChatEvent) => void;
 }) {
   const [tab, setTab] = useState<'chat' | 'raw' | 'plan'>('chat');
@@ -70,12 +64,13 @@ export function AgentChatPanel({
           <div className="flex items-center gap-3">
             {tab === 'chat' && (
               <div className="flex items-center gap-2">
-                <span className={`text-[10px] font-bold uppercase tracking-tight ${chatMode === 'clean' ? 'text-forge-green' : 'text-forge-muted'}`}>Chat</span>
+                <span title="Conversation-first view: hides compact tool, file, and command timeline events." className={`text-[10px] font-bold uppercase tracking-tight ${chatMode === 'clean' ? 'text-forge-green' : 'text-forge-muted'}`}>Chat</span>
                 <Switch 
+                  title="Toggle between Chat and Activity views"
                   checked={chatMode === 'full'} 
                   onCheckedChange={(full) => setChatMode(full ? 'full' : 'clean')} 
                 />
-                <span className={`text-[10px] font-bold uppercase tracking-tight ${chatMode === 'full' ? 'text-forge-green' : 'text-forge-muted'}`}>Activity</span>
+                <span title="Activity view: includes compact tool, file, command, and test timeline events." className={`text-[10px] font-bold uppercase tracking-tight ${chatMode === 'full' ? 'text-forge-green' : 'text-forge-muted'}`}>Activity</span>
               </div>
             )}
           </div>
@@ -162,28 +157,6 @@ export function AgentChatPanel({
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const isRunning = status === 'running';
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button className="outline-none focus:ring-0">
-          <Badge 
-            variant={status === 'failed' || status === 'interrupted' ? 'destructive' : isRunning ? 'success' : 'info'} 
-            dot 
-            animateDot={isRunning} 
-            className="px-1.5 py-1"
-          >
-            {isRunning ? <Play className="h-3 w-3" /> : status === 'failed' ? <AlertCircle className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
-          </Badge>
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="center" className="w-auto p-2 text-ui-label font-semibold">
-        Session: {status}
-      </PopoverContent>
-    </Popover>
-  );
-}
 
 function ResultStrip({
   summary,

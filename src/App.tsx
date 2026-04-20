@@ -1,17 +1,15 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Keyboard } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from './components/ui/button';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { open as openFilePicker } from '@tauri-apps/plugin-dialog';
 import { DetailPanel } from './components/detail/DetailPanel';
 import { Sidebar, type NavView } from './components/layout/Sidebar';
 import { WorkspaceTerminal } from './components/terminal/WorkspaceTerminal';
 import { listRepositories, removeRepository, addRepository } from './lib/tauri-api/repositories';
 import { createWorkspacePr } from './lib/tauri-api/pr-draft';
-import { getSettings, saveHasCompletedEnvCheck, resolveGitRepositoryPath } from './lib/tauri-api/settings';
+import { getSettings, resolveGitRepositoryPath } from './lib/tauri-api/settings';
 import { listActivity } from './lib/tauri-api/activity';
 import { openDeepLink } from './lib/tauri-api/deep-links';
-import { checkEnvironment } from './lib/tauri-api/environment';
 import { listWorkspaceAttention, markWorkspaceAttentionRead } from './lib/tauri-api/workspace-attention';
 import { getWorkspaceConflicts } from './lib/tauri-api/workspace-health';
 import { formatCursorOpenError } from './lib/ui-errors';
@@ -28,12 +26,17 @@ import {
   openInCursor,
   openWorktreeInCursor,
 } from './lib/tauri-api/workspaces';
-import type { ActivityItem, AppSettings, CreateWorkspaceInput, EnvironmentCheckItem, TerminalOutputEvent, Workspace, WorkspaceAttention } from './types';
+import type { ActivityItem, AppSettings, CreateWorkspaceInput, Workspace, WorkspaceAttention } from './types';
 import { LoadingView, ErrorView } from './components/views/LoadingView';
 import { EnvironmentSetupModal } from './components/modals/EnvironmentSetupModal';
 import { SettingsView } from './components/settings/SettingsView';
 import { MemoryView } from './components/memory/MemoryView';
 import { sanitizeWorkspaceForDisplay, sanitizeWorkspacesForDisplay } from './lib/workspace-display';
+import { KeyboardShortcutsModal } from './components/shortcuts/KeyboardShortcutsModal';
+import { useAppKeyboardShortcuts } from './lib/hooks/useAppKeyboardShortcuts';
+import { useEnvironmentCheck } from './lib/hooks/useEnvironmentCheck';
+import { useAppLayoutState } from './lib/hooks/useAppLayoutState';
+import { useAppNotifications } from './lib/hooks/useAppNotifications';
 
 
 const APP_BOOT_MARK = 'forge:app-boot';
@@ -45,27 +48,6 @@ const NewWorkspaceModal = lazy(() => import('./components/modals/NewWorkspaceMod
 
 const SELECTED_WORKSPACE_KEY = 'forge:selected-workspace-id';
 const ARCHIVED_WORKSPACES_KEY = 'forge:archived-workspace-ids';
-const SIDEBAR_WIDTH_KEY = 'forge:sidebar-width';
-const DETAIL_PANEL_WIDTH_KEY = 'forge:detail-panel-width';
-const DETAIL_PANEL_COLLAPSED_KEY = 'forge:detail-panel-collapsed';
-
-interface AttentionToast {
-  id: string;
-  workspaceId: string;
-  workspaceName: string;
-  text: string;
-}
-
-function isEditableShortcutTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  const tag = target.tagName.toLowerCase();
-  return tag === 'input' || tag === 'textarea' || tag === 'select' || target.isContentEditable;
-}
-
-function focusWorkspaceComposer(): void {
-  window.dispatchEvent(new CustomEvent('forge:focus-composer'));
-}
-
 
 async function withLoadTimeout<T>(label: string, task: Promise<T>, timeoutMs = 8000): Promise<T> {
   let timer: number | undefined;
@@ -99,7 +81,6 @@ export default function App() {
   const [displayedWorkspaces, setDisplayedWorkspaces] = useState<Workspace[]>([]);
   const [workspaceAttention, setWorkspaceAttention] = useState<Record<string, WorkspaceAttention>>({});
   const [conflictingWorkspaceIds, setConflictingWorkspaceIds] = useState<Set<string>>(new Set());
-  const [attentionToasts, setAttentionToasts] = useState<AttentionToast[]>([]);
   const [deepLinkNotice, setDeepLinkNotice] = useState<string | null>(null);
   const [activityItems, setActivityItems] = useState<ActivityItem[]>([]);
   const [selectedReviewPath, setSelectedReviewPath] = useState<string | null>(null);
@@ -107,128 +88,58 @@ export default function App() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [reviewTargetCommentId, setReviewTargetCommentId] = useState<string | null>(null);
   const [settingsState, setSettingsState] = useState<AppSettings | null>(null);
-  const [environmentItems, setEnvironmentItems] = useState<EnvironmentCheckItem[]>([]);
-  const [environmentModalOpen, setEnvironmentModalOpen] = useState(false);
-  const [environmentCheckBusy, setEnvironmentCheckBusy] = useState(false);
   const [linkedWorktreesByWorkspaceId, setLinkedWorktreesByWorkspaceId] = useState<Record<string, { worktreeId: string; repoId: string; repoName: string; path: string; branch?: string; head?: string }[]>>({});
-  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
-    const raw = window.localStorage.getItem(SIDEBAR_WIDTH_KEY);
-    const parsed = raw ? Number(raw) : NaN;
-    return Number.isFinite(parsed) ? Math.min(520, Math.max(220, parsed)) : 300;
-  });
-  const [detailPanelWidth, setDetailPanelWidth] = useState<number>(() => {
-    const raw = window.localStorage.getItem(DETAIL_PANEL_WIDTH_KEY);
-    const parsed = raw ? Number(raw) : NaN;
-    return Number.isFinite(parsed) ? Math.min(520, Math.max(240, parsed)) : 280;
-  });
-  const COLLAPSED_RAIL_WIDTH = 44;
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [detailPanelCollapsed, setDetailPanelCollapsed] = useState<boolean>(() =>
-    window.localStorage.getItem(DETAIL_PANEL_COLLAPSED_KEY) === 'true',
-  );
+  const {
+    collapsedRailWidth,
+    detailPanelCollapsed,
+    detailPanelWidth,
+    setDetailPanelCollapsed,
+    setDetailPanelWidth,
+    setSidebarCollapsed,
+    setSidebarWidth,
+    sidebarCollapsed,
+    sidebarWidth,
+    startResize,
+  } = useAppLayoutState();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const attentionRefreshTimerRef = useRef<number | null>(null);
   const markReadTimerRef = useRef<Record<string, number>>({});
   const workspaceSwitchMarkRef = useRef<string | null>(null);
   const selectedIdRef = useRef<string | null>(selectedId);
-  const workspacesRef = useRef<Workspace[]>([]);
-  const firstRunEnvCheckStartedRef = useRef(false);
-
   useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
-  useEffect(() => { workspacesRef.current = workspaces; }, [workspaces]);
+  const {
+    completeFirstRunEnvironmentCheck,
+    environmentCheckBusy,
+    environmentItems,
+    environmentModalOpen,
+    runEnvironmentCheck,
+  } = useEnvironmentCheck({ settingsState, setSettingsState });
 
-  const sendForgeNotification = useCallback(async (title: string, body: string) => {
-    try {
-      const notificationsEnabled = window.localStorage.getItem('forge:notifications-enabled');
-      if (notificationsEnabled === 'false') return;
-      const { isPermissionGranted, requestPermission, sendNotification } = await import('@tauri-apps/plugin-notification');
-      let granted = await isPermissionGranted();
-      if (!granted) {
-        const permission = await requestPermission();
-        granted = permission === 'granted';
-      }
-      if (granted) sendNotification({ title, body });
-    } catch { /* non-fatal */ }
+  const closeShortcuts = useCallback(() => setShortcutsOpen(false), []);
+  const openReviewsFromShortcut = useCallback(() => {
+    setSelectedReviewPath(null);
+    setReviewTargetCommentId(null);
+    setView('reviews');
   }, []);
+  const setWorkspacesView = useCallback(() => setView('workspaces'), []);
+  const toggleCommandPalette = useCallback(() => setCommandPaletteOpen((open) => !open), []);
+  const toggleDetailPanel = useCallback(() => setDetailPanelCollapsed((collapsed) => !collapsed), [setDetailPanelCollapsed]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const key = event.key.toLowerCase();
-      const meta = event.metaKey || event.ctrlKey;
-      const editableTarget = isEditableShortcutTarget(event.target);
-
-      if (meta && key === 'k') {
-        event.preventDefault();
-        setCommandPaletteOpen((open) => !open);
-        return;
-      }
-
-      if (event.key === 'Escape' && shortcutsOpen) {
-        event.preventDefault();
-        setShortcutsOpen(false);
-        return;
-      }
-
-      if (event.key === 'Escape' && editableTarget) {
-        (event.target as HTMLElement).blur();
-        return;
-      }
-
-      if (commandPaletteOpen || modalOpen || environmentModalOpen || shortcutsOpen) return;
-
-      // Cmd+1..9 — jump to workspace by position in sidebar list
-      if (meta && event.key >= '1' && event.key <= '9' && !event.shiftKey && !event.altKey) {
-        event.preventDefault();
-        const idx = parseInt(event.key) - 1;
-        const ws = displayedWorkspaces[idx];
-        if (ws) { setSelectedId(ws.id); setView('workspaces'); }
-        return;
-      }
-
-      if (meta && event.shiftKey && key === 'd') {
-        event.preventDefault();
-        setDetailPanelCollapsed((collapsed) => !collapsed);
-        return;
-      }
-
-      if (meta && event.shiftKey && key === 'r') {
-        if (!selectedIdRef.current) return;
-        event.preventDefault();
-        setSelectedReviewPath(null);
-        setReviewTargetCommentId(null);
-        setView('reviews');
-        return;
-      }
-
-      if (editableTarget || meta || event.altKey || event.shiftKey) return;
-
-      if (event.key === '/') {
-        if (!selectedIdRef.current) return;
-        event.preventDefault();
-        setView('workspaces');
-        window.setTimeout(focusWorkspaceComposer, 0);
-        return;
-      }
-
-      if (event.key === '[' || event.key === ']') {
-        if (displayedWorkspaces.length === 0) return;
-        event.preventDefault();
-        const selectedIndex = displayedWorkspaces.findIndex((workspace) => workspace.id === selectedIdRef.current);
-        const fallbackIndex = event.key === '[' ? displayedWorkspaces.length : -1;
-        const currentIndex = selectedIndex >= 0 ? selectedIndex : fallbackIndex;
-        const delta = event.key === '[' ? -1 : 1;
-        const nextIndex = (currentIndex + delta + displayedWorkspaces.length) % displayedWorkspaces.length;
-        const nextWorkspace = displayedWorkspaces[nextIndex];
-        if (nextWorkspace) {
-          setSelectedId(nextWorkspace.id);
-          setView('workspaces');
-        }
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [commandPaletteOpen, displayedWorkspaces, environmentModalOpen, modalOpen, shortcutsOpen]);
+  useAppKeyboardShortcuts({
+    commandPaletteOpen,
+    displayedWorkspaces,
+    environmentModalOpen,
+    modalOpen,
+    selectedWorkspaceId: selectedId,
+    shortcutsOpen,
+    onCloseShortcuts: closeShortcuts,
+    onOpenReviews: openReviewsFromShortcut,
+    onSelectWorkspace: setSelectedId,
+    onSetWorkspacesView: setWorkspacesView,
+    onToggleCommandPalette: toggleCommandPalette,
+    onToggleDetailPanel: toggleDetailPanel,
+  });
 
   useEffect(() => {
     if (view !== 'reviews') return;
@@ -300,40 +211,13 @@ export default function App() {
     }, 300);
   }, [scheduleAttentionLoad]);
 
-  const runEnvironmentCheck = useCallback(async (showModal = true) => {
-    setEnvironmentCheckBusy(true);
-    try {
-      const items = await checkEnvironment();
-      setEnvironmentItems(items);
-      if (showModal) setEnvironmentModalOpen(true);
-      return items;
-    } catch (err) {
-      forgeWarn('environment', 'check failed', { err });
-      const unknownItems: EnvironmentCheckItem[] = ['git', 'tmux', 'codex', 'claude', 'gh'].map((binary) => ({
-        name: binary === 'codex' ? 'codex CLI' : binary === 'claude' ? 'claude CLI' : binary === 'gh' ? 'GitHub CLI' : binary,
-        binary,
-        status: 'unknown',
-        fix: `brew install ${binary}`,
-        optional: binary === 'gh',
-        path: null,
-      }));
-      setEnvironmentItems(unknownItems);
-      if (showModal) setEnvironmentModalOpen(true);
-      return unknownItems;
-    } finally {
-      setEnvironmentCheckBusy(false);
-    }
-  }, []);
-
-  const completeFirstRunEnvironmentCheck = useCallback(async () => {
-    setEnvironmentModalOpen(false);
-    try {
-      const nextSettings = await saveHasCompletedEnvCheck(true);
-      setSettingsState(nextSettings);
-    } catch (err) {
-      forgeWarn('environment', 'failed to persist completion flag', { err });
-    }
-  }, []);
+  const { attentionToasts, dismissAttentionToast } = useAppNotifications({
+    selectedWorkspaceId: selectedId,
+    view,
+    workspaces,
+    onScheduleAttentionLoad: scheduleAttentionLoad,
+    onScheduleMarkAttentionRead: scheduleMarkAttentionRead,
+  });
 
   useEffect(() => () => {
     if (attentionRefreshTimerRef.current !== null) window.clearTimeout(attentionRefreshTimerRef.current);
@@ -386,15 +270,7 @@ export default function App() {
     void loadBackendState();
   }, [loadBackendState]);
 
-  useEffect(() => {
-    if (!settingsState || settingsState.hasCompletedEnvCheck || firstRunEnvCheckStartedRef.current) return;
-    firstRunEnvCheckStartedRef.current = true;
-    void runEnvironmentCheck(true).finally(() => {
-      void saveHasCompletedEnvCheck(true)
-        .then((nextSettings) => setSettingsState(nextSettings))
-        .catch((err) => forgeWarn('environment', 'failed to persist first-run completion', { err }));
-    });
-  }, [runEnvironmentCheck, settingsState]);
+
 
   const handleDeepLinkUrl = useCallback(async (url: string) => {
     setDeepLinkNotice(null);
@@ -449,150 +325,9 @@ export default function App() {
   }, [scheduleMarkAttentionRead, selectedId, view]);
 
   useEffect(() => {
-    let unlisten: UnlistenFn | undefined;
-    let disposed = false;
-    void listen<{ workspaceId: string; message: string }>(
-      'forge://orchestrator-notify',
-      (event) => {
-        if (disposed) return;
-        const { workspaceId, message } = event.payload;
-        const ws = workspacesRef.current.find((w) => w.id === workspaceId);
-        const id = `orch-notify-${workspaceId}-${Date.now()}`;
-        setAttentionToasts((current) => [
-          { id, workspaceId, workspaceName: ws?.name ?? workspaceId, text: `Orchestrator: ${message}` },
-          ...current.slice(0, 2),
-        ]);
-        window.setTimeout(() => setAttentionToasts((current) => current.filter((t) => t.id !== id)), 8000);
-        void sendForgeNotification('Orchestrator', message);
-      },
-    ).then((fn) => { if (disposed) fn(); else unlisten = fn; })
-      .catch(() => undefined);
-    return () => { disposed = true; if (unlisten) unlisten(); };
-  }, [sendForgeNotification]);
-
-  useEffect(() => {
-    let unlisten: UnlistenFn | undefined;
-    let disposed = false;
-    void listen<{ workspaceId: string; workspaceName: string; branch: string; baseBranch: string }>(
-      'forge://workspace-rebase-conflict',
-      (event) => {
-        if (disposed) return;
-        const { workspaceId, workspaceName, branch, baseBranch } = event.payload;
-        const id = `rebase-conflict-${workspaceId}-${Date.now()}`;
-        setAttentionToasts((current) => [
-          { id, workspaceId, workspaceName, text: `Rebase conflict: ${branch} → origin/${baseBranch}` },
-          ...current.slice(0, 2),
-        ]);
-        window.setTimeout(() => setAttentionToasts((current) => current.filter((t) => t.id !== id)), 8000);
-        void sendForgeNotification('Rebase Conflict', `Conflict in ${branch} (${workspaceName})`);
-      },
-    ).then((fn) => {
-      if (disposed) fn(); else unlisten = fn;
-    }).catch(() => undefined);
-    return () => { disposed = true; if (unlisten) unlisten(); };
-  }, [sendForgeNotification]);
-
-  useEffect(() => {
-    let unlisten: UnlistenFn | undefined;
-    let disposed = false;
-    void listen<TerminalOutputEvent>('forge://terminal-output', (event) => {
-      if (disposed) return;
-      const workspaceId = event.payload.workspaceId;
-      if (workspaceId === selectedIdRef.current && view === 'workspaces') {
-        scheduleMarkAttentionRead(workspaceId);
-        return;
-      }
-      const workspace = workspacesRef.current.find((item) => item.id === workspaceId);
-      const text = event.payload.chunk.data.replace(/\s+/g, ' ').trim();
-      if (!workspace || !text || event.payload.chunk.streamType === 'pty_snapshot') {
-        scheduleAttentionLoad();
-        return;
-      }
-      const id = `${workspaceId}-${event.payload.chunk.sessionId}-${event.payload.chunk.seq}`;
-      setAttentionToasts((current) => [
-        { id, workspaceId, workspaceName: workspace.name, text: text.slice(0, 120) },
-        ...current.filter((toast) => toast.workspaceId !== workspaceId).slice(0, 2),
-      ]);
-      window.setTimeout(() => {
-        setAttentionToasts((current) => current.filter((toast) => toast.id !== id));
-      }, 5000);
-      scheduleAttentionLoad();
-    }).then((fn) => {
-      if (disposed) fn(); else unlisten = fn;
-    }).catch((err) => forgeWarn('attention', 'event listener failed', { err }));
-    return () => {
-      disposed = true;
-      if (unlisten) unlisten();
-    };
-  }, [scheduleAttentionLoad, scheduleMarkAttentionRead, view]);
-
-  useEffect(() => {
-    let unlisten: UnlistenFn | undefined;
-    let disposed = false;
-    void listen<{ workspaceId: string; workspaceName: string; stuckFor: number }>(
-      'forge://terminal-stuck',
-      (event) => {
-        if (disposed) return;
-        const { workspaceName, stuckFor } = event.payload;
-        void sendForgeNotification('Agent Stuck', `${workspaceName} has been stuck for ${stuckFor}min`);
-      },
-    ).then((fn) => { if (disposed) fn(); else unlisten = fn; }).catch(() => undefined);
-    return () => { disposed = true; if (unlisten) unlisten(); };
-  }, [sendForgeNotification]);
-
-  useEffect(() => {
-    let unlisten: UnlistenFn | undefined;
-    let disposed = false;
-    void listen<{ workspaceId: string; command: string }>(
-      'forge://command-approval-required',
-      (event) => {
-        if (disposed) return;
-        const ws = workspacesRef.current.find((w) => w.id === event.payload.workspaceId);
-        const workspaceName = ws?.name ?? event.payload.workspaceId;
-        void sendForgeNotification('Approval Needed', `Agent wants to run a command in ${workspaceName}`);
-      },
-    ).then((fn) => { if (disposed) fn(); else unlisten = fn; }).catch(() => undefined);
-    return () => { disposed = true; if (unlisten) unlisten(); };
-  }, [sendForgeNotification]);
-
-  useEffect(() => {
-    let unlisten: UnlistenFn | undefined;
-    let disposed = false;
-    void listen<{ workspaceId: string; cost: string; limit: number }>(
-      'forge://workspace-budget-exceeded',
-      (event) => {
-        if (disposed) return;
-        const { cost } = event.payload;
-        void sendForgeNotification('Budget exceeded', `Workspace spend reached $${cost}`);
-        const ws = workspacesRef.current.find((w) => w.id === event.payload.workspaceId);
-        const id = `budget-${event.payload.workspaceId}-${Date.now()}`;
-        setAttentionToasts((current) => [
-          { id, workspaceId: event.payload.workspaceId, workspaceName: ws?.name ?? event.payload.workspaceId, text: `Budget cap reached: $${cost}` },
-          ...current.slice(0, 2),
-        ]);
-        window.setTimeout(() => setAttentionToasts((current) => current.filter((t) => t.id !== id)), 8000);
-      },
-    ).then((fn) => { if (disposed) fn(); else unlisten = fn; }).catch(() => undefined);
-    return () => { disposed = true; if (unlisten) unlisten(); };
-  }, [sendForgeNotification]);
-
-  useEffect(() => {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem(ARCHIVED_WORKSPACES_KEY, JSON.stringify(archivedWorkspaceIds));
   }, [archivedWorkspaceIds]);
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth));
-  }, [sidebarWidth]);
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(DETAIL_PANEL_WIDTH_KEY, String(detailPanelWidth));
-  }, [detailPanelWidth]);
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(DETAIL_PANEL_COLLAPSED_KEY, String(detailPanelCollapsed));
-  }, [detailPanelCollapsed]);
-
   const selected = useMemo(
     () => workspaces.find((w) => w.id === selectedId) ?? null,
     [selectedId, workspaces],
@@ -734,31 +469,6 @@ export default function App() {
     }
   };
 
-  const startResize = (
-    event: React.MouseEvent<HTMLDivElement>,
-    panel: 'left' | 'right',
-  ) => {
-    if (panel === 'left' && sidebarCollapsed) return;
-    if (panel === 'right' && detailPanelCollapsed) return;
-    event.preventDefault();
-    const startX = event.clientX;
-    const startWidth = panel === 'left' ? sidebarWidth : detailPanelWidth;
-    const onMove = (moveEvent: MouseEvent) => {
-      const delta = moveEvent.clientX - startX;
-      if (panel === 'left') {
-        setSidebarWidth(Math.min(520, Math.max(220, startWidth + delta)));
-      } else {
-        setDetailPanelWidth(Math.min(520, Math.max(240, startWidth - delta)));
-      }
-    };
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  };
-
   const mainContent = () => {
     if (loading) return <LoadingView />;
     if (error) return <ErrorView message={error} onRetry={loadBackendState} />;
@@ -791,7 +501,7 @@ export default function App() {
 
   const isReviewView = view === 'reviews';
   const showDetailPanel = view === 'workspaces';
-  const effectiveSidebarWidth = sidebarCollapsed ? COLLAPSED_RAIL_WIDTH : sidebarWidth;
+  const effectiveSidebarWidth = sidebarCollapsed ? collapsedRailWidth : sidebarWidth;
 
   return (
     <div className="h-[100dvh] flex flex-col overflow-hidden bg-forge-bg text-forge-text antialiased selection:bg-forge-green/25">
@@ -800,7 +510,7 @@ export default function App() {
           sidebarCollapsed ? (
             <div
               className="shrink-0 h-full flex flex-col items-center justify-start bg-forge-surface"
-              style={{ width: `${COLLAPSED_RAIL_WIDTH}px` }}
+              style={{ width: `${collapsedRailWidth}px` }}
             >
               <Button
                 type="button"
@@ -922,7 +632,7 @@ export default function App() {
               ) : (
                 <div
                   className="shrink-0 h-full flex items-start justify-center bg-forge-surface"
-                  style={{ width: `${COLLAPSED_RAIL_WIDTH}px` }}
+                  style={{ width: `${collapsedRailWidth}px` }}
                 >
                   <Button
                     type="button"
@@ -966,37 +676,7 @@ export default function App() {
         </Suspense>
       )}
 
-      {shortcutsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm" onMouseDown={() => setShortcutsOpen(false)}>
-          <div className="w-full max-w-md rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Keyboard className="h-4 w-4 text-forge-green" />
-                <h2 className="text-sm font-bold text-forge-text">Keyboard shortcuts</h2>
-              </div>
-              <button type="button" className="text-xs text-forge-muted hover:text-forge-text" onClick={() => setShortcutsOpen(false)}>Close</button>
-            </div>
-            <div className="space-y-1.5 text-xs">
-              {[
-                ['Cmd/Ctrl K', 'Open command palette'],
-                ['Cmd/Ctrl 1–9', 'Select visible workspace'],
-                ['/', 'Focus workspace composer'],
-                ['[ / ]', 'Previous / next workspace'],
-                ['Cmd/Ctrl Shift D', 'Toggle detail panel'],
-                ['Cmd/Ctrl Shift R', 'Open Review Cockpit'],
-                ['Enter', 'Send composer prompt'],
-                ['Shift Enter', 'New line in composer'],
-                ['Esc', 'Blur composer or close this help'],
-              ].map(([keys, action]) => (
-                <div key={keys} className="flex items-center justify-between gap-3 rounded border border-forge-border/50 bg-black/15 px-2 py-1.5">
-                  <span className="font-mono text-[11px] text-forge-text">{keys}</span>
-                  <span className="text-forge-muted">{action}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      {shortcutsOpen && <KeyboardShortcutsModal onClose={() => setShortcutsOpen(false)} />}
 
       {environmentModalOpen && (
         <EnvironmentSetupModal
@@ -1030,7 +710,7 @@ export default function App() {
               onClick={() => {
                 setView('workspaces');
                 setSelectedId(toast.workspaceId);
-                setAttentionToasts((current) => current.filter((item) => item.id !== toast.id));
+                dismissAttentionToast(toast.id);
               }}
               className="pointer-events-auto rounded-xl border border-forge-blue/25 bg-forge-bg/95 px-3 py-2 text-left shadow-xl shadow-black/30 backdrop-blur hover:bg-forge-surface"
             >

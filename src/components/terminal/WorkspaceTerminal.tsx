@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, Plus, Terminal as TerminalIcon, X } from 'lucide-react';
+import { ChevronDown, Terminal as TerminalIcon } from 'lucide-react';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { AgentProfile, ForgeWorkspaceConfig, TerminalOutputChunk, TerminalOutputEvent, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
 import type { AgentChatEvent, AgentChatEventEnvelope, AgentChatNextAction, AgentChatSession } from '../../types/agent-chat';
@@ -62,7 +62,6 @@ import {
 } from '../../lib/agent-workbench';
 import {
   OUTPUT_RETENTION_CHUNKS,
-  PROFILE_LABELS,
   type OutputMap,
 } from './workspace-terminal-constants';
 import { TerminalPane } from './WorkspaceTerminalPane';
@@ -86,7 +85,6 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   const [outputs, setOutputs] = useState<OutputMap>({});
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [shellRailOpen, setShellRailOpen] = useState(true);
   const [commandBusy, setCommandBusy] = useState<string | null>(null);
   const [forgeConfig, setForgeConfig] = useState<ForgeWorkspaceConfig | null>(null);
   const [ports, setPorts] = useState<WorkspacePort[]>([]);
@@ -1067,10 +1065,6 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                   summary={focusedWorkbenchSummary.changedFileCount > 0 || focusedChatSession.status === 'succeeded' ? focusedWorkbenchSummary : null}
                   nextActions={focusedNextActions}
                   acceptedPlanId={acceptedPlans[focusedChatSession.id] ? latestPlanEvent(focusedChatEvents)?.id ?? null : null}
-                  onInterrupt={() => void interruptAgentChatSession(focusedChatSession.id).then((session) => {
-                    setChatSessions((current) => current.map((item) => item.id === session.id ? session : item));
-                    void refreshChatSessions(session.id);
-                  }).catch(setActionError)}
                   onAction={(action, event) => void handleWorkbenchAction(action, event)}
                 />
               ) : focusedSession ? (
