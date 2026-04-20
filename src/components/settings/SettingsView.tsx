@@ -216,7 +216,7 @@ function TrustAndSafetyCard() {
   );
 }
 
-const DEFAULT_PROFILE_IDS = new Set(['claude-default', 'claude-plan', 'codex-default', 'codex-high', 'ollama-local', 'shell']);
+const DEFAULT_PROFILE_IDS = new Set(['claude-default', 'claude-plan', 'codex-default', 'codex-high', 'shell']);
 
 function AgentProfilesCard() {
   const [effectiveProfiles, setEffectiveProfiles] = useState<AgentProfile[]>([]);

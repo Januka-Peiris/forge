@@ -355,25 +355,6 @@ pub fn default_profiles() -> Vec<AgentProfile> {
             templates: vec![],
         },
         AgentProfile {
-            id: "ollama-local".to_string(),
-            label: "Ollama Local".to_string(),
-            agent: "local_llm".to_string(),
-            command: "ollama".to_string(),
-            args: vec!["run".to_string(), "llama3.2".to_string()],
-            model: Some("llama3.2".to_string()),
-            reasoning: None,
-            mode: Some("act".to_string()),
-            provider: Some("ollama".to_string()),
-            endpoint: Some("http://localhost:11434".to_string()),
-            local: true,
-            description: Some(
-                "Local Ollama terminal profile; adjust model in .forge/config.json if needed"
-                    .to_string(),
-            ),
-            skills: vec![],
-            templates: vec![],
-        },
-        AgentProfile {
             id: "shell".to_string(),
             label: "Shell".to_string(),
             agent: "shell".to_string(),
@@ -453,7 +434,6 @@ mod tests {
         assert!(ids.contains(&"codex-default".to_string()));
         assert!(ids.contains(&"codex-high".to_string()));
         assert!(ids.contains(&"claude-plan".to_string()));
-        assert!(ids.contains(&"ollama-local".to_string()));
         assert!(ids.contains(&"shell".to_string()));
     }
 
@@ -468,7 +448,22 @@ mod tests {
 
     #[test]
     fn local_profile_metadata_is_preserved_in_prompt_metadata() {
-        let profile = default_profile("ollama-local");
+        let profile = AgentProfile {
+            id: "qwen-local".to_string(),
+            label: "Qwen Local".to_string(),
+            agent: "local_llm".to_string(),
+            command: "ollama".to_string(),
+            args: vec!["run".to_string(), "qwen2.5-coder:14b".to_string()],
+            model: Some("qwen2.5-coder:14b".to_string()),
+            reasoning: None,
+            mode: Some("act".to_string()),
+            provider: Some("ollama".to_string()),
+            endpoint: Some("http://localhost:11434".to_string()),
+            local: true,
+            description: None,
+            skills: vec![],
+            templates: vec![],
+        };
         let preamble = prompt_metadata_preamble(&profile, None, None);
         assert!(profile.local);
         assert_eq!(profile.agent, "local_llm");

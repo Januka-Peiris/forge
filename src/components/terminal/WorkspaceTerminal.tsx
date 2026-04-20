@@ -1055,16 +1055,6 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                 <div className="mt-4 flex flex-wrap justify-center gap-2">
                   <button disabled={busy} onClick={() => void createChatSession('claude_code', 'Claude Chat')} className="rounded-lg bg-forge-orange px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Start Claude</button>
                   <button disabled={busy} onClick={() => void createChatSession('codex', 'Codex Chat')} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">Start Codex</button>
-                  {agentProfiles.filter((profile) => profile.agent === 'local_llm' || profile.local).slice(0, 2).map((profile) => (
-                    <button
-                      key={profile.id}
-                      disabled={busy}
-                      onClick={() => void createTerminal('agent', profile.agent as TerminalProfile, profile.label, profile.id)}
-                      className="rounded-lg border border-forge-green/30 bg-forge-green/10 px-3 py-2 text-sm font-semibold text-forge-green disabled:opacity-50"
-                    >
-                      Start {profile.label}
-                    </button>
-                  ))}
                   <button disabled={busy} onClick={() => void createTerminal('shell', 'shell', 'Shell')} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">New Shell</button>
                 </div>
               </div>
