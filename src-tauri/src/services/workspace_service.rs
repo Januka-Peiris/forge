@@ -273,7 +273,7 @@ pub fn delete_workspace(state: &AppState, workspace_id: &str) -> Result<(), Stri
         detail.summary.worktree_managed_by_forge
     );
 
-    // Must stop PTY sessions before `git worktree remove`, or removal fails and we never delete the DB row.
+    // Stop PTY sessions before forgetting the workspace record. Git branches/worktrees are preserved.
     match terminal_service::stop_workspace_terminal_session(state, workspace_id) {
         Ok(_) => log::info!(target: "forge_lib", "stop agent terminal: ok id={workspace_id}"),
         Err(e) => log::warn!(target: "forge_lib", "stop agent terminal: {e} id={workspace_id}"),
@@ -298,7 +298,7 @@ pub fn delete_workspace(state: &AppState, workspace_id: &str) -> Result<(), Stri
         .unwrap_or(&detail.worktree_path)
         .to_string();
     let path_on_disk = Path::new(&path);
-    let remove_managed_worktree = should_remove_worktree_on_delete(&detail);
+    let remove_managed_worktree = false;
     let mut worktree_cleanup_warning: Option<String> = None;
 
     if remove_managed_worktree {
@@ -398,7 +398,7 @@ pub fn delete_workspace(state: &AppState, workspace_id: &str) -> Result<(), Stri
     let activity_details = worktree_cleanup_warning.or_else(|| {
         Some(
             if remove_managed_worktree {
-                "Removed Forge-managed worktree from git (or it was already gone) and deleted the workspace record."
+                "Removed workspace record; branch and on-disk worktree were preserved."
             } else {
                 "Removed workspace record; on-disk worktree was not removed by Forge."
             }
@@ -413,7 +413,7 @@ pub fn delete_workspace(state: &AppState, workspace_id: &str) -> Result<(), Stri
             workspace_id: None,
             repo: detail.summary.repo.clone(),
             branch: Some(detail.summary.branch.clone()),
-            event: "Workspace deleted".to_string(),
+            event: "Workspace forgotten".to_string(),
             level: activity_level.to_string(),
             details: activity_details,
             timestamp: "just now".to_string(),
@@ -640,21 +640,6 @@ fn git_current_head_ref(workspace_root: &str) -> Result<String, String> {
         });
     }
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-}
-
-fn should_remove_worktree_on_delete(detail: &WorkspaceDetail) -> bool {
-    if detail.summary.worktree_managed_by_forge {
-        return true;
-    }
-    let path = detail
-        .summary
-        .workspace_root_path
-        .as_deref()
-        .unwrap_or(&detail.worktree_path);
-    let norm = path.replace('\\', "/");
-    // Legacy sibling layout, or in-repo `forge/<id>` if the managed flag was ever missing.
-    norm.contains("/.forge-worktrees/")
-        || (norm.contains("/forge/") && norm.ends_with(&format!("/{}", detail.summary.id)))
 }
 
 fn infer_repo_path_from_worktree(worktree_path: &str) -> Result<String, String> {

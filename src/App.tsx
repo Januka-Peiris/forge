@@ -583,10 +583,10 @@ export default function App() {
     void loadLinkedWorktrees(selectedId);
   }, [loadLinkedWorktrees, selectedId]);
 
-  const handleArchiveWorkspace = () => {
-    if (!selectedId) return;
+  const handleArchiveWorkspace = (workspaceId = selectedId) => {
+    if (!workspaceId) return;
     setArchivedWorkspaceIds((current) => (
-      current.includes(selectedId) ? current.filter((id) => id !== selectedId) : [...current, selectedId]
+      current.includes(workspaceId) ? current.filter((id) => id !== workspaceId) : [...current, workspaceId]
     ));
   };
 
@@ -627,11 +627,11 @@ export default function App() {
     const candidate = workspaces.find((workspace) => workspace.id === workspaceId);
     const label = candidate?.name ?? workspaceId;
     if (!window.confirm([
-      `Delete workspace "${label}"?`,
+      `Forget workspace "${label}" from Forge?`,
       '',
-      'This removes the Forge workspace record and managed local workspace state.',
-      'Use Archive or Safe cleanup first if you want to keep it inspectable.',
-      'This cannot be undone.',
+      'This removes only the Forge workspace record from the app.',
+      'It will not delete the branch, Git worktree, checkout folder, or files on disk.',
+      'Prefer Archive if you may want to reopen it from Forge later.',
     ].join('\n'))) return;
     forgeLog('deleteWorkspace', 'user confirmed; invoking delete_workspace', { workspaceId, label });
     setError(null);
@@ -753,7 +753,7 @@ export default function App() {
                   conflictingWorkspaceIds={conflictingWorkspaceIds}
                   selectedWorkspaceId={selectedId}
                   onSelectWorkspace={setSelectedId}
-                  onDeleteWorkspace={(workspaceId) => void handleDeleteWorkspace(workspaceId)}
+                  onArchiveWorkspace={(workspaceId) => handleArchiveWorkspace(workspaceId)}
                   onRemoveRepository={(repositoryId) => void handleRemoveRepository(repositoryId)}
                   onNewWorkspace={(repositoryId) => {
                     setModalRepositoryId(repositoryId);

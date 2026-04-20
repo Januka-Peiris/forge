@@ -10,6 +10,8 @@ import {
   Search,
   Settings,
   ArrowUpDown,
+  Archive,
+  ArchiveRestore,
   Trash2,
   CheckSquare,
   Square as SquareIcon,
@@ -44,7 +46,7 @@ interface SidebarProps {
   archivedWorkspaceIds: string[];
   selectedWorkspaceId: string | null;
   onSelectWorkspace: (workspaceId: string) => void;
-  onDeleteWorkspace: (workspaceId: string) => void;
+  onArchiveWorkspace: (workspaceId: string) => void;
   onRemoveRepository: (repositoryId: string) => void;
   onNewWorkspace: (repositoryId?: string) => void;
   onAddRepository?: () => void;
@@ -70,7 +72,7 @@ export function Sidebar({
   archivedWorkspaceIds,
   selectedWorkspaceId,
   onSelectWorkspace,
-  onDeleteWorkspace,
+  onArchiveWorkspace,
   onRemoveRepository,
   onNewWorkspace,
   onAddRepository,
@@ -80,7 +82,7 @@ export function Sidebar({
   const [filter, setFilter] = useState<'all' | 'active' | 'archived'>('all');
   const [sort, setSort] = useState<'recent' | 'name' | 'status'>('recent');
   const [searchQuery, setSearchQuery] = useState('');
-  /** Track which workspace row the mouse is hovering over so we can show the trash icon. */
+  /** Track which workspace row the mouse is hovering over so we can show quick lifecycle actions. */
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [hoveredRepoId, setHoveredRepoId] = useState<string | null>(null);
@@ -380,6 +382,7 @@ export function Sidebar({
                     const isSelected = workspace.id === selectedWorkspaceId;
                     const isHovered = hoveredId === workspace.id;
                     const attention = workspaceAttention[workspace.id];
+                    const isArchived = archivedSet.has(workspace.id);
 
                     const attentionDot =
                       attention?.status === 'running'
@@ -455,19 +458,19 @@ export function Sidebar({
                           </div>
                         </div>
 
-                        {/* Delete button — shown on hover */}
+                        {/* Archive button — shown on hover; preserves branch/worktree/files. */}
                         {isHovered && (
                           <Button
                             variant="ghost"
                             size="icon-xs"
                             onClick={(e) => {
                               e.stopPropagation();
-                              onDeleteWorkspace(workspace.id);
+                              onArchiveWorkspace(workspace.id);
                             }}
-                            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-forge-muted hover:bg-forge-red/15 hover:text-forge-red"
-                            title={`Delete workspace "${workspace.name}"`}
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-forge-muted hover:bg-forge-orange/15 hover:text-forge-orange"
+                            title={`${isArchived ? 'Unarchive' : 'Archive'} workspace "${workspace.name}" — keeps branch/worktree/files`}
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            {isArchived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
                           </Button>
                         )}
                       </div>

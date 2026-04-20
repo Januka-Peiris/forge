@@ -460,7 +460,7 @@ function LifecyclePanel({
             onClick={onDelete}
             className="text-forge-red/80 hover:text-forge-red"
           >
-            Delete workspace
+            Forget workspace
           </Button>
         </div>
         {recoveryResult && (
@@ -1243,7 +1243,7 @@ export function DetailPanel({
     const confirmed = window.confirm(
       isArchived
         ? 'Unarchive this workspace? It will return to the active workspace view.'
-        : 'Archive this workspace? It will be hidden from the active view, but Forge keeps its history, checkpoints, and local files.',
+        : 'Archive this workspace? It will be hidden from active views, but Forge keeps its history, checkpoints, branch, Git worktree, and local files.',
     );
     if (confirmed) onArchiveWorkspace();
   };
@@ -1938,7 +1938,7 @@ export function DetailPanel({
             onClick={onDeleteWorkspace}
             className="flex-1 text-forge-red/70 hover:text-forge-red hover:bg-forge-red/10"
           >
-            Delete
+            Forget
           </Button>
         </div>
       </div>

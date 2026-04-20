@@ -252,7 +252,7 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
         id: 'action-cleanup',
         title: 'Cleanup workspace',
         subtitle: 'Stop sessions, run teardown, scan ports',
-        keywords: 'cleanup stop teardown ports delete worktree',
+        keywords: 'cleanup stop teardown ports safe',
         icon: 'cleanup' as const,
         run: async () => { paletteCache.delete(selectedWorkspace.id); await cleanupWorkspace({ workspaceId: selectedWorkspace.id, killPorts: false, removeManagedWorktree: false }); onOpenWorkspace(); },
       },
