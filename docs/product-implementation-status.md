@@ -71,6 +71,7 @@ Forge is being shaped as a **local-first agent conductor**: simple by default, i
 - Changed files link into the Review Cockpit.
 - The Review Cockpit remains the deeper path for diff inspection and review work.
 - The workspace cockpit now surfaces review blockers: merge-readiness reasons, local risk notes, cached/open PR comments, and quick PR-comment refresh.
+- Review Cockpit now groups PR comments by file path with general comments separately, shows comments needing attention, and keeps per-comment open-file/send/resolve/link actions local and explicit.
 - Pending review cards now open the relevant workspace/review cockpit instead of showing non-functional approve/request-change actions, and they have a clearer empty state.
 - Pending reviews are sorted by risk/churn and show high/medium/low counts before the card grid.
 - Pending reviews show the top few items by default with an explicit show-more/show-fewer control to avoid cluttering the workspace list.
@@ -79,6 +80,7 @@ Forge is being shaped as a **local-first agent conductor**: simple by default, i
 
 - PR status is fetched through `gh pr view` where available.
 - The cockpit surfaces PR number/state, draft status, review decision, and check summary.
+- Deep Checks & Shipping shows failed/pending GitHub checks first, includes state/conclusion/details links, and uses a quiet empty state when no CI is reported.
 
 ### Safety and Trust
 
@@ -142,6 +144,7 @@ Forge is being shaped as a **local-first agent conductor**: simple by default, i
 - Local profile provider/endpoint/runtime metadata is included in agent prompt context.
 - MCP config is parsed and validated without launching MCP processes yet.
 - The workspace Config tab now shows repo-defined scripts, agent profiles, MCP servers, and MCP warnings as inspectable developer-depth metadata.
+- MCP developer-depth visibility now distinguishes enabled/disabled and stdio/http metadata, and agent/profile prompt context includes enabled/disabled MCP metadata without launching servers.
 
 ## Current Validation Commands
 
@@ -154,8 +157,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 ## Remaining Useful Next Slices
 
-- Improve stale-session recovery/reconciliation after app restart.
-- Add richer PR comments/review-thread handling in the cockpit.
-- Add CI/check detail drill-down from the PR/check summary.
-- Add repo/workspace MCP/profile/context configuration as a developer-depth feature.
-- Add keyboard-first navigation for workspace/status/review flows.
+- Manual UX pass in the running app to tune spacing, default collapsed states, and copy.
+- Optional future local LLM presets/adapters for LM Studio, llama.cpp, vLLM, or direct OpenAI-compatible HTTP.
+- Optional deeper GitHub work: true review-thread resolution and CI log fetching.
+- Optional MCP runtime launch support if Forge later chooses to manage MCP processes directly.

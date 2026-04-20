@@ -168,15 +168,21 @@ function ChecksShippingPanel({
             </Button>
           </div>
         )}
+        {prStatus?.found && prChecks.length === 0 && (
+          <div className="mt-3 rounded-lg border border-forge-border/60 bg-black/10 px-2 py-2">
+            <p className="text-xs font-semibold text-forge-text/85">GitHub checks</p>
+            <p className="mt-0.5 text-xs text-forge-muted">No CI reported for this PR yet.</p>
+          </div>
+        )}
         {prChecks.length > 0 && (
           <div className="mt-3 rounded-lg border border-forge-border/60 bg-black/10 p-2">
             <div className="mb-1.5 flex items-center justify-between gap-2">
               <p className="text-xs font-semibold text-forge-text/85">GitHub checks</p>
-              <span className="text-xs text-forge-muted">{prChecks.length} reported</span>
+              <span className="text-xs text-forge-muted">failed/pending first · {prChecks.length} reported</span>
             </div>
             <div className="space-y-1">
               {prChecks.slice(0, 5).map((check) => {
-                const label = check.conclusion ?? check.status;
+                const label = check.conclusion ? `${check.status} · ${check.conclusion}` : check.status;
                 return (
                   <div key={`${check.name}-${check.status}-${check.conclusion ?? ''}`} className="flex items-center gap-2 rounded border border-forge-border/50 bg-black/15 px-2 py-1">
                     <span className="min-w-0 flex-1 truncate text-xs text-forge-text/90" title={check.name}>{check.name}</span>
@@ -678,6 +684,8 @@ function WorkspaceConfigDepthPanel({ config }: { config: ForgeWorkspaceConfig | 
   const profileCount = config?.agentProfiles.length ?? 0;
   const mcpCount = config?.mcpServers.length ?? 0;
   const enabledMcpCount = config?.mcpServers.filter((server) => server.enabled).length ?? 0;
+  const stdioMcpCount = config?.mcpServers.filter((server) => server.transport === 'stdio').length ?? 0;
+  const httpMcpCount = config?.mcpServers.filter((server) => server.transport === 'http').length ?? 0;
   const scriptCount = (config?.setup.length ?? 0) + (config?.run.length ?? 0) + (config?.teardown.length ?? 0);
 
   return (
@@ -691,7 +699,7 @@ function WorkspaceConfigDepthPanel({ config }: { config: ForgeWorkspaceConfig | 
           <CockpitLine label="Config file" value={config?.exists ? (config.path ?? '.forge/config.json') : 'not configured'} />
           <CockpitLine label="Scripts" value={`${scriptCount} total · ${config?.run.length ?? 0} check/run`} />
           <CockpitLine label="Agent profiles" value={`${profileCount} repo profile${profileCount === 1 ? '' : 's'}`} />
-          <CockpitLine label="MCP servers" value={`${enabledMcpCount}/${mcpCount} enabled`} />
+          <CockpitLine label="MCP servers" value={`${enabledMcpCount}/${mcpCount} enabled · ${stdioMcpCount} stdio · ${httpMcpCount} http`} />
         </div>
         {config?.warning && (
           <div className="mt-2 rounded border border-forge-yellow/20 bg-forge-yellow/10 px-2 py-1.5 text-xs text-forge-yellow">
@@ -727,7 +735,10 @@ function WorkspaceConfigDepthPanel({ config }: { config: ForgeWorkspaceConfig | 
         )}
         {mcpCount > 0 && (
           <div className="mt-3 space-y-1">
-            <p className="text-xs font-semibold text-forge-text/85">MCP servers</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-forge-text/85">MCP servers</p>
+              <p className="text-xs text-forge-muted">metadata only · not auto-launched</p>
+            </div>
             {config?.mcpServers.slice(0, 5).map((server) => {
               const preview = server.url ?? [server.command, ...server.args].filter(Boolean).join(' ');
               const envCount = Object.keys(server.env ?? {}).length;

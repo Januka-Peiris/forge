@@ -129,11 +129,25 @@ export function ReviewCockpit({
     null;
   const reviewedCount =
     cockpit?.files.filter((item) => item.review?.status === 'reviewed').length ?? 0;
-  const commentsForSelected = useMemo(() => {
-    if (!cockpit || !effectiveSelectedPath) return [];
-    return cockpit.prComments.filter(
-      (comment) => comment.path === effectiveSelectedPath || !comment.path,
-    );
+  const prCommentGroups = useMemo(() => {
+    const comments = cockpit?.prComments ?? [];
+    const general = comments.filter((comment) => !comment.path);
+    const byPath = new Map<string, WorkspacePrComment[]>();
+    for (const comment of comments) {
+      if (!comment.path) continue;
+      const existing = byPath.get(comment.path) ?? [];
+      existing.push(comment);
+      byPath.set(comment.path, existing);
+    }
+    const fileGroups = Array.from(byPath.entries())
+      .map(([path, comments]) => ({ path, comments }))
+      .sort((a, b) => {
+        if (a.path === effectiveSelectedPath) return -1;
+        if (b.path === effectiveSelectedPath) return 1;
+        return a.path.localeCompare(b.path);
+      });
+    const openCount = comments.filter((comment) => comment.state !== 'resolved_local' && !comment.resolvedAt).length;
+    return { general, fileGroups, openCount, total: comments.length };
   }, [cockpit, effectiveSelectedPath]);
 
   const selectFile = async (path: string) => {
@@ -204,6 +218,71 @@ export function ReviewCockpit({
       setBusy(false);
     }
   };
+
+
+  const renderComment = (comment: WorkspacePrComment) => (
+    <div
+      id={`review-comment-${comment.commentId}`}
+      key={comment.commentId}
+      className={`p-3 ${targetCommentId === comment.commentId ? 'bg-forge-blue/10' : ''}`}
+    >
+      <div className="mb-1.5 flex items-start justify-between gap-2">
+        <span className="flex items-center gap-1 text-[11px] font-semibold text-forge-text">
+          <MessageSquare className="h-3 w-3 shrink-0 text-forge-muted" />
+          {comment.author}
+        </span>
+        {(comment.path || comment.line || comment.state === 'resolved_local') && (
+          <span className="shrink-0 rounded bg-white/5 px-1.5 py-0.5 font-mono text-[9px] text-forge-muted">
+            {comment.state === 'resolved_local' ? 'resolved local' : comment.line ? `:${comment.line}` : 'general'}
+          </span>
+        )}
+      </div>
+
+      <p className="max-h-28 overflow-auto whitespace-pre-wrap text-[11px] leading-relaxed text-forge-text/80">
+        {comment.body}
+      </p>
+
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {comment.path && comment.path !== effectiveSelectedPath && (
+          <button
+            disabled={busy}
+            onClick={() => void selectFile(comment.path!)}
+            className="flex items-center gap-1 rounded-md border border-forge-border bg-white/5 px-2 py-1 text-[10px] font-semibold text-forge-muted hover:bg-white/10 disabled:opacity-50"
+          >
+            <FileCode className="h-3 w-3" /> Open file
+          </button>
+        )}
+        <button
+          disabled={busy}
+          onClick={() => void sendPrompt('address_comment', comment)}
+          className="flex items-center gap-1 rounded-md border border-forge-orange/25 bg-forge-orange/10 px-2 py-1 text-[10px] font-semibold text-forge-orange hover:bg-forge-orange/15 disabled:opacity-50"
+        >
+          <Send className="h-3 w-3" /> Send
+        </button>
+        <button
+          disabled={busy || comment.state === 'resolved_local'}
+          onClick={() => void resolveComment(comment.commentId)}
+          className="flex items-center gap-1 rounded-md border border-forge-border bg-white/5 px-2 py-1 text-[10px] font-semibold text-forge-muted hover:bg-white/10 disabled:opacity-50"
+        >
+          {comment.state === 'resolved_local' ? (
+            <CheckCircle2 className="h-3 w-3 text-forge-green" />
+          ) : null}
+          {comment.state === 'resolved_local' ? 'Resolved' : 'Resolve'}
+        </button>
+        {comment.url && (
+          <a
+            href={comment.url}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold text-forge-blue hover:bg-forge-blue/10"
+          >
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        )}
+      </div>
+    </div>
+  );
+
 
   // ── Empty state ───────────────────────────────────────────────────────────
   if (!workspace) {
@@ -536,68 +615,50 @@ export function ReviewCockpit({
               </button>
             </div>
 
+            <div className="shrink-0 border-b border-forge-border/60 px-3 py-2 text-[10px] text-forge-muted">
+              {prCommentGroups.total === 0 ? (
+                <span>No PR comments cached</span>
+              ) : (
+                <span>
+                  <span className="font-semibold text-forge-text/85">{prCommentGroups.openCount}</span> needing attention · {prCommentGroups.fileGroups.length} file group{prCommentGroups.fileGroups.length === 1 ? '' : 's'} · {prCommentGroups.general.length} general
+                </span>
+              )}
+            </div>
+
             <div className="flex-1 overflow-y-auto divide-y divide-forge-border/40">
-              {commentsForSelected.length === 0 ? (
+              {prCommentGroups.total === 0 ? (
                 <p className="p-4 text-[12px] leading-relaxed text-forge-muted">
-                  No comments for this file yet. Use <span className="font-semibold text-forge-text">PR comments</span> in the header to fetch team or Greptile feedback.
+                  No PR comments cached yet. Use <span className="font-semibold text-forge-text">PR comments</span> in the header to fetch team or Greptile feedback.
                 </p>
               ) : (
-                commentsForSelected.map((comment) => (
-                  <div
-                    id={`review-comment-${comment.commentId}`}
-                    key={comment.commentId}
-                    className={`p-3 ${targetCommentId === comment.commentId ? 'bg-forge-blue/10' : ''}`}
-                  >
-                    {/* Author + location */}
-                    <div className="mb-1.5 flex items-start justify-between gap-2">
-                      <span className="flex items-center gap-1 text-[11px] font-semibold text-forge-text">
-                        <MessageSquare className="h-3 w-3 shrink-0 text-forge-muted" />
-                        {comment.author}
-                      </span>
-                      {(comment.path || comment.line) && (
-                        <span className="shrink-0 rounded bg-white/5 px-1.5 py-0.5 font-mono text-[9px] text-forge-muted">
-                          {comment.line ? `:${comment.line}` : 'general'}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Body */}
-                    <p className="max-h-28 overflow-auto whitespace-pre-wrap text-[11px] leading-relaxed text-forge-text/80">
-                      {comment.body}
-                    </p>
-
-                    {/* Actions */}
-                    <div className="mt-2 flex items-center gap-1.5">
+                <>
+                  {prCommentGroups.fileGroups.map((group) => (
+                    <div key={group.path}>
                       <button
-                        disabled={busy}
-                        onClick={() => void sendPrompt('address_comment', comment)}
-                        className="flex items-center gap-1 rounded-md border border-forge-orange/25 bg-forge-orange/10 px-2 py-1 text-[10px] font-semibold text-forge-orange hover:bg-forge-orange/15 disabled:opacity-50"
+                        type="button"
+                        onClick={() => void selectFile(group.path)}
+                        className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider hover:bg-white/5 ${group.path === effectiveSelectedPath ? 'bg-forge-orange/10 text-forge-orange' : 'text-forge-muted'}`}
                       >
-                        <Send className="h-3 w-3" /> Send
+                        <span className="min-w-0 truncate">{group.path}</span>
+                        <span className="shrink-0 rounded bg-white/5 px-1.5 py-0.5 font-mono">{group.comments.length}</span>
                       </button>
-                      <button
-                        disabled={busy || comment.state === 'resolved_local'}
-                        onClick={() => void resolveComment(comment.commentId)}
-                        className="flex items-center gap-1 rounded-md border border-forge-border bg-white/5 px-2 py-1 text-[10px] font-semibold text-forge-muted hover:bg-white/10 disabled:opacity-50"
-                      >
-                        {comment.state === 'resolved_local' ? (
-                          <CheckCircle2 className="h-3 w-3 text-forge-green" />
-                        ) : null}
-                        {comment.state === 'resolved_local' ? 'Resolved' : 'Resolve'}
-                      </button>
-                      {comment.url && (
-                        <a
-                          href={comment.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold text-forge-blue hover:bg-forge-blue/10"
-                        >
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                      )}
+                      <div className="divide-y divide-forge-border/40">
+                        {group.comments.map(renderComment)}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+                  {prCommentGroups.general.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-forge-muted">
+                        <span>General comments</span>
+                        <span className="rounded bg-white/5 px-1.5 py-0.5 font-mono">{prCommentGroups.general.length}</span>
+                      </div>
+                      <div className="divide-y divide-forge-border/40">
+                        {prCommentGroups.general.map(renderComment)}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>

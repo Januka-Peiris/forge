@@ -265,10 +265,22 @@ pub fn prompt_metadata_preamble_for_workspace(
                     format!("{} ({}, {})", server.id, server.transport, endpoint)
                 })
                 .collect::<Vec<_>>();
-            if !enabled_mcp.is_empty() {
+            let disabled_mcp = config
+                .mcp_servers
+                .iter()
+                .filter(|server| !server.enabled)
+                .map(|server| format!("{} ({})", server.id, server.transport))
+                .collect::<Vec<_>>();
+            if !enabled_mcp.is_empty() || !disabled_mcp.is_empty() {
                 preamble.push_str("\nForge workspace MCP config:");
-                preamble.push_str("\n- Available MCP servers: ");
-                preamble.push_str(&enabled_mcp.join(", "));
+                if !enabled_mcp.is_empty() {
+                    preamble.push_str("\n- Enabled MCP servers: ");
+                    preamble.push_str(&enabled_mcp.join(", "));
+                }
+                if !disabled_mcp.is_empty() {
+                    preamble.push_str("\n- Disabled MCP servers: ");
+                    preamble.push_str(&disabled_mcp.join(", "));
+                }
                 preamble.push_str("\n- Instruction: use MCP servers only when the active agent runtime has them configured; otherwise treat this as local config metadata.");
             }
         }
