@@ -62,6 +62,7 @@ fn scan_workspace_ports(
     state: &AppState,
     workspace_id: &str,
 ) -> Result<Vec<WorkspacePort>, String> {
+    let started = Instant::now();
     let root = workspace_root_path(state, workspace_id)?;
     let output = Command::new("lsof")
         .args(["-nP", "-iTCP", "-sTCP:LISTEN", "-F", "pcLn"])
@@ -86,6 +87,13 @@ fn scan_workspace_ports(
         .collect::<Vec<_>>();
     ports.sort_by_key(|port| port.port);
     ports.dedup_by_key(|port| (port.port, port.pid));
+    log::debug!(
+        target: "forge_lib",
+        "scan_workspace_ports workspace={} ports={} elapsed_ms={}",
+        workspace_id,
+        ports.len(),
+        started.elapsed().as_millis()
+    );
     Ok(ports)
 }
 

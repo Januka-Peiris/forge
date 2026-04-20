@@ -137,6 +137,12 @@ export function Sidebar({
   };
 
   const archivedSet = useMemo(() => new Set(archivedWorkspaceIds), [archivedWorkspaceIds]);
+  const workspaceChangeTotals = useMemo(() => Object.fromEntries(
+    workspaces.map((workspace) => [workspace.id, {
+      additions: workspace.changedFiles.reduce((sum, file) => sum + file.additions, 0),
+      deletions: workspace.changedFiles.reduce((sum, file) => sum + file.deletions, 0),
+    }]),
+  ), [workspaces]);
 
   const workspacesByRepoId = useMemo(() => {
     const map = new Map<string, Workspace[]>();
@@ -395,6 +401,7 @@ export function Sidebar({
                     const isHovered = hoveredId === workspace.id;
                     const attention = workspaceAttention[workspace.id];
                     const isArchived = archivedSet.has(workspace.id);
+                    const totals = workspaceChangeTotals[workspace.id] ?? { additions: 0, deletions: 0 };
 
                     return (
                       <WorkspaceListItem
@@ -403,6 +410,8 @@ export function Sidebar({
                         isSelected={isSelected}
                         isHovered={isHovered}
                         showRepo={false}
+                        totalAdds={totals.additions}
+                        totalDels={totals.deletions}
                         onMouseEnter={() => {
                           if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
                           setHoveredId(workspace.id);

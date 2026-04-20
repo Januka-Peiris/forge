@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   GitBranch, ArrowUp, ArrowDown, AlertTriangle,
   Clock, ExternalLink, Activity, AlertCircle, CheckCircle2, Circle,
@@ -915,6 +915,25 @@ function formatPrDraftMarkdown(draft: WorkspacePrDraft): string {
   ].join('\n');
 }
 
+function loadCockpitSummaryData(workspaceId: string) {
+  return Promise.allSettled([
+    getWorkspaceForgeConfig(workspaceId),
+    getWorkspaceReadiness(workspaceId),
+    getWorkspaceHealth(workspaceId),
+    getWorkspaceChangedFiles(workspaceId),
+  ]);
+}
+
+function loadCockpitHeavyData(workspaceId: string) {
+  return Promise.allSettled([
+    listWorkspacePorts(workspaceId),
+    getWorkspacePrStatus(workspaceId),
+    getWorkspacePrDraft(workspaceId),
+    getWorkspaceReviewCockpit(workspaceId, null),
+    listWorkspaceCheckpoints(workspaceId),
+  ]);
+}
+
 export function DetailPanel({
   workspace,
   isArchived = false,
@@ -969,8 +988,56 @@ export function DetailPanel({
   const [reviewCommentsRefreshing, setReviewCommentsRefreshing] = useState(false);
   const [reviewMessage, setReviewMessage] = useState<string | null>(null);
   const workspaceId = workspace?.id;
-  useEffect(() => {
+
+  const resetCockpitState = useCallback(() => {
+    setForgeConfig(null);
+    setWorkspaceReadiness(null);
+    setWorkspacePrStatus(null);
+    setWorkspacePrDraft(null);
+    setWorkspaceHealth(null);
+    setReviewCockpit(null);
+    setRecoveryResult(null);
+    setWorkspacePortCount(null);
+    setWorkspaceChangedFiles([]);
+    setScriptActionBusy(null);
+    setScriptActionMessage(null);
+    setCheckpoints([]);
+    setSelectedCheckpointRef(null);
+    setCheckpointDiff(null);
+    setCheckpointRestorePlan(null);
+  }, []);
+
+  const applySummaryResults = useCallback((
+    [configResult, readinessResult, healthResult, changedFilesResult]: Awaited<ReturnType<typeof loadCockpitSummaryData>>,
+  ) => {
+    setForgeConfig(configResult.status === 'fulfilled' ? configResult.value : null);
+    setWorkspaceReadiness(readinessResult.status === 'fulfilled' ? readinessResult.value : null);
+    setWorkspaceHealth(healthResult.status === 'fulfilled' ? healthResult.value : null);
+    setWorkspaceChangedFiles(changedFilesResult.status === 'fulfilled' ? changedFilesResult.value : []);
+  }, []);
+
+  const applyHeavyResults = useCallback((
+    [portsResult, prStatusResult, prDraftResult, reviewCockpitResult, checkpointsResult]: Awaited<ReturnType<typeof loadCockpitHeavyData>>,
+  ) => {
+    setWorkspacePortCount(portsResult.status === 'fulfilled' ? portsResult.value.length : null);
+    setWorkspacePrStatus(prStatusResult.status === 'fulfilled' ? prStatusResult.value : null);
+    setWorkspacePrDraft(prDraftResult.status === 'fulfilled' ? prDraftResult.value : null);
+    setReviewCockpit(reviewCockpitResult.status === 'fulfilled' ? reviewCockpitResult.value : null);
+    setCheckpoints(checkpointsResult.status === 'fulfilled' ? checkpointsResult.value : []);
+  }, []);
+
+  const refreshCockpitData = useCallback(async () => {
     if (!workspaceId) return;
+    const [summaryResults, heavyResults] = await Promise.all([
+      loadCockpitSummaryData(workspaceId),
+      loadCockpitHeavyData(workspaceId),
+    ]);
+    applySummaryResults(summaryResults);
+    applyHeavyResults(heavyResults);
+  }, [applyHeavyResults, applySummaryResults, workspaceId]);
+
+  useEffect(() => {
+    if (!workspaceId || !activityOpen) return;
     let cancelled = false;
     setTimelineLoading(true);
     listWorkspaceActivity(workspaceId, 50)
@@ -978,59 +1045,38 @@ export function DetailPanel({
       .catch(() => undefined)
       .finally(() => { if (!cancelled) setTimelineLoading(false); });
     return () => { cancelled = true; };
-  }, [workspaceId]);
+  }, [activityOpen, workspaceId]);
 
   useEffect(() => {
     if (!workspaceId) {
-      setForgeConfig(null);
-      setWorkspaceReadiness(null);
-      setWorkspacePrStatus(null);
-      setWorkspacePrDraft(null);
-      setWorkspaceHealth(null);
-      setReviewCockpit(null);
-      setRecoveryResult(null);
-      setWorkspacePortCount(null);
-      setWorkspaceChangedFiles([]);
-      setScriptActionBusy(null);
-      setScriptActionMessage(null);
-      setCheckpoints([]);
-      setSelectedCheckpointRef(null);
-      setCheckpointDiff(null);
-      setCheckpointRestorePlan(null);
+      resetCockpitState();
       return;
     }
     let cancelled = false;
+    let heavyTimer: number | undefined;
     setCockpitLoading(true);
-    Promise.allSettled([
-      getWorkspaceForgeConfig(workspaceId),
-      getWorkspaceReadiness(workspaceId),
-      listWorkspacePorts(workspaceId),
-      getWorkspacePrStatus(workspaceId),
-      getWorkspacePrDraft(workspaceId),
-      getWorkspaceHealth(workspaceId),
-      getWorkspaceReviewCockpit(workspaceId, null),
-      listWorkspaceCheckpoints(workspaceId),
-      getWorkspaceChangedFiles(workspaceId),
-    ])
-      .then(([configResult, readinessResult, portsResult, prStatusResult, prDraftResult, healthResult, reviewCockpitResult, checkpointsResult, changedFilesResult]) => {
+
+    loadCockpitSummaryData(workspaceId)
+      .then((summaryResults) => {
         if (cancelled) return;
-        setForgeConfig(configResult.status === 'fulfilled' ? configResult.value : null);
-        setWorkspaceReadiness(readinessResult.status === 'fulfilled' ? readinessResult.value : null);
-        setWorkspacePortCount(portsResult.status === 'fulfilled' ? portsResult.value.length : null);
-        setWorkspacePrStatus(prStatusResult.status === 'fulfilled' ? prStatusResult.value : null);
-        setWorkspacePrDraft(prDraftResult.status === 'fulfilled' ? prDraftResult.value : null);
-        setWorkspaceHealth(healthResult.status === 'fulfilled' ? healthResult.value : null);
-        setReviewCockpit(reviewCockpitResult.status === 'fulfilled' ? reviewCockpitResult.value : null);
-        setCheckpoints(checkpointsResult.status === 'fulfilled' ? checkpointsResult.value : []);
-        setWorkspaceChangedFiles(changedFilesResult.status === 'fulfilled' ? changedFilesResult.value : []);
+        applySummaryResults(summaryResults);
+        setCockpitLoading(false);
+        heavyTimer = window.setTimeout(() => {
+          if (cancelled || document.hidden) return;
+          void loadCockpitHeavyData(workspaceId).then((heavyResults) => {
+            if (!cancelled) applyHeavyResults(heavyResults);
+          });
+        }, 100);
       })
-      .finally(() => {
+      .catch(() => {
         if (!cancelled) setCockpitLoading(false);
       });
+
     return () => {
       cancelled = true;
+      if (heavyTimer !== undefined) window.clearTimeout(heavyTimer);
     };
-  }, [workspaceId]);
+  }, [applyHeavyResults, applySummaryResults, resetCockpitState, workspaceId]);
 
   const createManualCheckpoint = async () => {
     if (!workspaceId) return;
@@ -1068,30 +1114,6 @@ export function DetailPanel({
     } finally {
       setCheckpointBusy(false);
     }
-  };
-
-  const refreshCockpitData = async () => {
-    if (!workspaceId) return;
-    const [configResult, readinessResult, portsResult, prStatusResult, prDraftResult, healthResult, reviewCockpitResult, checkpointsResult, changedFilesResult] = await Promise.allSettled([
-      getWorkspaceForgeConfig(workspaceId),
-      getWorkspaceReadiness(workspaceId),
-      listWorkspacePorts(workspaceId),
-      getWorkspacePrStatus(workspaceId),
-      getWorkspacePrDraft(workspaceId),
-      getWorkspaceHealth(workspaceId),
-      getWorkspaceReviewCockpit(workspaceId, null),
-      listWorkspaceCheckpoints(workspaceId),
-      getWorkspaceChangedFiles(workspaceId),
-    ]);
-    setForgeConfig(configResult.status === 'fulfilled' ? configResult.value : null);
-    setWorkspaceReadiness(readinessResult.status === 'fulfilled' ? readinessResult.value : null);
-    setWorkspacePortCount(portsResult.status === 'fulfilled' ? portsResult.value.length : null);
-    setWorkspacePrStatus(prStatusResult.status === 'fulfilled' ? prStatusResult.value : null);
-    setWorkspacePrDraft(prDraftResult.status === 'fulfilled' ? prDraftResult.value : null);
-    setWorkspaceHealth(healthResult.status === 'fulfilled' ? healthResult.value : null);
-    setReviewCockpit(reviewCockpitResult.status === 'fulfilled' ? reviewCockpitResult.value : null);
-    setCheckpoints(checkpointsResult.status === 'fulfilled' ? checkpointsResult.value : []);
-    setWorkspaceChangedFiles(changedFilesResult.status === 'fulfilled' ? changedFilesResult.value : []);
   };
 
   const runSetupFromCockpit = async () => {

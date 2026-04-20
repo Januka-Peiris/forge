@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Instant;
 
 use crate::models::{WorkspaceChangedFile, WorkspaceFileDiff};
 use crate::repositories::workspace_repository;
@@ -12,6 +13,7 @@ pub fn get_workspace_changed_files(
     state: &AppState,
     workspace_id: &str,
 ) -> Result<Vec<WorkspaceChangedFile>, String> {
+    let started = Instant::now();
     let root = workspace_root(state, workspace_id)?;
     ensure_git_worktree(&root)?;
     let porcelain = git(&root, &["status", "--porcelain=v1", "-z"])?;
@@ -23,6 +25,13 @@ pub fn get_workspace_changed_files(
         file.deletions = deletions;
     }
 
+    log::debug!(
+        target: "forge_lib",
+        "get_workspace_changed_files workspace={} files={} elapsed_ms={}",
+        workspace_id,
+        files.len(),
+        started.elapsed().as_millis()
+    );
     Ok(files)
 }
 

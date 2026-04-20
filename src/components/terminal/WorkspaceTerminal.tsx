@@ -115,6 +115,8 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   const outputFlushRafRef = useRef<number | null>(null);
   const focusedIdRef = useRef<string | null>(null);
   const focusedChatIdRef = useRef<string | null>(null);
+  const visibleSessionsRef = useRef<TerminalSession[]>([]);
+  const chatSessionsRef = useRef<AgentChatSession[]>([]);
   const metadataPollTickRef = useRef(0);
   /** Serializes agent prompt writes so rapid Enter / Send do not race attach + PTY. */
   const promptSendChainRef = useRef(Promise.resolve());
@@ -177,6 +179,14 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   useEffect(() => {
     focusedChatIdRef.current = focusedChatId;
   }, [focusedChatId]);
+
+  useEffect(() => {
+    visibleSessionsRef.current = visibleSessions;
+  }, [visibleSessions]);
+
+  useEffect(() => {
+    chatSessionsRef.current = chatSessions;
+  }, [chatSessions]);
 
   const appendOutput = useCallback((sessionId: string, chunks: TerminalOutputChunk[], reset = false) => {
     if (chunks.length === 0 && !reset) return;
@@ -242,18 +252,31 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     }
   }, [appendOutput, setActionError, workspaceId]);
 
-  const refreshChatSessions = useCallback(async (preferredFocusId?: string | null) => {
+  const refreshChatSessions = useCallback(async (
+    preferredFocusId?: string | null,
+    scope: 'all' | 'active' = 'all',
+  ) => {
     if (!workspaceId) return;
     try {
       const sessions = await listAgentChatSessions(workspaceId);
+      chatSessionsRef.current = sessions;
       setChatSessions(sessions);
       const nextFocusedChatId = preferredFocusId ?? focusedChatIdRef.current;
       const focused = nextFocusedChatId && sessions.some((session) => session.id === nextFocusedChatId)
         ? nextFocusedChatId
         : sessions[0]?.id ?? null;
+      focusedChatIdRef.current = focused;
       setFocusedChatId(focused);
+
+      const sessionsNeedingEvents = scope === 'all'
+        ? sessions.slice(0, 12)
+        : sessions
+            .filter((session) => session.id === focused || session.status === 'running')
+            .slice(0, 4);
+
+      if (sessionsNeedingEvents.length === 0) return;
       const eventPairs = await Promise.all(
-        sessions.slice(0, 12).map(async (session) => [session.id, await listAgentChatEvents(session.id)] as const),
+        sessionsNeedingEvents.map(async (session) => [session.id, await listAgentChatEvents(session.id)] as const),
       );
       setChatEvents((current) => ({ ...current, ...Object.fromEntries(eventPairs) }));
     } catch (err) {
@@ -438,7 +461,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       void refreshAgentProfiles();
       void refreshModelSettings();
       void refreshSessions(true);
-      void refreshChatSessions();
+      void refreshChatSessions(undefined, 'all');
       void refreshWorkbenchState();
       const timer = window.setTimeout(() => {
         if (document.hidden) return;
@@ -454,10 +477,23 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     const timer = window.setInterval(() => {
       if (document.hidden) return;
       metadataPollTickRef.current += 1;
-      const shouldBackfillOutput = metadataPollTickRef.current % 6 === 0;
-      const shouldRefreshExpensiveState = metadataPollTickRef.current % 3 === 0;
+      const hasRunningTerminal = visibleSessionsRef.current.some((session) => session.status === 'running');
+      const hasRunningChat = chatSessionsRef.current.some((session) => session.status === 'running');
+      const hasRunningSession = hasRunningTerminal || hasRunningChat;
+
+      // Idle workspaces still reconcile occasionally, but avoid doing every metadata fetch
+      // on every 5s tick when there is no active session to follow.
+      if (!hasRunningSession && metadataPollTickRef.current % 3 !== 0) return;
+
+      const shouldBackfillOutput = hasRunningSession
+        ? metadataPollTickRef.current % 6 === 0
+        : metadataPollTickRef.current % 9 === 0;
+      const shouldRefreshExpensiveState = hasRunningSession
+        ? metadataPollTickRef.current % 3 === 0
+        : metadataPollTickRef.current % 6 === 0;
+
       void refreshSessions(shouldBackfillOutput);
-      void refreshChatSessions();
+      void refreshChatSessions(undefined, 'active');
       if (shouldRefreshExpensiveState) {
         void refreshHealth();
         void refreshReadiness();
@@ -505,7 +541,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       });
       if (chatEvent.eventType === 'status' && (chatEvent.status === 'succeeded' || chatEvent.status === 'failed')) {
         window.setTimeout(() => {
-          void refreshChatSessions();
+          void refreshChatSessions(undefined, 'active');
           void refreshReadiness();
           void refreshWorkbenchState();
         }, 600);

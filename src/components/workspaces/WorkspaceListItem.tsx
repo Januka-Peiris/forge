@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { GitBranch, GitPullRequest, Clock } from 'lucide-react';
 import type { Workspace } from '../../types';
 
@@ -13,9 +14,11 @@ interface WorkspaceListItemProps {
   actions?: React.ReactNode;
   prefix?: React.ReactNode;
   suffix?: React.ReactNode;
+  totalAdds?: number;
+  totalDels?: number;
 }
 
-export function WorkspaceListItem({
+function WorkspaceListItemBase({
   workspace,
   isSelected,
   isHovered,
@@ -27,9 +30,9 @@ export function WorkspaceListItem({
   actions,
   prefix,
   suffix,
+  totalAdds = 0,
+  totalDels = 0,
 }: WorkspaceListItemProps) {
-  const totalAdds = workspace.changedFiles.reduce((s, f) => s + f.additions, 0);
-  const totalDels = workspace.changedFiles.reduce((s, f) => s + f.deletions, 0);
   
   const Icon = workspace.prStatus ? GitPullRequest : GitBranch;
   const iconColorClass = 
@@ -105,3 +108,21 @@ export function WorkspaceListItem({
     </div>
   );
 }
+
+export const WorkspaceListItem = memo(WorkspaceListItemBase, (prev, next) => (
+  prev.workspace.id === next.workspace.id
+  && prev.workspace.name === next.workspace.name
+  && prev.workspace.repo === next.workspace.repo
+  && prev.workspace.status === next.workspace.status
+  && prev.workspace.prStatus === next.workspace.prStatus
+  && prev.workspace.lastUpdated === next.workspace.lastUpdated
+  && prev.isSelected === next.isSelected
+  && prev.isHovered === next.isHovered
+  && prev.showRepo === next.showRepo
+  && prev.className === next.className
+  && prev.totalAdds === next.totalAdds
+  && prev.totalDels === next.totalDels
+  && prev.prefix === next.prefix
+  && prev.suffix === next.suffix
+  && prev.actions === next.actions
+));

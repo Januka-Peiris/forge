@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::Value;
 
@@ -113,6 +113,7 @@ fn build_cockpit(
     selected_path: Option<&str>,
     refresh: bool,
 ) -> Result<WorkspaceReviewCockpit, String> {
+    let started = Instant::now();
     workspace_repository::get_detail(&state.db, workspace_id)?
         .ok_or_else(|| format!("Workspace {workspace_id} was not found"))?;
     let changed_files = git_review_service::get_workspace_changed_files(state, workspace_id)?;
@@ -147,7 +148,7 @@ fn build_cockpit(
         merge_readiness_service::get_workspace_merge_readiness(state, workspace_id).ok()
     };
     let pr_comments = review_cockpit_repository::list_pr_comments(&state.db, workspace_id)?;
-    Ok(WorkspaceReviewCockpit {
+    let cockpit = WorkspaceReviewCockpit {
         workspace_id: workspace_id.to_string(),
         files,
         selected_diff,
@@ -155,7 +156,17 @@ fn build_cockpit(
         merge_readiness,
         pr_comments,
         warnings: Vec::new(),
-    })
+    };
+    log::debug!(
+        target: "forge_lib",
+        "build_review_cockpit workspace={} files={} comments={} refresh={} elapsed_ms={}",
+        workspace_id,
+        cockpit.files.len(),
+        cockpit.pr_comments.len(),
+        refresh,
+        started.elapsed().as_millis()
+    );
+    Ok(cockpit)
 }
 
 fn fetch_github_pr_comments(
