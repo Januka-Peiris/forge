@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown, Copy, ExternalLink, Globe2, MoreHorizontal, PlugZap, RefreshCw, RotateCcw, Square, Terminal as TerminalIcon, Wrench } from 'lucide-react';
 import { Button } from '../ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '../ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import type { AgentProfile, ForgeWorkspaceConfig, TerminalProfile, TerminalSession, Workspace, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
 import { PROFILE_LABELS } from './workspace-terminal-constants';
 import {
@@ -172,18 +172,20 @@ export function WorkspaceHeader({
                 New Claude tab
               </DropdownMenuItem>
               {localAgentProfiles.length > 0 && (
-                <>
-                  <DropdownMenuSeparator />
-                  {localAgentProfiles.map((profile) => (
-                    <DropdownMenuItem
-                      key={profile.id}
-                      disabled={busy}
-                      onSelect={() => onCreateTerminal('agent', profile.agent as TerminalProfile, profile.label, profile.id)}
-                    >
-                      New {profile.label} tab
-                    </DropdownMenuItem>
-                  ))}
-                </>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>Other agents</DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {localAgentProfiles.map((profile) => (
+                      <DropdownMenuItem
+                        key={profile.id}
+                        disabled={busy}
+                        onSelect={() => onCreateTerminal('agent', profile.agent as TerminalProfile, profile.label, profile.id)}
+                      >
+                        New {profile.label} tab
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
               )}
               <DropdownMenuSeparator />
               <DropdownMenuItem disabled={!focusedSession} onSelect={onCopyFocusedOutput}>

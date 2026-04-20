@@ -522,6 +522,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     setError(null);
     try {
       const session = await createWorkspaceTerminal({ workspaceId, kind, profile, profileId, title });
+      if (session.terminalKind === 'agent') setSelectedProfileId(session.profile);
       nextSeqRef.current[session.id] = 0;
       focusedIdRef.current = session.id;
       setFocusedId(session.id);
@@ -690,6 +691,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       setFocusedChatId(null);
       focusedIdRef.current = session.id;
       setFocusedId(session.id);
+      if (session.terminalKind === 'agent') setSelectedProfileId(session.profile);
       nextSeqRef.current[session.id] = 0;
       const output = await getWorkspaceTerminalOutputForSession(workspaceId, session.id, 0);
       nextSeqRef.current[session.id] = output.nextSeq;
@@ -895,10 +897,11 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         if (sendBehavior === 'interrupt_send' && focusedSession) {
           await interruptWorkspaceTerminalSessionById(focusedSession.id).catch(() => undefined);
         }
+        const terminalProfileId = focusedSession?.terminalKind === 'agent' ? focusedSession.profile : selectedProfileId;
         await queueWorkspaceAgentPrompt({
           workspaceId,
           prompt: text,
-          profileId: selectedProfileId,
+          profileId: terminalProfileId,
           taskMode: selectedTaskMode,
           reasoning: selectedReasoning,
         });
