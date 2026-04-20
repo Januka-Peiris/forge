@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronRight, Plus, Terminal as TerminalIcon, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Terminal as TerminalIcon, X } from 'lucide-react';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { AgentProfile, ForgeWorkspaceConfig, TerminalOutputChunk, TerminalOutputEvent, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
 import type { AgentChatEvent, AgentChatEventEnvelope, AgentChatNextAction, AgentChatSession } from '../../types/agent-chat';
@@ -69,6 +69,7 @@ import { TerminalPane } from './WorkspaceTerminalPane';
 import { AgentChatPanel } from '../agent/AgentChatPanel';
 import { WorkspaceHeader } from './WorkspaceHeader';
 import { WorkspaceComposer, type ComposerSettings } from './WorkspaceComposer';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import type { PromptTemplate } from '../../types/prompt-template';
 
 interface WorkspaceTerminalProps {
@@ -128,6 +129,10 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   const focusedSession = useMemo(
     () => visibleSessions.find((session) => session.id === focusedId) ?? visibleSessions[0] ?? null,
     [focusedId, visibleSessions],
+  );
+  const localAgentProfiles = useMemo(
+    () => agentProfiles.filter((profile) => profile.agent === 'local_llm' || profile.local),
+    [agentProfiles],
   );
   const focusedChatSession = useMemo(
     () => chatSessions.find((session) => session.id === focusedChatId) ?? null,
@@ -1058,6 +1063,27 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                 <div className="mt-4 flex flex-wrap justify-center gap-2">
                   <button disabled={busy} onClick={() => void createChatSession('claude_code', 'Claude Chat')} className="rounded-lg bg-forge-orange px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Start Claude</button>
                   <button disabled={busy} onClick={() => void createChatSession('codex', 'Codex Chat')} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">Start Codex</button>
+                  {localAgentProfiles.length > 0 && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">
+                          Other agents
+                          <ChevronDown className="h-3.5 w-3.5 text-forge-muted" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="center">
+                        {localAgentProfiles.map((profile) => (
+                          <DropdownMenuItem
+                            key={profile.id}
+                            disabled={busy}
+                            onSelect={() => void createTerminal('agent', profile.agent as TerminalProfile, profile.label, profile.id)}
+                          >
+                            Start {profile.label}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
                   <button disabled={busy} onClick={() => void createTerminal('shell', 'shell', 'Shell')} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">New Shell</button>
                 </div>
               </div>
