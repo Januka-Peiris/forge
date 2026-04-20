@@ -5,7 +5,6 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { open as openFilePicker } from '@tauri-apps/plugin-dialog';
 import { DetailPanel } from './components/detail/DetailPanel';
 import { Sidebar, type NavView } from './components/layout/Sidebar';
-import { ContextHeader } from './components/layout/ContextHeader';
 import { WorkspaceTerminal } from './components/terminal/WorkspaceTerminal';
 import { listRepositories, removeRepository, addRepository } from './lib/tauri-api/repositories';
 import { createWorkspacePr } from './lib/tauri-api/pr-draft';
@@ -852,7 +851,6 @@ export default function App() {
 
         <div className="flex flex-1 min-w-0 min-h-0">
           <div className="relative flex flex-col flex-1 min-w-0 min-h-0 bg-forge-bg">
-            <ContextHeader workspace={selected} />
             <div className="relative flex flex-1 flex-col min-h-0">
               {mainContent()}
             </div>

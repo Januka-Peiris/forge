@@ -64,45 +64,34 @@ export function AgentChatPanel({
   const hasNextActions = (nextActions ?? []).length > 0;
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-forge-border bg-forge-bg">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-forge-bg">
       <Tabs value={tab} onValueChange={(v) => setTab(v as 'chat' | 'raw' | 'plan')} className="flex min-h-0 flex-1 flex-col">
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-forge-border bg-forge-surface px-3 py-1.5">
-          <div className="flex min-w-0 items-center gap-2">
-            <Bot className="h-3.5 w-3.5 shrink-0 text-forge-green" />
-            <h2 className="truncate text-ui-body font-semibold text-forge-text">{session.title}</h2>
-            <StatusBadge status={session.status} />
-          </div>
-          <div className="flex shrink-0 items-center gap-3">
+        <div className="flex shrink-0 items-center justify-between gap-3 px-3 py-1.5 border-b border-forge-border/40 bg-black/5">
+          <div className="flex items-center gap-3">
             {tab === 'chat' && (
-              <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-forge-bg/50 border border-forge-border/40">
-                <span title="Conversation-first view: hides compact tool, file, and command timeline events." className={`text-ui-tiny font-bold uppercase tracking-tighter ${chatMode === 'clean' ? 'text-forge-green' : 'text-forge-muted'}`}>Chat</span>
+              <div className="flex items-center gap-2">
+                <span className={`text-[10px] font-bold uppercase tracking-tight ${chatMode === 'clean' ? 'text-forge-green' : 'text-forge-muted'}`}>Chat</span>
                 <Switch 
-                  title="Toggle between Chat and Activity views"
                   checked={chatMode === 'full'} 
                   onCheckedChange={(full) => setChatMode(full ? 'full' : 'clean')} 
                 />
-                <span title="Activity view: includes compact tool, file, command, and test timeline events." className={`text-ui-tiny font-bold uppercase tracking-tighter ${chatMode === 'full' ? 'text-forge-green' : 'text-forge-muted'}`}>Activity</span>
+                <span className={`text-[10px] font-bold uppercase tracking-tight ${chatMode === 'full' ? 'text-forge-green' : 'text-forge-muted'}`}>Activity</span>
               </div>
             )}
-            <TabsList>
-              <TabsTrigger value="chat" title="Chat View">
-                <MessageSquareText className="w-3.5 h-3.5 mr-1" />
-                Chat
-              </TabsTrigger>
-              {latestPlan && (
-                <TabsTrigger value="plan" className={!acceptedPlanId ? 'data-[state=inactive]:text-forge-blue/70' : ''}>
-                  <LayoutList className="w-3.5 h-3.5 mr-1" />
-                  Plan
-                </TabsTrigger>
-              )}
-              <TabsTrigger value="raw">Raw</TabsTrigger>
-            </TabsList>
-            {running && (
-              <Button type="button" variant="destructive" size="xs" onClick={onInterrupt}>
-                Interrupt
-              </Button>
-            )}
           </div>
+          <TabsList className="bg-transparent h-7 p-0 gap-1">
+            <TabsTrigger value="chat" className="h-6 text-[11px] px-2 data-[state=active]:bg-white/10">
+              <MessageSquareText className="w-3 h-3 mr-1" />
+              Chat
+            </TabsTrigger>
+            {latestPlan && (
+              <TabsTrigger value="plan" className={`h-6 text-[11px] px-2 data-[state=active]:bg-white/10 ${!acceptedPlanId ? 'data-[state=inactive]:text-forge-blue/70' : ''}`}>
+                <LayoutList className="w-3 h-3 mr-1" />
+                Plan
+              </TabsTrigger>
+            )}
+            <TabsTrigger value="raw" className="h-6 text-[11px] px-2 data-[state=active]:bg-white/10">Raw</TabsTrigger>
+          </TabsList>
         </div>
 
         {(hasSummary || hasNextActions) && (

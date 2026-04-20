@@ -985,11 +985,12 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         workspaceHealth={workspaceHealth}
         workspaceReadiness={workspaceReadiness}
         visibleSessions={visibleSessions}
-        allSessions={allSessions}
+        chatSessions={chatSessions}
         dockOverflowSessions={dockOverflowSessions}
         busy={busy}
         error={error}
         focusedSession={focusedSession}
+        focusedChatId={focusedChatId}
         agentProfiles={agentProfiles}
         onOpenInCursor={onOpenInCursor}
         onCreateChatSession={(provider, title) => void createChatSession(provider, title)}
@@ -1005,91 +1006,20 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
         onRefreshHealth={() => void refreshHealth()}
         onRecoverSessions={() => void recoverSessions()}
         onCloseTerminal={(sessionId) => void closeTerminal(sessionId)}
+        onCloseChatSession={(sessionId) => void closeChatSession(sessionId)}
         onStartShell={() => void createTerminal('shell', 'shell', 'Shell')}
         onAttachTerminal={(session) => void attachTerminal(session)}
+        onAttachChatSession={(sessionId) => {
+          focusedChatIdRef.current = sessionId;
+          setFocusedChatId(sessionId);
+          focusedIdRef.current = null;
+          setFocusedId(null);
+          if (!chatEvents[sessionId]) void listAgentChatEvents(sessionId).then((events) => setChatEvents((current) => ({ ...current, [sessionId]: events })));
+        }}
         onSetError={setError}
       />
 
       <div className="flex min-h-0 flex-1 gap-2 p-2">
-        {/* Shell / run session rail — left column, only when shells exist */}
-        {visibleSessions.length > 0 && (
-          shellRailOpen ? (
-            <div
-              className="flex w-44 shrink-0 flex-col border-r border-forge-border/50 pr-2"
-              onKeyDown={(e) => { if (e.key === 'Escape') setShellRailOpen(false); }}
-            >
-              <div className="mb-1 flex shrink-0 items-center justify-between px-1">
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-forge-muted/50">Shells</span>
-                <button
-                  onClick={() => void createTerminal('shell', 'shell', 'Shell')}
-                  className="rounded p-0.5 text-forge-muted/50 hover:bg-white/5 hover:text-forge-green"
-                  title="New shell"
-                >
-                  <Plus className="h-3 w-3" />
-                </button>
-              </div>
-              <div className="flex flex-col gap-0.5 overflow-y-auto">
-                {visibleSessions.map((session) => {
-                  const title = session.title || PROFILE_LABELS[session.profile as TerminalProfile] || session.profile;
-                  const isActive = !focusedChatSession && focusedSession?.id === session.id;
-                  const statusColor = session.status === 'running' ? 'text-forge-green' : session.status === 'failed' || session.status === 'interrupted' ? 'text-forge-red' : 'text-forge-muted/50';
-                  return (
-                    <div key={session.id} className="group relative">
-                      <button
-                        type="button"
-                        onClick={() => void attachTerminal(session)}
-                        className={`w-full rounded px-2 py-1.5 text-left transition-colors ${isActive ? 'bg-white/8 text-forge-text' : 'text-forge-muted hover:bg-white/5 hover:text-forge-text/85'}`}
-                        title={`${title} · ${session.status}`}
-                      >
-                        <div className="flex items-center gap-1.5">
-                          <TerminalIcon className={`h-3 w-3 shrink-0 ${isActive ? 'text-forge-green' : 'text-forge-muted/50'}`} />
-                          <span className="min-w-0 flex-1 truncate text-xs font-medium">{title}</span>
-                          <span className={`shrink-0 text-[10px] ${statusColor} group-hover:opacity-0`}>
-                            {session.status === 'running' ? '●' : session.status === 'failed' ? '✕' : '○'}
-                          </span>
-                        </div>
-                      </button>
-                      <div className="absolute right-0 top-0 bottom-0 flex items-center pl-4 bg-gradient-to-l from-forge-surface via-forge-surface to-transparent hidden group-hover:flex pr-1 rounded-r-md">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); void closeTerminal(session.id); }}
-                          className="rounded p-0.5 text-forge-muted hover:text-forge-red"
-                          title={`Close ${title}`}
-                        >
-                          <X className="h-2.5 w-2.5" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            <div className="flex shrink-0 flex-col items-center gap-1 border-r border-forge-border/50 pr-2">
-              <button
-                onClick={() => setShellRailOpen(true)}
-                className="rounded p-1 text-forge-muted/50 hover:bg-white/5 hover:text-forge-text"
-                title="Expand shell panel"
-              >
-                <ChevronRight className="h-3 w-3" />
-              </button>
-              {visibleSessions.map((session) => {
-                const isActive = !focusedChatSession && focusedSession?.id === session.id;
-                const iconColor = session.status === 'running' ? 'text-forge-green' : session.status === 'failed' || session.status === 'interrupted' ? 'text-forge-red' : 'text-forge-muted/40';
-                return (
-                  <button
-                    key={session.id}
-                    onClick={() => void attachTerminal(session)}
-                    className={`rounded p-1 ${isActive ? 'text-forge-green' : `${iconColor} hover:text-forge-text`}`}
-                    title={session.title || PROFILE_LABELS[session.profile as TerminalProfile] || session.profile}
-                  >
-                    <TerminalIcon className="h-3 w-3" />
-                  </button>
-                );
-              })}
-            </div>
-          )
-        )}
-
         {/* Main content area */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
           {visibleSessions.length === 0 && chatSessions.length === 0 ? (
@@ -1128,41 +1058,6 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
             </div>
           ) : (
             <>
-              {/* AI chat tab bar */}
-              {chatSessions.length > 0 && (
-                <div className="flex shrink-0 items-center gap-1 overflow-x-auto px-1 pb-1">
-                  {chatSessions.map((session) => {
-                    const active = focusedChatSession?.id === session.id;
-                    return (
-                      <button
-                        key={session.id}
-                        type="button"
-                        onClick={() => {
-                          focusedChatIdRef.current = session.id;
-                          setFocusedChatId(session.id);
-                          focusedIdRef.current = null;
-                          setFocusedId(null);
-                          if (!chatEvents[session.id]) void listAgentChatEvents(session.id).then((events) => setChatEvents((current) => ({ ...current, [session.id]: events })));
-                        }}
-                        className={`group flex max-w-[220px] shrink-0 items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition-colors ${active ? 'border-forge-green/40 bg-forge-green/10 text-forge-text' : 'border-transparent bg-transparent text-forge-muted hover:bg-white/5 hover:text-forge-text/85'}`}
-                        title={`${session.title} · ${session.status} · ${session.cwd}`}
-                      >
-                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${session.status === 'running' ? 'bg-forge-green' : session.status === 'failed' || session.status === 'interrupted' ? 'bg-forge-red' : 'bg-forge-muted/50'}`} />
-                        <span className="truncate text-sm font-semibold">{session.title}</span>
-                        <span
-                          role="button"
-                          tabIndex={-1}
-                          onClick={(event) => { event.stopPropagation(); void closeChatSession(session.id); }}
-                          className="rounded p-0.5 text-forge-muted opacity-70 hover:bg-white/10 hover:text-forge-text group-hover:opacity-100"
-                          title={`Close ${session.title}`}
-                        >
-                          <X className="h-3 w-3" />
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
               {/* Content */}
               {focusedChatSession ? (
                 <AgentChatPanel
@@ -1193,7 +1088,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                 />
               ) : (
                 <div className="flex h-full items-center justify-center text-sm text-forge-muted">
-                  Select a session above or open a shell on the left.
+                  Select a session above.
                 </div>
               )}
             </>
