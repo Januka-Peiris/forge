@@ -1,18 +1,15 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { Button } from './components/ui/button';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { DetailPanel } from './components/detail/DetailPanel';
 import { Sidebar, type NavView } from './components/layout/Sidebar';
+import { AppFrame } from './components/layout/AppFrame';
 import { WorkspaceTerminal } from './components/terminal/WorkspaceTerminal';
 import { listActivity } from './lib/tauri-api/activity';
 import { openDeepLink } from './lib/tauri-api/deep-links';
-import { listWorkspaceAttention, markWorkspaceAttentionRead } from './lib/tauri-api/workspace-attention';
-import { getWorkspaceConflicts } from './lib/tauri-api/workspace-health';
 import { getSettings } from './lib/tauri-api/settings';
 import { forgeWarn } from './lib/forge-log';
 import { measureAsync, perfMark, perfMeasure } from './lib/perf';
 import { listWorkspaces } from './lib/tauri-api/workspaces';
-import type { ActivityItem, CreateWorkspaceInput, WorkspaceAttention } from './types';
+import type { ActivityItem, CreateWorkspaceInput } from './types';
 import { LoadingView, ErrorView } from './components/views/LoadingView';
 import { EnvironmentSetupModal } from './components/modals/EnvironmentSetupModal';
 import { SettingsView } from './components/settings/SettingsView';
@@ -24,6 +21,7 @@ import { useAppLayoutState } from './lib/hooks/useAppLayoutState';
 import { useAppNotifications } from './lib/hooks/useAppNotifications';
 import { useForgeWorkspaces } from './lib/hooks/useForgeWorkspaces';
 import { useAppRepositories } from './lib/hooks/useAppRepositories';
+import { useWorkspaceAttentionState } from './lib/hooks/useWorkspaceAttentionState';
 
 
 const APP_BOOT_MARK = 'forge:app-boot';
@@ -51,8 +49,6 @@ export default function App() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalRepositoryId, setModalRepositoryId] = useState<string | undefined>(undefined);
   const [branchFromWorkspaceId, setBranchFromWorkspaceId] = useState<string | null>(null);
-  const [workspaceAttention, setWorkspaceAttention] = useState<Record<string, WorkspaceAttention>>({});
-  const [conflictingWorkspaceIds, setConflictingWorkspaceIds] = useState<Set<string>>(new Set());
   const [deepLinkNotice, setDeepLinkNotice] = useState<string | null>(null);
   const [activityItems, setActivityItems] = useState<ActivityItem[]>([]);
   const [selectedReviewPath, setSelectedReviewPath] = useState<string | null>(null);
@@ -82,8 +78,6 @@ export default function App() {
   } = useAppLayoutState();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const attentionRefreshTimerRef = useRef<number | null>(null);
-  const markReadTimerRef = useRef<Record<string, number>>({});
   const {
     completeFirstRunEnvironmentCheck,
     environmentCheckBusy,
@@ -157,38 +151,13 @@ export default function App() {
     if (modalOpen) void refreshRepositories();
   }, [modalOpen, refreshRepositories]);
 
-  const loadAttention = useCallback(async () => {
-    try {
-      const rows = await listWorkspaceAttention();
-      setWorkspaceAttention(Object.fromEntries(rows.map((row) => [row.workspaceId, row])));
-    } catch (err) {
-      forgeWarn('attention', 'load failed', { err });
-    }
-    try {
-      const result = await getWorkspaceConflicts();
-      setConflictingWorkspaceIds(new Set(result.conflictingWorkspaceIds));
-    } catch {
-      // non-fatal
-    }
-  }, []);
+  const {
+    conflictingWorkspaceIds,
+    scheduleAttentionLoad,
+    scheduleMarkAttentionRead,
+    workspaceAttention,
+  } = useWorkspaceAttentionState(selectedId, view);
 
-  const scheduleAttentionLoad = useCallback((delay = 300) => {
-    if (attentionRefreshTimerRef.current !== null) return;
-    attentionRefreshTimerRef.current = window.setTimeout(() => {
-      attentionRefreshTimerRef.current = null;
-      void loadAttention();
-    }, delay);
-  }, [loadAttention]);
-
-  const scheduleMarkAttentionRead = useCallback((workspaceId: string) => {
-    if (markReadTimerRef.current[workspaceId] !== undefined) return;
-    markReadTimerRef.current[workspaceId] = window.setTimeout(() => {
-      delete markReadTimerRef.current[workspaceId];
-      void markWorkspaceAttentionRead(workspaceId)
-        .then(() => scheduleAttentionLoad(50))
-        .catch((err) => forgeWarn('attention', 'mark read failed', { err, workspaceId }));
-    }, 300);
-  }, [scheduleAttentionLoad]);
 
   const { attentionToasts, dismissAttentionToast } = useAppNotifications({
     selectedWorkspaceId: selectedId,
@@ -198,10 +167,6 @@ export default function App() {
     onScheduleMarkAttentionRead: scheduleMarkAttentionRead,
   });
 
-  useEffect(() => () => {
-    if (attentionRefreshTimerRef.current !== null) window.clearTimeout(attentionRefreshTimerRef.current);
-    for (const timer of Object.values(markReadTimerRef.current)) window.clearTimeout(timer);
-  }, []);
 
   const loadBackendState = useCallback(async () => {
     setLoading(true);
@@ -271,18 +236,6 @@ export default function App() {
     }
   }, [handleDeepLinkUrl]);
 
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      if (!document.hidden) void loadAttention();
-    }, 10000);
-    return () => window.clearInterval(timer);
-  }, [loadAttention]);
-
-  useEffect(() => {
-    if (!selectedId || view !== 'workspaces') return;
-    scheduleMarkAttentionRead(selectedId);
-  }, [scheduleMarkAttentionRead, selectedId, view]);
-
   const handleCreateWorkspace = async (input: CreateWorkspaceInput) => {
     await createWorkspaceFromInput(input, branchFromWorkspaceId);
     setModalOpen(false);
@@ -321,136 +274,76 @@ export default function App() {
   };
 
   const isReviewView = view === 'reviews';
-  const showDetailPanel = view === 'workspaces';
   const effectiveSidebarWidth = sidebarCollapsed ? collapsedRailWidth : sidebarWidth;
 
   return (
     <div className="h-[100dvh] flex flex-col overflow-hidden bg-forge-bg text-forge-text antialiased selection:bg-forge-green/25">
-      <div className="flex flex-1 min-h-0">
-        {!isReviewView && (
-          sidebarCollapsed ? (
-            <div
-              className="shrink-0 h-full flex flex-col items-center justify-start bg-forge-surface"
-              style={{ width: `${collapsedRailWidth}px` }}
-            >
-              <Button
-                type="button"
-                variant="outline"
-                size="icon-sm"
-                onClick={() => setSidebarCollapsed(false)}
-                title="Expand sidebar"
-                className="mt-2.5 shadow-md ring-1 ring-black/20"
-              >
-                <ChevronRight className="h-4 w-4" strokeWidth={2.25} />
-              </Button>
-            </div>
-          ) : (
-            <>
-              <div className="shrink-0 h-full" style={{ width: `${sidebarWidth}px` }}>
-                <Sidebar
-                  activeView={view}
-                  onNavigate={setView}
-                  repositories={settingsState?.discoveredRepositories ?? []}
-                  workspaces={workspaces}
-                  archivedWorkspaceIds={archivedWorkspaceIds}
-                  workspaceAttention={workspaceAttention}
-                  conflictingWorkspaceIds={conflictingWorkspaceIds}
-                  selectedWorkspaceId={selectedId}
-                  onSelectWorkspace={setSelectedId}
-                  onArchiveWorkspace={(workspaceId) => archiveWorkspace(workspaceId)}
-                  onRemoveRepository={(repositoryId) => void removeRepositoryFromSettings(repositoryId)}
-                  onNewWorkspace={(repositoryId) => {
-                    setModalRepositoryId(repositoryId);
-                    setBranchFromWorkspaceId(null);
-                    setModalOpen(true);
-                  }}
-                  onAddRepository={() => void addRepositoryToSettings()}
-                  onCollapse={() => setSidebarCollapsed(true)}
-                  onFilteredWorkspacesChange={setDisplayedWorkspaces}
-                />
-              </div>
-              <div
-                role="separator"
-                aria-label="Resize sidebar"
-                onMouseDown={(event) => startResize(event, 'left')}
-                onDoubleClick={() => setSidebarWidth(300)}
-                className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-forge-border/70 active:bg-forge-green/60"
-                title="Double-click to reset width"
-              />            </>
-          )
+      <AppFrame
+        collapsedRailWidth={collapsedRailWidth}
+        detailPanel={(
+        <DetailPanel
+          workspace={selected}
+          onCollapse={() => setDetailPanelCollapsed(true)}
+          onOpenInCursor={() => void openWorkspaceInCursor()}
+          isArchived={selected ? archivedWorkspaceIds.includes(selected.id) : false}
+          onArchiveWorkspace={archiveWorkspace}
+          onDeleteWorkspace={selected ? () => void deleteWorkspaceRecord(selected.id) : undefined}
+          onOpenReviewFile={(path) => {
+            setSelectedReviewPath(path ?? null);
+            setView('reviews');
+          }}
+          activityItems={selected ? activityItems.filter((item) => item.workspaceId === selected.id) : []}
+          repositories={settingsState?.discoveredRepositories ?? []}
+          linkedWorktrees={selected ? linkedWorktreesByWorkspaceId[selected.id] ?? [] : []}
+          onAttachLinkedWorktree={(worktreeId) => void attachLinkedWorktree(worktreeId)}
+          onDetachLinkedWorktree={(worktreeId) => void detachLinkedWorktree(worktreeId)}
+          onOpenLinkedWorktreeInCursor={openLinkedWorktree}
+          onCreateChildWorkspace={() => {
+            if (!selected) return;
+            setModalRepositoryId(selected.repositoryId);
+            setBranchFromWorkspaceId(selected.id);
+            setModalOpen(true);
+          }}
+          onCreatePr={selected ? () => markPrCreated(selected.id) : undefined}
+        />
         )}
-
-        <div className="flex flex-1 min-w-0 min-h-0">
-          <div className="relative flex flex-col flex-1 min-w-0 min-h-0 bg-forge-bg">
-            <div className="relative flex flex-1 flex-col min-h-0">
-              {mainContent()}
-            </div>
-          </div>
-
-          {showDetailPanel && (
-            <>
-              {!detailPanelCollapsed ? (
-                <>
-                  <div
-                    role="separator"
-                    aria-label="Resize detail panel"
-                    onMouseDown={(event) => startResize(event, 'right')}
-                    onDoubleClick={() => setDetailPanelWidth(280)}
-                    className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-forge-border/70 active:bg-forge-green/60"
-                    title="Double-click to reset width"
-                  />
-                  <div
-                    className="relative z-[2] shrink-0 h-full shadow-forge-panel"
-                    style={{ width: `${detailPanelWidth}px` }}
-                  >
-                    <DetailPanel
-                      workspace={selected}
-                      onCollapse={() => setDetailPanelCollapsed(true)}
-                      onOpenInCursor={() => void openWorkspaceInCursor()}
-                      isArchived={selected ? archivedWorkspaceIds.includes(selected.id) : false}
-                      onArchiveWorkspace={archiveWorkspace}
-                      onDeleteWorkspace={selected ? () => void deleteWorkspaceRecord(selected.id) : undefined}
-                      onOpenReviewFile={(path) => {
-                        setSelectedReviewPath(path ?? null);
-                        setView('reviews');
-                      }}
-                      activityItems={selected ? activityItems.filter((item) => item.workspaceId === selected.id) : []}
-                      repositories={settingsState?.discoveredRepositories ?? []}
-                      linkedWorktrees={selected ? linkedWorktreesByWorkspaceId[selected.id] ?? [] : []}
-                      onAttachLinkedWorktree={(worktreeId) => void attachLinkedWorktree(worktreeId)}
-                      onDetachLinkedWorktree={(worktreeId) => void detachLinkedWorktree(worktreeId)}
-                      onOpenLinkedWorktreeInCursor={openLinkedWorktree}
-                      onCreateChildWorkspace={() => {
-                        if (!selected) return;
-                        setModalRepositoryId(selected.repositoryId);
-                        setBranchFromWorkspaceId(selected.id);
-                        setModalOpen(true);
-                      }}
-                      onCreatePr={selected ? () => markPrCreated(selected.id) : undefined}
-                    />
-                  </div>
-                </>
-              ) : (
-                <div
-                  className="shrink-0 h-full flex items-start justify-center bg-forge-surface"
-                  style={{ width: `${collapsedRailWidth}px` }}
-                >
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon-xs"
-                    onClick={() => setDetailPanelCollapsed(false)}
-                    title="Expand detail panel"
-                    className="mt-2.5"
-                  >
-                    <ChevronLeft className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
+        detailPanelCollapsed={detailPanelCollapsed}
+        detailPanelWidth={detailPanelWidth}
+        isReviewView={isReviewView}
+        onExpandDetailPanel={() => setDetailPanelCollapsed(false)}
+        onExpandSidebar={() => setSidebarCollapsed(false)}
+        onResetDetailWidth={() => setDetailPanelWidth(280)}
+        onResizeDetail={(event) => startResize(event, 'right')}
+        onResizeSidebar={(event) => startResize(event, 'left')}
+        onResetSidebarWidth={() => setSidebarWidth(300)}
+        sidebar={(
+        <Sidebar
+          activeView={view}
+          onNavigate={setView}
+          repositories={settingsState?.discoveredRepositories ?? []}
+          workspaces={workspaces}
+          archivedWorkspaceIds={archivedWorkspaceIds}
+          workspaceAttention={workspaceAttention}
+          conflictingWorkspaceIds={conflictingWorkspaceIds}
+          selectedWorkspaceId={selectedId}
+          onSelectWorkspace={setSelectedId}
+          onArchiveWorkspace={(workspaceId) => archiveWorkspace(workspaceId)}
+          onRemoveRepository={(repositoryId) => void removeRepositoryFromSettings(repositoryId)}
+          onNewWorkspace={(repositoryId) => {
+            setModalRepositoryId(repositoryId);
+            setBranchFromWorkspaceId(null);
+            setModalOpen(true);
+          }}
+          onAddRepository={() => void addRepositoryToSettings()}
+          onCollapse={() => setSidebarCollapsed(true)}
+          onFilteredWorkspacesChange={setDisplayedWorkspaces}
+        />
+        )}
+        sidebarCollapsed={sidebarCollapsed}
+        sidebarWidth={sidebarWidth}
+      >
+        {mainContent()}
+      </AppFrame>
 
       {commandPaletteOpen && (
         <Suspense fallback={null}>
