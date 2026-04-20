@@ -1,5 +1,12 @@
 export type MergeReadinessLevel = 'ready' | 'caution' | 'blocked';
 
+export interface PreFlightCheck {
+  id: string;
+  label: string;
+  status: 'pass' | 'fail' | 'warning' | 'pending';
+  message: string;
+}
+
 export interface WorkspaceMergeReadiness {
   workspaceId: string;
   mergeReady: boolean;
@@ -10,5 +17,6 @@ export interface WorkspaceMergeReadiness {
   behindCount?: number;
   activeRunStatus?: string;
   reviewRiskLevel?: string;
+  preFlightChecks: PreFlightCheck[];
   generatedAt: string;
 }

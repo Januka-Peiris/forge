@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Bot,
   CheckCircle2,
@@ -7,11 +6,15 @@ import {
   FileCode2,
   GitPullRequest,
   Hammer,
+  LayoutList,
   ListChecks,
   MessageSquare,
+  MessageSquareText,
   Search,
   Terminal,
   XCircle,
+  Play,
+  AlertCircle,
 } from 'lucide-react';
 import type { AgentChatEvent, AgentChatNextAction, AgentChatSession } from '../../types/agent-chat';
 import type { AgentRunSection, AgentWorkbenchSummary } from '../../lib/agent-workbench';
@@ -19,6 +22,8 @@ import { latestPlanEvent } from '../../lib/agent-workbench';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
+import { Switch } from '../ui/switch';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 
 const TIMELINE_EVENT_TYPES = new Set(['file_change', 'file_read', 'command', 'test_run', 'tool_call', 'tool_result']);
 
@@ -42,6 +47,7 @@ export function AgentChatPanel({
   onAction?: (action: AgentChatNextAction, event?: AgentChatEvent) => void;
 }) {
   const [tab, setTab] = useState<'chat' | 'raw' | 'plan'>('chat');
+  const [chatMode, setChatMode] = useState<'clean' | 'full'>('clean');
   const latestPlan = latestPlanEvent(events);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const running = session.status === 'running';
@@ -59,18 +65,32 @@ export function AgentChatPanel({
 
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-forge-border bg-forge-bg">
-      <Tabs value={tab} onValueChange={(v) => setTab(v as 'chat' | 'raw')} className="flex min-h-0 flex-1 flex-col">
+      <Tabs value={tab} onValueChange={(v) => setTab(v as 'chat' | 'raw' | 'plan')} className="flex min-h-0 flex-1 flex-col">
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-forge-border bg-forge-surface px-3 py-1.5">
           <div className="flex min-w-0 items-center gap-2">
-            <Bot className="h-3.5 w-3.5 shrink-0 text-forge-orange" />
-            <h2 className="truncate text-sm font-semibold text-forge-text">{session.title}</h2>
+            <Bot className="h-3.5 w-3.5 shrink-0 text-forge-green" />
+            <h2 className="truncate text-ui-body font-semibold text-forge-text">{session.title}</h2>
             <StatusBadge status={session.status} />
           </div>
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="flex shrink-0 items-center gap-3">
+            {tab === 'chat' && (
+              <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-forge-bg/50 border border-forge-border/40">
+                <span className={`text-ui-tiny font-bold uppercase tracking-tighter ${chatMode === 'clean' ? 'text-forge-green' : 'text-forge-muted'}`}>Clean</span>
+                <Switch 
+                  checked={chatMode === 'full'} 
+                  onCheckedChange={(full) => setChatMode(full ? 'full' : 'clean')} 
+                />
+                <span className={`text-ui-tiny font-bold uppercase tracking-tighter ${chatMode === 'full' ? 'text-forge-green' : 'text-forge-muted'}`}>Log</span>
+              </div>
+            )}
             <TabsList>
-              <TabsTrigger value="chat">Chat</TabsTrigger>
+              <TabsTrigger value="chat" title="Chat View">
+                <MessageSquareText className="w-3.5 h-3.5 mr-1" />
+                Chat
+              </TabsTrigger>
               {latestPlan && (
                 <TabsTrigger value="plan" className={!acceptedPlanId ? 'data-[state=inactive]:text-forge-blue/70' : ''}>
+                  <LayoutList className="w-3.5 h-3.5 mr-1" />
                   Plan
                 </TabsTrigger>
               )}
@@ -124,7 +144,7 @@ export function AgentChatPanel({
         </TabsContent>
 
         <TabsContent value="raw">
-          <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap bg-[#08090c] p-3 font-mono text-xs leading-relaxed text-forge-text/85">
+          <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap bg-forge-bg p-3 font-mono text-xs leading-relaxed text-forge-text/85">
             {session.rawOutput || 'No raw diagnostic output yet.'}
           </pre>
         </TabsContent>
@@ -138,6 +158,7 @@ export function AgentChatPanel({
                   key={section.kind}
                   section={section}
                   acceptedPlanId={acceptedPlanId}
+                  chatMode={chatMode}
                   onAction={handleAction}
                 />
               ))}
@@ -152,10 +173,26 @@ export function AgentChatPanel({
 }
 
 function StatusBadge({ status }: { status: string }) {
-  if (status === 'running') return <Badge variant="success" dot>{status}</Badge>;
-  if (status === 'failed' || status === 'interrupted') return <Badge variant="destructive" dot>{status}</Badge>;
-  if (status === 'succeeded') return <Badge variant="info">{status}</Badge>;
-  return <Badge>{status}</Badge>;
+  const isRunning = status === 'running';
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button className="outline-none focus:ring-0">
+          <Badge 
+            variant={status === 'failed' || status === 'interrupted' ? 'destructive' : isRunning ? 'success' : 'info'} 
+            dot 
+            animateDot={isRunning} 
+            className="px-1.5 py-1"
+          >
+            {isRunning ? <Play className="h-3 w-3" /> : status === 'failed' ? <AlertCircle className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
+          </Badge>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="center" className="w-auto p-2 text-ui-label font-semibold">
+        Session: {status}
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 function ResultStrip({
@@ -212,15 +249,17 @@ function sectionSummary(events: AgentChatEvent[]): string {
 function AgentRunSectionView({
   section,
   acceptedPlanId,
+  chatMode,
   onAction,
 }: {
   section: AgentRunSection;
   acceptedPlanId?: string | null;
+  chatMode: 'clean' | 'full';
   onAction?: (action: AgentChatNextAction, event?: AgentChatEvent) => void;
 }) {
   const defaultCollapsed = section.kind === 'actions';
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
-  const visibleEvents = section.events.filter((event) => !shouldOmitEvent(event));
+  const visibleEvents = section.events.filter((event) => !shouldOmitEvent(event, chatMode));
   if (visibleEvents.length === 0) return null;
 
   if (section.kind === 'conversation') {
@@ -269,7 +308,8 @@ function AgentRunSectionView({
   );
 }
 
-function shouldOmitEvent(event: AgentChatEvent): boolean {
+function shouldOmitEvent(event: AgentChatEvent, chatMode: 'clean' | 'full'): boolean {
+  if (chatMode === 'clean' && TIMELINE_EVENT_TYPES.has(event.eventType)) return true;
   if (event.eventType === 'thinking') return true;
   if (event.eventType === 'tool_result') return true;
   if (event.eventType === 'status' && event.status === 'running') return true;
@@ -308,7 +348,7 @@ function AgentEventCard({
   if (event.eventType === 'user_message') {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[78%] rounded bg-forge-orange px-3 py-2 text-sm leading-relaxed text-white">
+        <div className="max-w-[78%] rounded bg-forge-green px-3 py-2 text-sm leading-relaxed text-white">
           {event.body}
         </div>
       </div>
@@ -424,7 +464,7 @@ function inlineMarkdown(text: string): ReactNode {
     if (m.index > last) parts.push(text.slice(last, m.index));
     if (m[2] !== undefined) parts.push(<strong key={key++} className="font-semibold text-forge-text">{m[2]}</strong>);
     else if (m[3] !== undefined) parts.push(<em key={key++} className="italic">{m[3]}</em>);
-    else if (m[4] !== undefined) parts.push(<code key={key++} className="rounded bg-forge-bg px-1 py-0.5 font-mono text-xs text-forge-orange">{m[4]}</code>);
+    else if (m[4] !== undefined) parts.push(<code key={key++} className="rounded bg-forge-bg px-1 py-0.5 font-mono text-xs text-forge-green">{m[4]}</code>);
     last = m.index + m[0].length;
   }
   if (last < text.length) parts.push(text.slice(last));
@@ -551,7 +591,7 @@ function iconForEvent(event: AgentChatEvent) {
   if (event.eventType === 'plan' || event.eventType === 'todo') return <ListChecks className="h-3.5 w-3.5 text-forge-blue" />;
   if (event.eventType === 'result' || (event.eventType === 'status' && event.status === 'succeeded')) return <CheckCircle2 className="h-3.5 w-3.5 text-forge-green" />;
   if (event.eventType === 'error' || (event.eventType === 'status' && event.status === 'failed')) return <XCircle className="h-3.5 w-3.5 text-forge-red" />;
-  if (event.eventType === 'next_action') return <GitPullRequest className="h-3.5 w-3.5 text-forge-orange" />;
+  if (event.eventType === 'next_action') return <GitPullRequest className="h-3.5 w-3.5 text-forge-green" />;
   return <Hammer className="h-3.5 w-3.5 text-forge-yellow" />;
 }
 

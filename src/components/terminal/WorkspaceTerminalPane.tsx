@@ -58,10 +58,10 @@ export function TerminalPane({
       lineHeight: 1.15,
       scrollback: 2500,
       theme: {
-        background: '#08090c',
+        background: '#0a0a0a',
         foreground: '#d7dce5',
-        cursor: '#ff6a00',
-        selectionBackground: '#ff6a0040',
+        cursor: '#22c55e',
+        selectionBackground: '#22c55e40',
       },
     });
     const fitAddon = new FitAddon();
@@ -112,7 +112,7 @@ export function TerminalPane({
     <section
       onMouseDown={onFocus}
       title={session.cwd}
-      className={`relative flex min-h-0 flex-1 flex-col rounded-md border bg-[#08090c] ${focused ? 'border-forge-orange/50 shadow-lg shadow-orange-950/20' : 'border-forge-border'}`}
+      className={`relative flex min-h-0 flex-1 flex-col rounded-md border bg-forge-bg ${focused ? 'border-forge-green/50 shadow-lg shadow-emerald-950/20' : 'border-forge-border'}`}
     >
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-forge-border/70 bg-forge-surface px-2 py-1.5">
         <div className="flex min-w-0 items-center gap-2">

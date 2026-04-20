@@ -10,7 +10,7 @@ function DiffLine({ line }: { line: DiffFile['lines'][number] }) {
   if (line.type === 'header') {
     return (
       <div className="flex gap-3 px-4 py-1 bg-forge-blue/5 border-y border-forge-blue/10">
-        <span className="text-[10px] font-mono text-forge-blue/70 select-none">{line.content}</span>
+        <span className="text-ui-caption font-mono text-forge-blue/70 select-none">{line.content}</span>
       </div>
     );
   }
@@ -41,11 +41,11 @@ function DiffLine({ line }: { line: DiffFile['lines'][number] }) {
 
   return (
     <div className={`flex gap-3 px-4 py-0.5 transition-colors ${bg}`}>
-      <span className={`text-[10px] font-mono select-none w-6 shrink-0 text-right ${lineNumColor}`}>
+      <span className={`text-ui-caption font-mono select-none w-6 shrink-0 text-right ${lineNumColor}`}>
         {line.lineNumber ?? ''}
       </span>
-      <span className={`text-[11px] font-mono select-none w-3 shrink-0 ${textColor}`}>{prefix}</span>
-      <span className={`text-[11px] font-mono flex-1 whitespace-pre ${textColor}`}>{line.content}</span>
+      <span className={`text-ui-label font-mono select-none w-3 shrink-0 ${textColor}`}>{prefix}</span>
+      <span className={`text-ui-label font-mono flex-1 whitespace-pre ${textColor}`}>{line.content}</span>
     </div>
   );
 }
@@ -55,7 +55,7 @@ export function DiffPreview({ files }: DiffPreviewProps) {
   const current = files[activeFile];
 
   return (
-    <div className="flex flex-col h-full bg-[#0a0d12]">
+    <div className="flex flex-col h-full bg-forge-bg">
       <div className="flex items-center gap-1 px-3 pt-2 border-b border-forge-border shrink-0 bg-forge-surface/50">
         {files.map((f, i) => (
           <button
@@ -63,7 +63,7 @@ export function DiffPreview({ files }: DiffPreviewProps) {
             onClick={() => setActiveFile(i)}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-mono rounded-t-md border border-b-0 transition-colors ${
               i === activeFile
-                ? 'bg-[#0a0d12] border-forge-border text-forge-text'
+                ? 'bg-forge-bg border-forge-border text-forge-text'
                 : 'border-transparent text-forge-muted hover:text-forge-text hover:bg-white/3'
             }`}
           >

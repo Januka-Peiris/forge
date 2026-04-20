@@ -35,15 +35,17 @@ export interface BadgeProps
   extends React.HTMLAttributes<HTMLSpanElement>,
     VariantProps<typeof badgeVariants> {
   dot?: boolean;
+  animateDot?: boolean;
 }
 
-function Badge({ className, variant, dot, children, ...props }: BadgeProps) {
+function Badge({ className, variant, dot, animateDot, children, ...props }: BadgeProps) {
   return (
     <span className={cn(badgeVariants({ variant }), className)} {...props}>
       {dot && (
         <span
           className={cn(
             'h-1.5 w-1.5 rounded-full',
+            animateDot && 'animate-agent-pulse',
             variant === 'success' && 'bg-forge-green',
             variant === 'warning' && 'bg-forge-yellow',
             variant === 'destructive' && 'bg-forge-red',

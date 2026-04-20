@@ -59,12 +59,12 @@ export function MemoryView() {
   return (
     <div className="flex flex-1 flex-col min-h-0">
       <div className="px-6 pt-6 pb-4 border-b border-forge-border shrink-0">
-        <h1 className="text-[22px] font-bold text-forge-text tracking-tight">Agent Memory</h1>
-        <p className="text-[12px] text-forge-muted mt-1.5">Persistent knowledge shared across workspaces and agent sessions</p>
+        <h1 className="text-ui-title font-bold text-forge-text tracking-tight">Agent Memory</h1>
+        <p className="text-ui-label text-forge-muted mt-1.5">Persistent knowledge shared across workspaces and agent sessions</p>
       </div>
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
         <div className="rounded-xl border border-forge-border bg-forge-card p-4">
-          <h2 className="text-[14px] font-bold text-forge-text mb-3">Add Global Memory</h2>
+          <h2 className="text-ui-body font-bold text-forge-text mb-3">Add Global Memory</h2>
           <div className="flex gap-2 mb-2">
             <Input
               value={editKey}
@@ -80,7 +80,7 @@ export function MemoryView() {
             rows={3}
             className="mb-2"
           />
-          {error && <p className="text-[11px] text-forge-red mb-2">{error}</p>}
+          {error && <p className="text-ui-label text-forge-red mb-2">{error}</p>}
           <Button
             variant="ghost"
             size="sm"
@@ -94,15 +94,15 @@ export function MemoryView() {
 
         <div className="rounded-xl border border-forge-border bg-forge-card p-4">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[14px] font-bold text-forge-text">Stored Memories</h2>
+            <h2 className="text-ui-body font-bold text-forge-text">Stored Memories</h2>
             <Badge variant="info">{memories.length} entries</Badge>
           </div>
           {loading ? (
-            <p className="text-[12px] text-forge-muted">Loading…</p>
+            <p className="text-ui-label text-forge-muted">Loading…</p>
           ) : memories.length === 0 ? (
             <div className="rounded-lg border border-dashed border-forge-border p-6 text-center">
-              <p className="text-[13px] text-forge-muted">No memories stored yet</p>
-              <p className="text-[12px] text-forge-muted mt-1">Add entries above to share knowledge across workspaces.</p>
+              <p className="text-ui-body text-forge-muted">No memories stored yet</p>
+              <p className="text-ui-label text-forge-muted mt-1">Add entries above to share knowledge across workspaces.</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -111,12 +111,12 @@ export function MemoryView() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[12px] font-mono font-bold text-forge-text">{m.key}</span>
+                        <span className="text-ui-label font-mono font-bold text-forge-text">{m.key}</span>
                         {m.workspaceId && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-forge-blue/15 text-forge-blue border border-forge-blue/20">{m.workspaceId}</span>
+                          <span className="text-ui-caption px-1.5 py-0.5 rounded bg-forge-blue/15 text-forge-blue border border-forge-blue/20">{m.workspaceId}</span>
                         )}
                       </div>
-                      <p className="text-[11px] text-forge-muted leading-relaxed whitespace-pre-wrap">{m.value}</p>
+                      <p className="text-ui-label text-forge-muted leading-relaxed whitespace-pre-wrap">{m.value}</p>
                     </div>
                     <Button
                       variant="ghost"

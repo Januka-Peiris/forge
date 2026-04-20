@@ -5,6 +5,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { open as openFilePicker } from '@tauri-apps/plugin-dialog';
 import { DetailPanel } from './components/detail/DetailPanel';
 import { Sidebar, type NavView } from './components/layout/Sidebar';
+import { ContextHeader } from './components/layout/ContextHeader';
 import { WorkspaceTerminal } from './components/terminal/WorkspaceTerminal';
 import { listRepositories, removeRepository, addRepository } from './lib/tauri-api/repositories';
 import { createWorkspacePr } from './lib/tauri-api/pr-draft';
@@ -698,7 +699,7 @@ export default function App() {
 
     if (view === 'reviews') {
       return (
-        <Suspense fallback={<div className="flex flex-1 items-center justify-center text-[12px] text-forge-muted">Loading Review Cockpit…</div>}>
+        <Suspense fallback={<div className="flex flex-1 items-center justify-center text-ui-label text-forge-muted">Loading Review Cockpit…</div>}>
           <ReviewCockpit
             workspace={selected}
             selectedPath={selectedReviewPath}
@@ -721,7 +722,7 @@ export default function App() {
   const effectiveSidebarWidth = sidebarCollapsed ? COLLAPSED_RAIL_WIDTH : sidebarWidth;
 
   return (
-    <div className="h-[100dvh] flex flex-col overflow-hidden bg-forge-bg text-forge-text antialiased selection:bg-forge-orange/25">
+    <div className="h-[100dvh] flex flex-col overflow-hidden bg-forge-bg text-forge-text antialiased selection:bg-forge-green/25">
       <div className="flex flex-1 min-h-0">
         {!isReviewView && (
           sidebarCollapsed ? (
@@ -770,15 +771,15 @@ export default function App() {
                 aria-label="Resize sidebar"
                 onMouseDown={(event) => startResize(event, 'left')}
                 onDoubleClick={() => setSidebarWidth(300)}
-                className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-forge-border/70 active:bg-forge-orange/60"
+                className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-forge-border/70 active:bg-forge-green/60"
                 title="Double-click to reset width"
-              />
-            </>
+              />            </>
           )
         )}
 
         <div className="flex flex-1 min-w-0 min-h-0">
           <div className="relative flex flex-col flex-1 min-w-0 min-h-0 bg-forge-bg">
+            <ContextHeader workspace={selected} />
             <div className="relative flex flex-1 flex-col min-h-0">
               {mainContent()}
             </div>
@@ -793,7 +794,7 @@ export default function App() {
                     aria-label="Resize detail panel"
                     onMouseDown={(event) => startResize(event, 'right')}
                     onDoubleClick={() => setDetailPanelWidth(280)}
-                    className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-forge-border/70 active:bg-forge-orange/60"
+                    className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-forge-border/70 active:bg-forge-green/60"
                     title="Double-click to reset width"
                   />
                   <div
@@ -927,21 +928,21 @@ export default function App() {
                 setSelectedId(toast.workspaceId);
                 setAttentionToasts((current) => current.filter((item) => item.id !== toast.id));
               }}
-              className="pointer-events-auto rounded-xl border border-forge-blue/25 bg-[#0b0d12]/95 px-3 py-2 text-left shadow-xl shadow-black/30 backdrop-blur hover:bg-[#10131b]"
+              className="pointer-events-auto rounded-xl border border-forge-blue/25 bg-forge-bg/95 px-3 py-2 text-left shadow-xl shadow-black/30 backdrop-blur hover:bg-forge-surface"
             >
               <div className="flex items-center justify-between gap-3">
-                <span className="text-[11px] font-bold text-forge-blue">New workspace output</span>
-                <span className="text-[10px] text-forge-muted">Open</span>
+                <span className="text-ui-label font-bold text-forge-blue">New workspace output</span>
+                <span className="text-ui-caption text-forge-muted">Open</span>
               </div>
-              <p className="mt-1 truncate text-[12px] font-semibold text-forge-text">{toast.workspaceName}</p>
-              <p className="mt-0.5 truncate text-[11px] text-forge-muted">{toast.text}</p>
+              <p className="mt-1 truncate text-ui-label font-semibold text-forge-text">{toast.workspaceName}</p>
+              <p className="mt-0.5 truncate text-ui-label text-forge-muted">{toast.text}</p>
             </button>
           ))}
         </div>
       )}
 
       {deepLinkNotice && (
-        <div className="fixed right-4 top-4 z-50 max-w-[420px] rounded-xl border border-forge-blue/25 bg-[#0b0d12]/95 px-4 py-3 text-[12px] font-semibold text-forge-text shadow-xl shadow-black/30 backdrop-blur">
+        <div className="fixed right-4 top-4 z-50 max-w-[420px] rounded-xl border border-forge-blue/25 bg-forge-bg/95 px-4 py-3 text-ui-label font-semibold text-forge-text shadow-xl shadow-black/30 backdrop-blur">
           {deepLinkNotice}
         </div>
       )}

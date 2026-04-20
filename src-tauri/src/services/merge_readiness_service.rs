@@ -2,7 +2,7 @@ use std::path::Path;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::models::WorkspaceMergeReadiness;
+use crate::models::{WorkspaceMergeReadiness, PreFlightCheck};
 use crate::repositories::{agent_run_repository, merge_readiness_repository, workspace_repository};
 use crate::services::{git_review_service, review_summary_service};
 use crate::state::AppState;
@@ -34,6 +34,7 @@ pub fn refresh_workspace_merge_readiness(
     let mut blockers = Vec::new();
     let mut ahead_count = None;
     let mut behind_count = None;
+    let mut pre_flight_checks = Vec::new();
 
     let root_path = Path::new(&root);
     if !root_path.exists() {
@@ -43,6 +44,16 @@ pub fn refresh_workspace_merge_readiness(
         .unwrap_or(false)
     {
         reasons.push("Workspace path is a valid git worktree.".to_string());
+        
+        // --- 1. Git Diff Check ---
+        let git_check = git(root_path, &["diff", "--check"]);
+        pre_flight_checks.push(PreFlightCheck {
+            id: "git_diff_check".to_string(),
+            label: "Git Check".to_string(),
+            status: if git_check.is_ok() { "pass".to_string() } else { "fail".to_string() },
+            message: git_check.unwrap_or_else(|e| e),
+        });
+
         let base = workspace.summary.branch_health.base_branch.clone();
         if !base.trim().is_empty() {
             if let Ok((ahead, behind)) = ahead_behind(root_path, &base) {
@@ -62,9 +73,32 @@ pub fn refresh_workspace_merge_readiness(
         }
         if has_unmerged_conflicts(root_path) {
             blockers.push("Git reports unresolved merge conflicts.".to_string());
+            pre_flight_checks.push(PreFlightCheck {
+                id: "merge_conflicts".to_string(),
+                label: "Merge Conflicts".to_string(),
+                status: "fail".to_string(),
+                message: "Unresolved conflicts detected. Fix them before shipping.".to_string(),
+            });
+        } else {
+            pre_flight_checks.push(PreFlightCheck {
+                id: "merge_conflicts".to_string(),
+                label: "Merge Conflicts".to_string(),
+                status: "pass".to_string(),
+                message: "No unresolved conflicts.".to_string(),
+            });
         }
     } else {
         blockers.push(format!("Workspace path is not a git worktree: {root}"));
+    }
+
+    // --- 2. Lint Detection (Simple) ---
+    if root_path.join("package.json").exists() {
+        pre_flight_checks.push(PreFlightCheck {
+            id: "lint_check".to_string(),
+            label: "Lint Available".to_string(),
+            status: "warning".to_string(),
+            message: "Detected Node project. Manual linting recommended before ship.".to_string(),
+        });
     }
 
     let changed_files = git_review_service::get_workspace_changed_files(state, workspace_id)
@@ -134,6 +168,7 @@ pub fn refresh_workspace_merge_readiness(
         behind_count,
         active_run_status,
         review_risk_level,
+        pre_flight_checks,
         generated_at: timestamp(),
     };
     merge_readiness_repository::upsert(&state.db, &readiness)?;

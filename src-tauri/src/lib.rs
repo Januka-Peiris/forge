@@ -136,6 +136,7 @@ pub fn run() {
             pr_draft::get_workspace_pr_status,
             prompt_templates::list_workspace_prompt_templates,
             terminal::create_workspace_terminal,
+            terminal::check_shell_command_safety,
             terminal::attach_workspace_terminal_session,
             terminal::write_workspace_terminal_session_input,
             terminal::approve_workspace_terminal_command,

@@ -986,7 +986,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                 <span className="text-[10px] font-semibold uppercase tracking-widest text-forge-muted/50">Shells</span>
                 <button
                   onClick={() => void createTerminal('shell', 'shell', 'Shell')}
-                  className="rounded p-0.5 text-forge-muted/50 hover:bg-white/5 hover:text-forge-orange"
+                  className="rounded p-0.5 text-forge-muted/50 hover:bg-white/5 hover:text-forge-green"
                   title="New shell"
                 >
                   <Plus className="h-3 w-3" />
@@ -1006,20 +1006,22 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                         title={`${title} · ${session.status}`}
                       >
                         <div className="flex items-center gap-1.5">
-                          <TerminalIcon className={`h-3 w-3 shrink-0 ${isActive ? 'text-forge-orange' : 'text-forge-muted/50'}`} />
+                          <TerminalIcon className={`h-3 w-3 shrink-0 ${isActive ? 'text-forge-green' : 'text-forge-muted/50'}`} />
                           <span className="min-w-0 flex-1 truncate text-xs font-medium">{title}</span>
-                          <span className={`shrink-0 text-[10px] ${statusColor}`}>
+                          <span className={`shrink-0 text-[10px] ${statusColor} group-hover:opacity-0`}>
                             {session.status === 'running' ? '●' : session.status === 'failed' ? '✕' : '○'}
                           </span>
                         </div>
                       </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); void closeTerminal(session.id); }}
-                        className="absolute right-1 top-1/2 -translate-y-1/2 hidden rounded p-0.5 text-forge-muted hover:text-forge-red group-hover:block"
-                        title={`Close ${title}`}
-                      >
-                        <X className="h-2.5 w-2.5" />
-                      </button>
+                      <div className="absolute right-0 top-0 bottom-0 flex items-center pl-4 bg-gradient-to-l from-forge-surface via-forge-surface to-transparent hidden group-hover:flex pr-1 rounded-r-md">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); void closeTerminal(session.id); }}
+                          className="rounded p-0.5 text-forge-muted hover:text-forge-red"
+                          title={`Close ${title}`}
+                        >
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -1041,7 +1043,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                   <button
                     key={session.id}
                     onClick={() => void attachTerminal(session)}
-                    className={`rounded p-1 ${isActive ? 'text-forge-orange' : `${iconColor} hover:text-forge-text`}`}
+                    className={`rounded p-1 ${isActive ? 'text-forge-green' : `${iconColor} hover:text-forge-text`}`}
                     title={session.title || PROFILE_LABELS[session.profile as TerminalProfile] || session.profile}
                   >
                     <TerminalIcon className="h-3 w-3" />
@@ -1061,7 +1063,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                 <h2 className="text-base font-bold text-forge-text">Start a workspace terminal</h2>
                 <p className="mt-1 text-sm leading-relaxed text-forge-muted">Launch agents, shells, and dev servers for this workspace.</p>
                 <div className="mt-4 flex flex-wrap justify-center gap-2">
-                  <button disabled={busy} onClick={() => void createChatSession('claude_code', 'Claude Chat')} className="rounded-lg bg-forge-orange px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Start Claude</button>
+                  <button disabled={busy} onClick={() => void createChatSession('claude_code', 'Claude Chat')} className="rounded-lg bg-forge-green px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Start Claude</button>
                   <button disabled={busy} onClick={() => void createChatSession('codex', 'Codex Chat')} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">Start Codex</button>
                   {localAgentProfiles.length > 0 && (
                     <DropdownMenu>
@@ -1106,7 +1108,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
                           setFocusedId(null);
                           if (!chatEvents[session.id]) void listAgentChatEvents(session.id).then((events) => setChatEvents((current) => ({ ...current, [session.id]: events })));
                         }}
-                        className={`group flex max-w-[220px] shrink-0 items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition-colors ${active ? 'border-forge-orange/40 bg-forge-orange/10 text-forge-text' : 'border-transparent bg-transparent text-forge-muted hover:bg-white/5 hover:text-forge-text/85'}`}
+                        className={`group flex max-w-[220px] shrink-0 items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition-colors ${active ? 'border-forge-green/40 bg-forge-green/10 text-forge-text' : 'border-transparent bg-transparent text-forge-muted hover:bg-white/5 hover:text-forge-text/85'}`}
                         title={`${session.title} · ${session.status} · ${session.cwd}`}
                       >
                         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${session.status === 'running' ? 'bg-forge-green' : session.status === 'failed' || session.status === 'interrupted' ? 'bg-forge-red' : 'bg-forge-muted/50'}`} />

@@ -11,7 +11,17 @@ interface PendingReviewsProps {
 
 function RiskBadge({ risk }: { risk: RiskLevel }) {
   const variant = risk === 'Low' ? 'success' : risk === 'Medium' ? 'warning' : 'destructive';
-  return <Badge variant={variant}>{risk} Risk</Badge>;
+  return (
+    <div className="relative">
+      <Badge variant={variant}>{risk} Risk</Badge>
+      {risk === 'High' && (
+        <span className="absolute -right-1 -top-1 flex h-2 w-2">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-forge-red opacity-75"></span>
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-forge-red"></span>
+        </span>
+      )}
+    </div>
+  );
 }
 
 function ReviewCard({ review, onOpenWorkspace }: { review: ReviewItem; onOpenWorkspace?: (workspaceId: string) => void }) {
@@ -20,10 +30,10 @@ function ReviewCard({ review, onOpenWorkspace }: { review: ReviewItem; onOpenWor
     <div className="bg-forge-card border border-forge-border rounded-xl p-4 hover:border-forge-border-light transition-colors group">
       <div className="flex items-start justify-between gap-3 mb-2.5">
         <div>
-          <h4 className="text-[13px] font-semibold text-forge-text group-hover:text-white transition-colors">
+          <h4 className="text-ui-body font-semibold text-forge-text group-hover:text-forge-text transition-colors">
             {review.workspaceName}
           </h4>
-          <div className="flex items-center gap-1.5 text-[11px] text-forge-muted mt-0.5">
+          <div className="flex items-center gap-1.5 text-ui-label text-forge-muted mt-0.5">
             <span className="font-medium text-forge-text/88">{review.repo}</span>
             <span className="text-forge-muted">/</span>
             <GitBranch className="w-3 h-3" />
@@ -33,7 +43,7 @@ function ReviewCard({ review, onOpenWorkspace }: { review: ReviewItem; onOpenWor
         <RiskBadge risk={review.risk} />
       </div>
 
-      <div className="flex items-center gap-3 text-[11px] text-forge-muted mb-3">
+      <div className="flex items-center gap-3 text-ui-label text-forge-muted mb-3">
         <span className="flex items-center gap-1">
           <FileCode className="w-3 h-3" />
           {review.filesChanged} files
@@ -46,7 +56,7 @@ function ReviewCard({ review, onOpenWorkspace }: { review: ReviewItem; onOpenWor
       <div className="bg-forge-surface/60 rounded-lg px-3 py-2 mb-3 border border-forge-border/50">
         <div className="flex items-start gap-1.5">
           <AlertTriangle className="w-3 h-3 text-forge-muted mt-0.5 shrink-0" />
-          <p className="text-[11px] text-forge-muted/90 leading-relaxed">{review.aiSummary}</p>
+          <p className="text-ui-label text-forge-muted/90 leading-relaxed">{review.aiSummary}</p>
         </div>
       </div>
 
@@ -83,14 +93,14 @@ export function PendingReviews({ reviews, onOpenWorkspace }: PendingReviewsProps
       <div>
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h2 className="text-[14px] font-bold text-forge-text">Pending Reviews</h2>
-            <p className="text-[11px] text-forge-muted mt-0.5">AI-summarized changes awaiting approval</p>
+            <h2 className="text-ui-body font-bold text-forge-text">Pending Reviews</h2>
+            <p className="text-ui-label text-forge-muted mt-0.5">AI-summarized changes awaiting approval</p>
           </div>
           <Badge variant="default">0 pending</Badge>
         </div>
         <div className="rounded-xl border border-forge-border bg-forge-card/60 px-4 py-6 text-center">
-          <p className="text-sm text-forge-muted">No pending reviews right now.</p>
-          <p className="mt-1 text-xs text-forge-muted/80">Workspaces with changed files still appear in the Review attention filter.</p>
+          <p className="text-ui-body text-forge-muted">No pending reviews right now.</p>
+          <p className="mt-1 text-ui-label text-forge-muted/80">Workspaces with changed files still appear in the Review attention filter.</p>
         </div>
       </div>
     );
@@ -100,8 +110,8 @@ export function PendingReviews({ reviews, onOpenWorkspace }: PendingReviewsProps
     <div>
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h2 className="text-[14px] font-bold text-forge-text">Pending Reviews</h2>
-          <p className="text-[11px] text-forge-muted mt-0.5">AI-summarized changes awaiting cockpit review</p>
+          <h2 className="text-ui-body font-bold text-forge-text">Pending Reviews</h2>
+          <p className="text-ui-label text-forge-muted mt-0.5">AI-summarized changes awaiting cockpit review</p>
         </div>
         <Badge variant="info">{reviews.length} pending</Badge>
       </div>
@@ -121,7 +131,7 @@ export function PendingReviews({ reviews, onOpenWorkspace }: PendingReviewsProps
         <button
           type="button"
           onClick={() => setExpanded((value) => !value)}
-          className="mt-3 text-xs font-semibold text-forge-muted hover:text-forge-text"
+          className="mt-3 text-ui-label font-semibold text-forge-muted hover:text-forge-text"
         >
           {expanded ? 'Show fewer pending reviews' : `Show ${hiddenCount} more pending review${hiddenCount === 1 ? '' : 's'}`}
         </button>
@@ -137,7 +147,7 @@ function RiskSummary({ label, count, tone }: { label: string; count: number; ton
     low: 'border-forge-green/20 bg-forge-green/10 text-forge-green',
   }[tone];
   return (
-    <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${toneClass}`}>
+    <span className={`rounded-full border px-2 py-0.5 text-ui-label font-semibold ${toneClass}`}>
       {count} {label}
     </span>
   );

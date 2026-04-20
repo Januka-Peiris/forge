@@ -26,6 +26,8 @@ import { getOrchestratorStatus, setOrchestratorEnabled } from '../../lib/tauri-a
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
+import { StatusBadge } from '../workspaces/StatusBadge';
+
 import {
   Select,
   SelectTrigger,
@@ -220,7 +222,7 @@ export function Sidebar({
         size="icon-sm"
         onClick={() => onNavigate(id)}
         title={label}
-        className={isActive ? 'bg-white/10 text-forge-text' : 'text-forge-muted/60 hover:text-forge-text hover:bg-white/5'}
+        className={isActive ? 'bg-forge-surface-overlay-high text-forge-text' : 'text-forge-muted/60 hover:text-forge-text hover:bg-forge-surface-overlay'}
       >
         <Icon className="w-4 h-4" />
       </Button>
@@ -236,7 +238,7 @@ export function Sidebar({
         </div>
         <div className="flex items-center gap-1">
           {totalSpend && (
-            <span className="text-[10px] font-mono text-forge-muted/50 shrink-0" title="Total estimated agent spend">
+            <span className="text-ui-caption font-mono text-forge-muted/50 shrink-0" title="Total estimated agent spend">
               {totalSpend}
             </span>
           )}
@@ -246,7 +248,7 @@ export function Sidebar({
               variant="ghost"
               size="icon-xs"
               onClick={onCollapse}
-              className="shrink-0 text-forge-muted/50 hover:text-forge-text hover:bg-white/5"
+              className="shrink-0 text-forge-muted/50 hover:text-forge-text hover:bg-forge-surface-overlay"
               title="Collapse sidebar"
             >
               <ChevronLeft className="h-3.5 w-3.5" strokeWidth={2.25} />
@@ -264,7 +266,7 @@ export function Sidebar({
                 variant="ghost"
                 size="icon-xs"
                 onClick={onAddRepository}
-                className="text-forge-muted/60 hover:text-forge-text hover:bg-white/5"
+                className="text-forge-muted/60 hover:text-forge-text hover:bg-forge-surface-overlay"
                 title="Add repository"
               >
                 <FolderPlus className="w-3 h-3" />
@@ -326,8 +328,20 @@ export function Sidebar({
 
         <div className="mt-4 space-y-4">
           {repositories.length === 0 && workspaces.length === 0 && (
-            <div className="rounded-md border border-dashed border-forge-border px-3 py-2 text-xs text-forge-muted leading-relaxed">
-              No repositories discovered yet. Add repo roots and run <span className="font-semibold">Settings → Scan</span>, then create a branch workspace.
+            <div className="rounded-xl bg-forge-orange/5 border border-dashed border-forge-orange/20 px-4 py-5 text-center">
+              <FolderPlus className="mx-auto mb-2 h-6 w-6 text-forge-orange opacity-60" />
+              <p className="text-ui-label font-bold text-forge-text">No repositories</p>
+              <p className="mt-1 text-ui-caption text-forge-muted leading-relaxed">
+                Add repo roots and scan in <span className="text-forge-text font-semibold">Settings</span> to start creating workspaces.
+              </p>
+              <Button 
+                variant="outline" 
+                size="xs" 
+                className="mt-3 w-full border-forge-orange/30 text-forge-orange hover:bg-forge-orange/10"
+                onClick={onAddRepository}
+              >
+                Add Root Path
+              </Button>
             </div>
           )}
           {repoGroups.map((repo) => (
@@ -343,7 +357,7 @@ export function Sidebar({
                 }}
               >
                 <p className="text-xs font-semibold uppercase tracking-widest text-forge-muted/50 truncate">{repo.name}</p>
-                <span className="text-[10px] text-forge-muted/35">({repo.workspaces.length})</span>
+                <span className="text-ui-caption text-forge-muted/35">({repo.workspaces.length})</span>
                 {hoveredRepoId === repo.id && !repo.id.startsWith('name:') && (
                   <Button
                     variant="ghost"
@@ -367,7 +381,7 @@ export function Sidebar({
                       : repo.id;
                     onNewWorkspace(id);
                   }}
-                  className="ml-auto text-forge-muted hover:bg-white/6 hover:text-forge-orange"
+                  className="ml-auto text-forge-muted hover:bg-forge-surface-overlay hover:text-forge-orange"
                   title="New branch workspace in repository"
                 >
                   <Plus className="w-3 h-3" />
@@ -384,16 +398,6 @@ export function Sidebar({
                     const attention = workspaceAttention[workspace.id];
                     const isArchived = archivedSet.has(workspace.id);
 
-                    const attentionDot =
-                      attention?.status === 'running'
-                        ? 'bg-forge-green'
-                        : attention?.status === 'error'
-                        ? 'bg-forge-red'
-                        : attention?.status === 'complete'
-                        ? 'bg-forge-blue'
-                        : attention?.status === 'waiting'
-                        ? 'bg-forge-yellow'
-                        : 'bg-forge-dim';
                     return (
                       <div
                         key={workspace.id}
@@ -414,11 +418,11 @@ export function Sidebar({
                             onSelectWorkspace(workspace.id);
                           }}
                           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { onNavigate('workspaces'); onSelectWorkspace(workspace.id); } }}
-                          className={`w-full cursor-pointer rounded-md px-2.5 py-2 text-left transition-colors ${
+                          className={`w-full cursor-pointer rounded-md px-2.5 py-2 text-left transition-colors relative overflow-hidden ${
                             isSelected
-                              ? 'bg-forge-orange/12 border border-forge-orange/30'
-                              : 'border border-transparent hover:bg-white/5'
-                          }`}
+                              ? 'bg-forge-green/12 border border-forge-green/30'
+                              : 'border border-transparent hover:bg-forge-surface-overlay'
+                          } ${isHovered ? 'pr-8' : ''}`}
                         >
                           <div className="flex items-start gap-2">
                             <button
@@ -427,32 +431,27 @@ export function Sidebar({
                               title="Select for batch send"
                             >
                               {batchSelected.has(workspace.id)
-                                ? <CheckSquare className="w-3.5 h-3.5 text-forge-orange" />
+                                ? <CheckSquare className="w-3.5 h-3.5 text-forge-green" />
                                 : <SquareIcon className="w-3.5 h-3.5 text-forge-muted" />}
                             </button>
                             <div className="relative mt-0.5">
-                              <GitBranch className={`w-3.5 h-3.5 ${isSelected ? 'text-forge-orange' : 'text-forge-muted'}`} />
-                              <span className={`absolute -right-1 -top-1 h-2 w-2 rounded-full ring-2 ring-forge-surface ${attentionDot}`} />
+                              <GitBranch className={`w-3.5 h-3.5 ${isSelected ? 'text-forge-green' : 'text-forge-muted'}`} />
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex min-w-0 items-center gap-1.5">
                                 <p className={`truncate text-sm font-semibold ${isSelected ? 'text-forge-text' : 'text-forge-text/90'}`}>
                                   {workspace.name}
                                 </p>
-                                {!!attention?.unreadCount && (
-                                  <span className="shrink-0 rounded-full bg-forge-orange px-1.5 py-0.5 text-xs font-bold text-white">
-                                    {attention.unreadCount > 99 ? '99+' : attention.unreadCount}
-                                  </span>
-                                )}
-                                {!!attention?.queuedCount && (
-                                  <span className="shrink-0 rounded-full border border-forge-yellow/30 bg-forge-yellow/15 px-1.5 py-0.5 text-xs font-semibold text-forge-yellow" title="Queued messages">
-                                    {attention.queuedCount} queued
-                                  </span>
-                                )}
-                                <span
-                                  className={`shrink-0 h-2 w-2 rounded-full ${attentionDot}`}
-                                  title={attention?.status ?? workspace.status}
-                                />
+                                
+                                <div className="ml-auto flex items-center gap-1">
+                                  {!!attention?.unreadCount && (
+                                    <span className="shrink-0 rounded-full bg-forge-orange px-1.5 py-0.5 text-[10px] font-bold text-white shadow-amber-glow">
+                                      {attention.unreadCount > 99 ? '99+' : attention.unreadCount}
+                                    </span>
+                                  )}
+                                  
+                                  <StatusBadge status={workspace.status} iconOnly />
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -460,18 +459,20 @@ export function Sidebar({
 
                         {/* Archive button — shown on hover; preserves branch/worktree/files. */}
                         {isHovered && (
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onArchiveWorkspace(workspace.id);
-                            }}
-                            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-forge-muted hover:bg-forge-orange/15 hover:text-forge-orange"
-                            title={`${isArchived ? 'Unarchive' : 'Archive'} workspace "${workspace.name}" — keeps branch/worktree/files`}
-                          >
-                            {isArchived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
-                          </Button>
+                          <div className={`absolute right-1 top-1/2 -translate-y-1/2 flex items-center pl-4 bg-gradient-to-l ${isSelected ? 'from-[#0d1a14] via-[#0d1a14]' : 'from-forge-surface via-forge-surface'} to-transparent h-[80%] rounded-r-md`}>
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onArchiveWorkspace(workspace.id);
+                              }}
+                              className="text-forge-muted hover:bg-forge-green/15 hover:text-forge-green"
+                              title={`${isArchived ? 'Unarchive' : 'Archive'} workspace "${workspace.name}" — keeps branch/worktree/files`}
+                            >
+                              {isArchived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
+                            </Button>
+                          </div>
                         )}
                       </div>
                     );
@@ -536,7 +537,7 @@ export function Sidebar({
       {batchMode && (
         <div className="shrink-0 border-t border-forge-border bg-forge-surface px-3 py-3">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-semibold text-forge-orange">
+            <span className="text-sm font-semibold text-forge-green">
               {batchSelected.size} workspace{batchSelected.size === 1 ? '' : 's'} selected
             </span>
             <Button
@@ -554,13 +555,13 @@ export function Sidebar({
             onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void sendBatch(); }}
             placeholder="Send prompt to all selected agents…"
             rows={3}
-            className="border-forge-border bg-black/30 px-2.5 py-2 text-sm placeholder:text-forge-muted/60 focus:border-forge-orange/40"
+            className="border-forge-border bg-black/30 px-2.5 py-2 text-sm placeholder:text-forge-muted/60 focus:border-forge-green/40"
           />
           <Button
             variant="default"
             onClick={() => void sendBatch()}
             disabled={batchSending || !batchPrompt.trim()}
-            className="mt-2 w-full bg-forge-orange/90 text-white hover:bg-forge-orange"
+            className="mt-2 w-full bg-forge-green/90 text-white hover:bg-forge-green"
           >
             <Send className="h-3 w-3" />
             {batchSending ? 'Sending…' : `Send to ${batchSelected.size}`}

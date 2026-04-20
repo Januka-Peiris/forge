@@ -947,7 +947,7 @@ export default function App() {
                 setSelectedId(toast.workspaceId);
                 setAttentionToasts((current) => current.filter((item) => item.id !== toast.id));
               }}
-              className="pointer-events-auto rounded-xl border border-forge-blue/25 bg-[#0b0d12]/95 px-3 py-2 text-left shadow-xl shadow-black/30 backdrop-blur hover:bg-[#10131b]"
+              className="pointer-events-auto rounded-xl border border-forge-blue/25 bg-forge-bg/95 px-3 py-2 text-left shadow-xl shadow-black/30 backdrop-blur hover:bg-forge-surface"
             >
               <div className="flex items-center justify-between gap-3">
                 <span className="text-[11px] font-bold text-forge-blue">New workspace output</span>
@@ -961,7 +961,7 @@ export default function App() {
       )}
 
       {deepLinkNotice && (
-        <div className="fixed right-4 top-4 z-50 max-w-[420px] rounded-xl border border-forge-blue/25 bg-[#0b0d12]/95 px-4 py-3 text-[12px] font-semibold text-forge-text shadow-xl shadow-black/30 backdrop-blur">
+        <div className="fixed right-4 top-4 z-50 max-w-[420px] rounded-xl border border-forge-blue/25 bg-forge-bg/95 px-4 py-3 text-[12px] font-semibold text-forge-text shadow-xl shadow-black/30 backdrop-blur">
           {deepLinkNotice}
         </div>
       )}

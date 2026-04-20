@@ -33,20 +33,20 @@ export function NotesTab() {
 
   return (
     <div className="h-full overflow-y-auto p-4 space-y-4">
-      <div className="bg-forge-card border border-forge-border rounded-xl p-4">
+      <div className="bg-forge-card border border-forge-border rounded-xl p-4 shadow-forge-card">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <CheckSquare className="w-4 h-4 text-forge-orange" />
-            <h3 className="text-[12px] font-semibold text-forge-text">Checklist</h3>
+            <CheckSquare className="w-4 h-4 text-forge-green" />
+            <h3 className="text-ui-label font-semibold text-forge-text">Checklist</h3>
           </div>
-          <span className="text-[10px] text-forge-muted font-medium">
+          <span className="text-ui-caption text-forge-muted font-medium">
             {doneCount}/{items.length} done
           </span>
         </div>
 
-        <div className="w-full bg-forge-border rounded-full h-0.5 mb-3">
+        <div className="w-full bg-forge-surface-overlay rounded-full h-0.5 mb-3 overflow-hidden">
           <div
-            className="h-0.5 rounded-full bg-forge-orange transition-all duration-300"
+            className="h-0.5 rounded-full bg-forge-green transition-all duration-500 shadow-emerald-glow"
             style={{ width: `${(doneCount / items.length) * 100}%` }}
           />
         </div>
@@ -56,14 +56,14 @@ export function NotesTab() {
             <button
               key={item.id}
               onClick={() => toggle(item.id)}
-              className="w-full flex items-start gap-2.5 py-1.5 rounded-md hover:bg-white/3 transition-colors px-1 text-left group"
+              className="w-full flex items-start gap-2.5 py-1.5 rounded-md hover:bg-forge-surface-overlay transition-colors px-1 text-left group"
             >
               {item.done ? (
                 <CheckSquare className="w-3.5 h-3.5 text-forge-green shrink-0 mt-0.5" />
               ) : (
                 <Square className="w-3.5 h-3.5 text-forge-muted shrink-0 mt-0.5 group-hover:text-forge-text/80 transition-colors" />
               )}
-              <span className={`text-[11px] leading-snug ${item.done ? 'line-through text-forge-muted' : 'text-forge-text/88'}`}>
+              <span className={`text-ui-label leading-snug ${item.done ? 'line-through text-forge-muted' : 'text-forge-text/88'}`}>
                 {item.text}
               </span>
             </button>
@@ -71,14 +71,14 @@ export function NotesTab() {
         </div>
       </div>
 
-      <div className="bg-forge-card border border-forge-border rounded-xl p-4">
+      <div className="bg-forge-card border border-forge-border rounded-xl p-4 shadow-forge-card">
         <div className="flex items-center gap-2 mb-3">
           <FileText className="w-4 h-4 text-forge-blue" />
-          <h3 className="text-[12px] font-semibold text-forge-text">Session Summary</h3>
+          <h3 className="text-ui-label font-semibold text-forge-text">Session Summary</h3>
         </div>
         <ul className="space-y-1.5">
           {summaryBullets.map((b, i) => (
-            <li key={i} className="flex items-start gap-2 text-[11px] text-forge-text/70 leading-snug">
+            <li key={i} className="flex items-start gap-2 text-ui-label text-forge-text/70 leading-snug">
               <span className="text-forge-blue mt-1 shrink-0">·</span>
               {b}
             </li>
@@ -86,17 +86,17 @@ export function NotesTab() {
         </ul>
       </div>
 
-      <div className="bg-forge-card border border-forge-border rounded-xl p-4">
+      <div className="bg-forge-card border border-forge-border rounded-xl p-4 shadow-forge-card">
         <div className="flex items-center gap-2 mb-3">
           <Plus className="w-4 h-4 text-forge-muted" />
-          <h3 className="text-[12px] font-semibold text-forge-text">Quick Note</h3>
+          <h3 className="text-ui-label font-semibold text-forge-text">Quick Note</h3>
         </div>
         <textarea
           value={noteText}
           onChange={(e) => setNoteText(e.target.value)}
           placeholder="Add a note for this session..."
           rows={3}
-          className="w-full bg-forge-surface border border-forge-border rounded-lg px-3 py-2 text-[11px] text-forge-text placeholder:text-forge-muted/80 focus:outline-none focus:border-forge-blue/40 resize-none transition-colors"
+          className="w-full bg-forge-surface border border-forge-border rounded-lg px-3 py-2 text-ui-label text-forge-text placeholder:text-forge-muted/80 focus:outline-none focus:border-forge-green/40 resize-none transition-colors"
         />
       </div>
     </div>

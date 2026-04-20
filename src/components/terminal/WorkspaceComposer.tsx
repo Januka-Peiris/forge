@@ -227,7 +227,7 @@ export function WorkspaceComposer({
         role="separator"
         aria-label="Resize message panel"
         onMouseDown={startComposerResize}
-        className="h-1 cursor-row-resize bg-transparent hover:bg-forge-border/70 active:bg-forge-orange/60"
+        className="h-1 cursor-row-resize bg-transparent hover:bg-forge-border/70 active:bg-forge-green/60"
       />
       <div className="flex h-[calc(100%-4px)] min-h-0 flex-col gap-2 overflow-hidden p-2">
         <div className="shrink-0 flex items-center gap-2 overflow-x-auto">
@@ -473,7 +473,7 @@ export function WorkspaceComposer({
                 ? 'Send instruction to agent (Enter interrupts agent if needed then sends, Shift+Enter for newline)…'
                 : 'Send instruction to agent (Enter to send, Shift+Enter for newline)…'
             }
-            className="h-full min-h-0 w-0 flex-1 resize-none overflow-y-auto rounded border border-forge-border bg-forge-bg px-3 py-2 text-sm leading-relaxed text-forge-text placeholder:text-forge-muted focus:border-forge-orange/40 focus:outline-none"
+            className="h-full min-h-0 w-0 flex-1 resize-none overflow-y-auto rounded border border-forge-border bg-forge-bg px-3 py-2 text-sm leading-relaxed text-forge-text placeholder:text-forge-muted focus:border-forge-green/40 focus:outline-none"
             onKeyDown={(e) => {
               if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); onTogglePlanMode(); return; }
               if (e.key !== 'Enter' || e.shiftKey) return;
@@ -486,7 +486,7 @@ export function WorkspaceComposer({
             <button
               disabled={busy || !promptInput.trim()}
               onClick={handleSend}
-              className="rounded border border-forge-orange/30 bg-forge-orange/10 px-3 py-2 text-sm font-semibold text-forge-orange hover:bg-forge-orange/20 disabled:opacity-50"
+              className="rounded border border-forge-green/30 bg-forge-green/10 px-3 py-2 text-sm font-semibold text-forge-green hover:bg-forge-green/20 disabled:opacity-50"
               title={settings.sendBehavior === 'interrupt_send' ? 'Interrupt then send (same as Enter)' : 'Send now (same as Enter)'}
             >
               <Zap className="inline h-3.5 w-3.5" /> Send

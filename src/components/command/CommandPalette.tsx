@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, FileCode, GitPullRequest, Play, Search, Terminal as TerminalIcon, Trash2, X, Zap } from 'lucide-react';
+import { Bot, FileCode, GitPullRequest, Play, Search, ShieldCheck, Ship, Terminal as TerminalIcon, Trash2, X, Zap } from 'lucide-react';
 import type { AgentProfile, TerminalProfile, TerminalSession, Workspace, WorkspaceChangedFile, WorkspacePrComment, WorkspaceReadiness } from '../../types';
 import type { TerminalSearchResult } from '../../types/terminal';
-import { createWorkspaceTerminal, attachWorkspaceTerminalSession, listWorkspaceVisibleTerminalSessions, searchTerminalOutput } from '../../lib/tauri-api/terminal';
+import { createWorkspaceTerminal, attachWorkspaceTerminalSession, listWorkspaceVisibleTerminalSessions, searchTerminalOutput, queueWorkspaceAgentPrompt } from '../../lib/tauri-api/terminal';
 import { getWorkspaceReviewCockpit, refreshWorkspacePrComments, queueReviewAgentPrompt } from '../../lib/tauri-api/review-cockpit';
 import { listWorkspaceAgentProfiles } from '../../lib/tauri-api/agent-profiles';
 import { runWorkspaceSetup, startWorkspaceRunCommand, getWorkspaceForgeConfig } from '../../lib/tauri-api/workspace-scripts';
 import { cleanupWorkspace } from '../../lib/tauri-api/workspace-cleanup';
 import { getWorkspaceReadiness } from '../../lib/tauri-api/workspace-readiness';
+import { createWorkspaceCheckpoint } from '../../lib/tauri-api/checkpoints';
 import { perfMark, perfMeasure } from '../../lib/perf';
 
 type CommandItem = {
@@ -15,7 +16,7 @@ type CommandItem = {
   title: string;
   subtitle: string;
   keywords: string;
-  icon: 'workspace' | 'file' | 'terminal' | 'comment' | 'agent' | 'action' | 'cleanup';
+  icon: 'workspace' | 'file' | 'terminal' | 'comment' | 'agent' | 'action' | 'cleanup' | 'checkpoint' | 'ship';
   run: () => void | Promise<void>;
 };
 
@@ -205,6 +206,23 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
       run: () => onOpenReviewComment(comment.commentId, comment.path),
     }));
     const agentItems = selectedWorkspace ? agentProfiles.map((profile) => agentItem(selectedWorkspace.id, profile, onOpenWorkspace)) : [];
+    
+    // Direct agent prompt mode
+    const directPromptItem = selectedWorkspace && query.startsWith('@') ? [{
+      id: 'action-direct-prompt',
+      title: `Tell Agent: ${query.slice(1).trim() || '...'}`,
+      subtitle: `Direct instruction · ${selectedWorkspace.name}`,
+      keywords: 'tell agent ask prompt instruction chat',
+      icon: 'agent' as const,
+      run: async () => {
+        const prompt = query.slice(1).trim();
+        if (prompt) {
+          await queueWorkspaceAgentPrompt({ workspaceId: selectedWorkspace.id, prompt, mode: 'send_now' });
+          onOpenWorkspace();
+        }
+      }
+    }] : [];
+
     const globalActionItems = [
       {
         id: 'action-check-environment',
@@ -216,6 +234,22 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
       },
     ];
     const actionItems = selectedWorkspace ? [
+      {
+        id: 'action-create-checkpoint',
+        title: 'Create Checkpoint',
+        subtitle: 'Safe Iteration · Manual git-backed snap',
+        keywords: 'checkpoint snap safe backup save git',
+        icon: 'checkpoint' as const,
+        run: async () => { await createWorkspaceCheckpoint(selectedWorkspace.id, 'Manual checkpoint from palette'); onOpenWorkspace(); },
+      },
+      {
+        id: 'action-ship-flow',
+        title: 'Ship changes',
+        subtitle: 'Readiness · Review, checks, PR, and cleanup',
+        keywords: 'ship pr flow release readiness',
+        icon: 'ship' as const,
+        run: onOpenWorkspace, // Navigating to cockpit is the best proxy for now
+      },
       {
         id: 'action-run-setup',
         title: 'Run setup',
@@ -257,7 +291,7 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
         run: async () => { paletteCache.delete(selectedWorkspace.id); await cleanupWorkspace({ workspaceId: selectedWorkspace.id, killPorts: false, removeManagedWorktree: false }); onOpenWorkspace(); },
       },
     ] : [];
-    return [...globalActionItems, ...agentItems, ...actionItems, ...workspaceItems, ...fileItems, ...terminalItems, ...commentItems];
+    return [...directPromptItem, ...globalActionItems, ...agentItems, ...actionItems, ...workspaceItems, ...fileItems, ...terminalItems, ...commentItems];
   }, [agentProfiles, changedFiles, comments, onCheckEnvironment, onOpenReviewComment, onOpenReviewFile, onOpenWorkspace, onSelectWorkspace, paletteChangedFiles, query, readiness, runCommands, selectedWorkspace, sessions, terminalSearchResults, workspaces]);
 
   useEffect(() => {
@@ -303,24 +337,24 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
               if (event.key === 'Enter') { event.preventDefault(); void runActive(); }
             }}
             placeholder="Jump to workspace, file, agent session… or type > to search terminal output"
-            className="flex-1 bg-transparent text-[14px] text-forge-text outline-none placeholder:text-forge-muted"
+            className="flex-1 bg-transparent text-ui-body text-forge-text outline-none placeholder:text-forge-muted"
           />
-          <button onClick={onClose} className="rounded-md p-1 text-forge-muted hover:bg-white/5 hover:text-forge-text"><X className="h-4 w-4" /></button>
+          <button onClick={onClose} className="rounded-md p-1 text-forge-muted hover:bg-forge-surface-overlay hover:text-forge-text"><X className="h-4 w-4" /></button>
         </div>
         <div className="max-h-[55vh] overflow-y-auto p-2">
           {filtered.length === 0 ? (
-            <p className="p-4 text-center text-[12px] text-forge-muted">No matching commands.</p>
+            <p className="p-4 text-center text-ui-label text-forge-muted">No matching commands.</p>
           ) : filtered.map((item, index) => (
             <button
               key={item.id}
               onMouseEnter={() => setActiveIndex(index)}
               onClick={() => { void item.run(); onClose(); }}
-              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left ${index === activeIndex ? 'bg-forge-orange/10' : 'hover:bg-white/5'}`}
+              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left ${index === activeIndex ? 'bg-forge-green/10' : 'hover:bg-forge-surface-overlay'}`}
             >
               <CommandIcon icon={item.icon} />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-semibold text-forge-text">{item.title}</span>
-                <span className="block truncate text-[11px] text-forge-muted">{item.subtitle}</span>
+                <span className="block truncate text-ui-body font-semibold text-forge-text">{item.title}</span>
+                <span className="block truncate text-ui-label text-forge-muted">{item.subtitle}</span>
               </span>
             </button>
           ))}
@@ -346,13 +380,15 @@ function agentItem(workspaceId: string, profile: AgentProfile, onOpenWorkspace: 
 
 function CommandIcon({ icon }: { icon: CommandItem['icon'] }) {
   const cls = 'h-4 w-4 shrink-0';
-  if (icon === 'workspace') return <Zap className={`${cls} text-forge-orange`} />;
+  if (icon === 'workspace') return <Zap className={`${cls} text-forge-green`} />;
   if (icon === 'file') return <FileCode className={`${cls} text-forge-green`} />;
   if (icon === 'terminal') return <TerminalIcon className={`${cls} text-forge-blue`} />;
   if (icon === 'comment') return <GitPullRequest className={`${cls} text-forge-violet`} />;
   if (icon === 'action') return <Play className={`${cls} text-forge-green`} />;
+  if (icon === 'checkpoint') return <ShieldCheck className={`${cls} text-forge-blue`} />;
+  if (icon === 'ship') return <Ship className={`${cls} text-forge-green`} />;
   if (icon === 'cleanup') return <Trash2 className={`${cls} text-forge-red`} />;
-  return <Bot className={`${cls} text-forge-orange`} />;
+  return <Bot className={`${cls} text-forge-green`} />;
 }
 
 function firstLine(value: string) {

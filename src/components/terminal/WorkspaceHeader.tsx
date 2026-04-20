@@ -91,7 +91,7 @@ export function WorkspaceHeader({
     <div className="sticky top-0 z-10 shrink-0 border-b border-forge-border bg-forge-surface/95 px-4 py-2 backdrop-blur">
       <div className="flex items-center gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <TerminalIcon className="h-4 w-4 shrink-0 text-forge-orange" />
+          <TerminalIcon className="h-4 w-4 shrink-0 text-forge-green" />
           <h1 className="shrink-0 text-sm font-bold text-forge-text">{workspace.name}</h1>
           <span className="text-forge-border/60">/</span>
           <p className="min-w-0 truncate font-mono text-xs text-forge-muted">{workspace.repo} / {workspace.branch}</p>
