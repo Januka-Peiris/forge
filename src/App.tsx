@@ -1,42 +1,29 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from './components/ui/button';
-import { open as openFilePicker } from '@tauri-apps/plugin-dialog';
 import { DetailPanel } from './components/detail/DetailPanel';
 import { Sidebar, type NavView } from './components/layout/Sidebar';
 import { WorkspaceTerminal } from './components/terminal/WorkspaceTerminal';
-import { listRepositories, removeRepository, addRepository } from './lib/tauri-api/repositories';
-import { createWorkspacePr } from './lib/tauri-api/pr-draft';
-import { getSettings, resolveGitRepositoryPath } from './lib/tauri-api/settings';
 import { listActivity } from './lib/tauri-api/activity';
 import { openDeepLink } from './lib/tauri-api/deep-links';
 import { listWorkspaceAttention, markWorkspaceAttentionRead } from './lib/tauri-api/workspace-attention';
 import { getWorkspaceConflicts } from './lib/tauri-api/workspace-health';
-import { formatCursorOpenError } from './lib/ui-errors';
-import { forgeLog, forgeWarn } from './lib/forge-log';
+import { getSettings } from './lib/tauri-api/settings';
+import { forgeWarn } from './lib/forge-log';
 import { measureAsync, perfMark, perfMeasure } from './lib/perf';
-import {
-  attachWorkspaceLinkedWorktree,
-  createChildWorkspace,
-  createWorkspace,
-  deleteWorkspace,
-  detachWorkspaceLinkedWorktree,
-  listWorkspaces,
-  listWorkspaceLinkedWorktrees,
-  openInCursor,
-  openWorktreeInCursor,
-} from './lib/tauri-api/workspaces';
-import type { ActivityItem, AppSettings, CreateWorkspaceInput, Workspace, WorkspaceAttention } from './types';
+import { listWorkspaces } from './lib/tauri-api/workspaces';
+import type { ActivityItem, CreateWorkspaceInput, WorkspaceAttention } from './types';
 import { LoadingView, ErrorView } from './components/views/LoadingView';
 import { EnvironmentSetupModal } from './components/modals/EnvironmentSetupModal';
 import { SettingsView } from './components/settings/SettingsView';
 import { MemoryView } from './components/memory/MemoryView';
-import { sanitizeWorkspaceForDisplay, sanitizeWorkspacesForDisplay } from './lib/workspace-display';
 import { KeyboardShortcutsModal } from './components/shortcuts/KeyboardShortcutsModal';
 import { useAppKeyboardShortcuts } from './lib/hooks/useAppKeyboardShortcuts';
 import { useEnvironmentCheck } from './lib/hooks/useEnvironmentCheck';
 import { useAppLayoutState } from './lib/hooks/useAppLayoutState';
 import { useAppNotifications } from './lib/hooks/useAppNotifications';
+import { useForgeWorkspaces } from './lib/hooks/useForgeWorkspaces';
+import { useAppRepositories } from './lib/hooks/useAppRepositories';
 
 
 const APP_BOOT_MARK = 'forge:app-boot';
@@ -46,8 +33,6 @@ const ReviewCockpit = lazy(() => import('./components/reviews/ReviewCockpit').th
 const CommandPalette = lazy(() => import('./components/command/CommandPalette').then((module) => ({ default: module.CommandPalette })));
 const NewWorkspaceModal = lazy(() => import('./components/modals/NewWorkspaceModal').then((module) => ({ default: module.NewWorkspaceModal })));
 
-const SELECTED_WORKSPACE_KEY = 'forge:selected-workspace-id';
-const ARCHIVED_WORKSPACES_KEY = 'forge:archived-workspace-ids';
 
 async function withLoadTimeout<T>(label: string, task: Promise<T>, timeoutMs = 8000): Promise<T> {
   let timer: number | undefined;
@@ -63,22 +48,9 @@ async function withLoadTimeout<T>(label: string, task: Promise<T>, timeoutMs = 8
 
 export default function App() {
   const [view, setView] = useState<NavView>('workspaces');
-  const [selectedId, setSelectedId] = useState<string | null>(() => window.localStorage.getItem(SELECTED_WORKSPACE_KEY));
   const [modalOpen, setModalOpen] = useState(false);
   const [modalRepositoryId, setModalRepositoryId] = useState<string | undefined>(undefined);
   const [branchFromWorkspaceId, setBranchFromWorkspaceId] = useState<string | null>(null);
-  const [archivedWorkspaceIds, setArchivedWorkspaceIds] = useState<string[]>(() => {
-    const raw = window.localStorage.getItem(ARCHIVED_WORKSPACES_KEY);
-    if (!raw) return [];
-    try {
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
-    } catch {
-      return [];
-    }
-  });
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [displayedWorkspaces, setDisplayedWorkspaces] = useState<Workspace[]>([]);
   const [workspaceAttention, setWorkspaceAttention] = useState<Record<string, WorkspaceAttention>>({});
   const [conflictingWorkspaceIds, setConflictingWorkspaceIds] = useState<Set<string>>(new Set());
   const [deepLinkNotice, setDeepLinkNotice] = useState<string | null>(null);
@@ -87,8 +59,15 @@ export default function App() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [reviewTargetCommentId, setReviewTargetCommentId] = useState<string | null>(null);
-  const [settingsState, setSettingsState] = useState<AppSettings | null>(null);
-  const [linkedWorktreesByWorkspaceId, setLinkedWorktreesByWorkspaceId] = useState<Record<string, { worktreeId: string; repoId: string; repoName: string; path: string; branch?: string; head?: string }[]>>({});
+
+  const {
+    addRepositoryToSettings,
+    refreshRepositories,
+    removeRepositoryFromSettings,
+    setSettingsState,
+    settingsState,
+  } = useAppRepositories();
+
   const {
     collapsedRailWidth,
     detailPanelCollapsed,
@@ -105,9 +84,6 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const attentionRefreshTimerRef = useRef<number | null>(null);
   const markReadTimerRef = useRef<Record<string, number>>({});
-  const workspaceSwitchMarkRef = useRef<string | null>(null);
-  const selectedIdRef = useRef<string | null>(selectedId);
-  useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
   const {
     completeFirstRunEnvironmentCheck,
     environmentCheckBusy,
@@ -115,6 +91,30 @@ export default function App() {
     environmentModalOpen,
     runEnvironmentCheck,
   } = useEnvironmentCheck({ settingsState, setSettingsState });
+
+  const {
+    archivedWorkspaceIds,
+    archiveWorkspace,
+    attachLinkedWorktree,
+    createWorkspaceFromInput,
+    deleteWorkspaceRecord,
+    detachLinkedWorktree,
+    displayedWorkspaces,
+    linkedWorktreesByWorkspaceId,
+    markPrCreated,
+    openLinkedWorktree,
+    openWorkspaceInCursor,
+    replaceWorkspaces,
+    selected,
+    selectedId,
+    setDisplayedWorkspaces,
+    setSelectedId,
+    workspaces,
+  } = useForgeWorkspaces({
+    onActivityItems: setActivityItems,
+    onError: setError,
+    onViewWorkspaces: () => setView('workspaces'),
+  });
 
   const closeShortcuts = useCallback(() => setShortcutsOpen(false), []);
   const openReviewsFromShortcut = useCallback(() => {
@@ -154,29 +154,8 @@ export default function App() {
 
   /** Fresh repo list whenever the new-workspace modal opens (avoids stale worktrees; does not create workspaces). */
   useEffect(() => {
-    if (!modalOpen) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const repos = await listRepositories();
-        if (cancelled) return;
-        setSettingsState((current) =>
-          current
-            ? {
-                ...current,
-                repoRoots: repos.map((r) => r.path),
-                discoveredRepositories: repos,
-              }
-            : current,
-        );
-      } catch (err) {
-        forgeWarn('repositories', 'list on new workspace modal failed', { err });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [modalOpen]);
+    if (modalOpen) void refreshRepositories();
+  }, [modalOpen, refreshRepositories]);
 
   const loadAttention = useCallback(async () => {
     try {
@@ -229,18 +208,7 @@ export default function App() {
     setError(null);
     try {
       await measureAsync('app:backend-load', async () => {
-        const workspaceData = sanitizeWorkspacesForDisplay(await withLoadTimeout('list_workspaces', listWorkspaces()));
-        setWorkspaces(workspaceData);
-        setSelectedId((current) => {
-          const persisted = typeof window !== 'undefined'
-            ? window.localStorage.getItem(SELECTED_WORKSPACE_KEY)
-            : null;
-          const preferred = current ?? persisted;
-          if (preferred && workspaceData.some((workspace) => workspace.id === preferred)) {
-            return preferred;
-          }
-          return workspaceData[0]?.id ?? null;
-        });
+        replaceWorkspaces(await withLoadTimeout('list_workspaces', listWorkspaces()));
 
         const [settingsResult, activityResult] = await Promise.allSettled([
           withLoadTimeout('get_settings', getSettings()),
@@ -264,7 +232,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [scheduleAttentionLoad]);
+  }, [replaceWorkspaces, scheduleAttentionLoad, setSettingsState]);
 
   useEffect(() => {
     void loadBackendState();
@@ -286,7 +254,7 @@ export default function App() {
       forgeWarn('deep-link', 'open failed', { url, err: message });
       setDeepLinkNotice(`Deep link failed: ${message}`);
     }
-  }, [loadBackendState]);
+  }, [loadBackendState, setSelectedId]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -304,15 +272,6 @@ export default function App() {
   }, [handleDeepLinkUrl]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (selectedId) {
-      window.localStorage.setItem(SELECTED_WORKSPACE_KEY, selectedId);
-    } else {
-      window.localStorage.removeItem(SELECTED_WORKSPACE_KEY);
-    }
-  }, [selectedId]);
-
-  useEffect(() => {
     const timer = window.setInterval(() => {
       if (!document.hidden) void loadAttention();
     }, 10000);
@@ -324,149 +283,11 @@ export default function App() {
     scheduleMarkAttentionRead(selectedId);
   }, [scheduleMarkAttentionRead, selectedId, view]);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(ARCHIVED_WORKSPACES_KEY, JSON.stringify(archivedWorkspaceIds));
-  }, [archivedWorkspaceIds]);
-  const selected = useMemo(
-    () => workspaces.find((w) => w.id === selectedId) ?? null,
-    [selectedId, workspaces],
-  );
-
-  useEffect(() => {
-    if (!selectedId) return;
-    if (workspaceSwitchMarkRef.current) {
-      perfMeasure('workspace:switch', workspaceSwitchMarkRef.current);
-    }
-    const mark = `forge:workspace-switch:${selectedId}:${Date.now()}`;
-    workspaceSwitchMarkRef.current = mark;
-    perfMark(mark);
-  }, [selectedId]);
-
-  const handleOpenInCursor = async (workspaceId?: string) => {
-    const targetId = workspaceId ?? selectedId;
-    if (!targetId) return;
-    try {
-      await openInCursor(targetId);
-    } catch (err) {
-      window.alert(formatCursorOpenError(err));
-    }
-  };
-
   const handleCreateWorkspace = async (input: CreateWorkspaceInput) => {
-    const workspace = branchFromWorkspaceId
-      ? await createChildWorkspace({
-          parentWorkspaceId: branchFromWorkspaceId,
-          name: input.name,
-          branch: input.branch,
-          agent: input.agent,
-          taskPrompt: input.taskPrompt,
-          openInCursor: input.openInCursor,
-          runTests: input.runTests,
-          createPr: input.createPr,
-        })
-      : await createWorkspace(input);
-    // Workspace created — update state before any non-critical async work
-    const displayWorkspace = sanitizeWorkspaceForDisplay(workspace);
-    setWorkspaces((current) => [displayWorkspace, ...current]);
-    setSelectedId(displayWorkspace.id);
-    setView('workspaces');
+    await createWorkspaceFromInput(input, branchFromWorkspaceId);
     setModalOpen(false);
     setModalRepositoryId(undefined);
     setBranchFromWorkspaceId(null);
-    // Non-fatal: refresh activity feed; failure here must not surface as a creation error
-    listActivity().then(setActivityItems).catch(() => undefined);
-    if (input.openInCursor) {
-      await handleOpenInCursor(workspace.id);
-    }
-  };
-
-  const loadLinkedWorktrees = useCallback(async (workspaceId: string) => {
-    const linked = await listWorkspaceLinkedWorktrees(workspaceId);
-    setLinkedWorktreesByWorkspaceId((current) => ({ ...current, [workspaceId]: linked }));
-  }, []);
-
-  useEffect(() => {
-    if (!selectedId) return;
-    void loadLinkedWorktrees(selectedId);
-  }, [loadLinkedWorktrees, selectedId]);
-
-  const handleArchiveWorkspace = (workspaceId = selectedId) => {
-    if (!workspaceId) return;
-    setArchivedWorkspaceIds((current) => (
-      current.includes(workspaceId) ? current.filter((id) => id !== workspaceId) : [...current, workspaceId]
-    ));
-  };
-
-  const handleRemoveRepository = async (repositoryId: string) => {
-    const repo = settingsState?.discoveredRepositories.find((r) => r.id === repositoryId);
-    const label = repo?.name ?? repositoryId;
-    if (!window.confirm(`Remove repository "${label}" from Forge? This only removes it from the list — it won't delete files on disk.`)) return;
-    try {
-      await removeRepository(repositoryId);
-      setSettingsState((current) =>
-        current
-          ? {
-              ...current,
-              discoveredRepositories: current.discoveredRepositories.filter((r) => r.id !== repositoryId),
-            }
-          : current,
-      );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      window.alert(`Failed to remove repository: ${message}`);
-    }
-  };
-
-  const handleAddRepository = async () => {
-    const picked = await openFilePicker({ directory: true, multiple: false, title: 'Choose a Git repository' });
-    if (!picked) return;
-    try {
-      const toplevel = await resolveGitRepositoryPath(picked as string);
-      const repos = await addRepository(toplevel);
-      setSettingsState((current) => current ? { ...current, discoveredRepositories: repos } : current);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      window.alert(`Failed to add repository: ${message}`);
-    }
-  };
-
-  const handleDeleteWorkspace = async (workspaceId: string) => {
-    const candidate = workspaces.find((workspace) => workspace.id === workspaceId);
-    const label = candidate?.name ?? workspaceId;
-    if (!window.confirm([
-      `Forget workspace "${label}" from Forge?`,
-      '',
-      'This removes only the Forge workspace record from the app.',
-      'It will not delete the branch, Git worktree, checkout folder, or files on disk.',
-      'Prefer Archive if you may want to reopen it from Forge later.',
-    ].join('\n'))) return;
-    forgeLog('deleteWorkspace', 'user confirmed; invoking delete_workspace', { workspaceId, label });
-    setError(null);
-    try {
-      await deleteWorkspace(workspaceId);
-      forgeLog('deleteWorkspace', 'invoke returned ok', { workspaceId });
-      setWorkspaces((current) => {
-        const next = current.filter((workspace) => workspace.id !== workspaceId);
-        setSelectedId((prev) => {
-          if (prev !== workspaceId) return prev;
-          return next[0]?.id ?? null;
-        });
-        return next;
-      });
-      setArchivedWorkspaceIds((current) => current.filter((id) => id !== workspaceId));
-      setLinkedWorktreesByWorkspaceId((current) => {
-        const next = { ...current };
-        delete next[workspaceId];
-        return next;
-      });
-      setActivityItems(await listActivity());
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      forgeWarn('deleteWorkspace', 'invoke failed', { workspaceId, err, message });
-      setError(message);
-      window.alert(`Failed to delete workspace: ${message}`);
-    }
   };
 
   const mainContent = () => {
@@ -475,7 +296,7 @@ export default function App() {
 
     if (view === 'workspaces') {
       return (
-        <WorkspaceTerminal workspace={selected} onOpenInCursor={() => void handleOpenInCursor()} />
+        <WorkspaceTerminal workspace={selected} onOpenInCursor={() => void openWorkspaceInCursor()} />
       );
     }
 
@@ -496,7 +317,7 @@ export default function App() {
 
     if (view === 'memory') return <MemoryView />;
 
-    return <SettingsView settings={settingsState} onSettingsChange={setSettingsState} onRemoveRepository={(repositoryId) => void handleRemoveRepository(repositoryId)} />;
+    return <SettingsView settings={settingsState} onSettingsChange={setSettingsState} onRemoveRepository={(repositoryId) => void removeRepositoryFromSettings(repositoryId)} />;
   };
 
   const isReviewView = view === 'reviews';
@@ -536,14 +357,14 @@ export default function App() {
                   conflictingWorkspaceIds={conflictingWorkspaceIds}
                   selectedWorkspaceId={selectedId}
                   onSelectWorkspace={setSelectedId}
-                  onArchiveWorkspace={(workspaceId) => handleArchiveWorkspace(workspaceId)}
-                  onRemoveRepository={(repositoryId) => void handleRemoveRepository(repositoryId)}
+                  onArchiveWorkspace={(workspaceId) => archiveWorkspace(workspaceId)}
+                  onRemoveRepository={(repositoryId) => void removeRepositoryFromSettings(repositoryId)}
                   onNewWorkspace={(repositoryId) => {
                     setModalRepositoryId(repositoryId);
                     setBranchFromWorkspaceId(null);
                     setModalOpen(true);
                   }}
-                  onAddRepository={() => void handleAddRepository()}
+                  onAddRepository={() => void addRepositoryToSettings()}
                   onCollapse={() => setSidebarCollapsed(true)}
                   onFilteredWorkspacesChange={setDisplayedWorkspaces}
                 />
@@ -585,10 +406,10 @@ export default function App() {
                     <DetailPanel
                       workspace={selected}
                       onCollapse={() => setDetailPanelCollapsed(true)}
-                      onOpenInCursor={() => void handleOpenInCursor()}
+                      onOpenInCursor={() => void openWorkspaceInCursor()}
                       isArchived={selected ? archivedWorkspaceIds.includes(selected.id) : false}
-                      onArchiveWorkspace={handleArchiveWorkspace}
-                      onDeleteWorkspace={selected ? () => void handleDeleteWorkspace(selected.id) : undefined}
+                      onArchiveWorkspace={archiveWorkspace}
+                      onDeleteWorkspace={selected ? () => void deleteWorkspaceRecord(selected.id) : undefined}
                       onOpenReviewFile={(path) => {
                         setSelectedReviewPath(path ?? null);
                         setView('reviews');
@@ -596,36 +417,16 @@ export default function App() {
                       activityItems={selected ? activityItems.filter((item) => item.workspaceId === selected.id) : []}
                       repositories={settingsState?.discoveredRepositories ?? []}
                       linkedWorktrees={selected ? linkedWorktreesByWorkspaceId[selected.id] ?? [] : []}
-                      onAttachLinkedWorktree={(worktreeId) => {
-                        if (!selectedId) return;
-                        void attachWorkspaceLinkedWorktree(selectedId, worktreeId).then((linked) => {
-                          setLinkedWorktreesByWorkspaceId((current) => ({ ...current, [selectedId]: linked }));
-                        }).catch((err) => setError(err instanceof Error ? err.message : String(err)));
-                      }}
-                      onDetachLinkedWorktree={(worktreeId) => {
-                        if (!selectedId) return;
-                        void detachWorkspaceLinkedWorktree(selectedId, worktreeId).then((linked) => {
-                          setLinkedWorktreesByWorkspaceId((current) => ({ ...current, [selectedId]: linked }));
-                        }).catch((err) => setError(err instanceof Error ? err.message : String(err)));
-                      }}
-                      onOpenLinkedWorktreeInCursor={(path) => {
-                        void openWorktreeInCursor(path).catch((err) => window.alert(formatCursorOpenError(err)));
-                      }}
+                      onAttachLinkedWorktree={(worktreeId) => void attachLinkedWorktree(worktreeId)}
+                      onDetachLinkedWorktree={(worktreeId) => void detachLinkedWorktree(worktreeId)}
+                      onOpenLinkedWorktreeInCursor={openLinkedWorktree}
                       onCreateChildWorkspace={() => {
                         if (!selected) return;
                         setModalRepositoryId(selected.repositoryId);
                         setBranchFromWorkspaceId(selected.id);
                         setModalOpen(true);
                       }}
-                      onCreatePr={selected ? async () => {
-                        const result = await createWorkspacePr(selected.id);
-                        setWorkspaces((current) =>
-                          current.map((w) =>
-                            w.id === selected.id ? { ...w, prStatus: 'Open', prNumber: result.prNumber } : w,
-                          ),
-                        );
-                        return result;
-                      } : undefined}
+                      onCreatePr={selected ? () => markPrCreated(selected.id) : undefined}
                     />
                   </div>
                 </>
