@@ -97,7 +97,7 @@ export function useWorkspaceTerminalSessionActions({
     }
   };
 
-  const createChatSession = async (provider: 'claude_code' | 'codex', title?: string) => {
+  const createChatSession = async (provider: 'claude_code' | 'codex' | 'local_llm', title?: string) => {
     if (!workspaceId) return;
     setBusy(true);
     setError(null);

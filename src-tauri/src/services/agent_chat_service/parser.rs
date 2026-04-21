@@ -31,8 +31,28 @@ pub(super) fn parse_adapter_line(provider: &str, line: &str) -> Vec<ParsedAgentE
     match provider {
         "claude_code" => parse_claude_json_line(&value),
         "codex" => parse_codex_json_line(&value),
+        "local_llm" => parse_local_llm_line(line),
         _ => Vec::new(),
     }
+}
+
+fn parse_local_llm_line(line: &str) -> Vec<ParsedAgentEvent> {
+    let text = strip_ansi(line).trim().to_string();
+    if text.is_empty() {
+        return Vec::new();
+    }
+
+    // Basic heuristic for local LLMs: if it looks like a tool call in markdown or specific text
+    // we can try to promote it, but for now we just treat it as assistant text.
+    // The UI handles markdown rendering of the 'body' automatically.
+    vec![ParsedAgentEvent {
+        event_type: "assistant_message".to_string(),
+        role: Some("assistant".to_string()),
+        title: None,
+        body: text,
+        status: None,
+        metadata: None,
+    }]
 }
 
 fn parse_claude_json_line(value: &Value) -> Vec<ParsedAgentEvent> {

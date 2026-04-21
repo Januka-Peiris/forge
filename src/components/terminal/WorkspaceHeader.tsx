@@ -65,7 +65,7 @@ interface WorkspaceHeaderProps {
   focusedChatId: string | null;
   agentProfiles: AgentProfile[];
   onOpenInCursor?: () => void;
-  onCreateChatSession: (provider: 'claude_code' | 'codex', title?: string) => void;
+  onCreateChatSession: (provider: 'claude_code' | 'codex' | 'local_llm', title?: string) => void;
   onCreateTerminal: (kind: 'agent' | 'shell', profile: TerminalProfile, title?: string, profileId?: string) => void;
   onCopyFocusedOutput: () => void;
   onInterruptFocusedAgent: () => void;
@@ -140,7 +140,7 @@ export function WorkspaceHeader({
           
           <ChevronRight className="h-3 w-3 text-forge-dim shrink-0" />
           
-          <div className="flex items-center gap-1.5 min-w-0 shrink">
+          <div className="flex items-center gap-1 min-w-0 shrink">
             <GitBranch className="h-3.5 w-3.5 text-forge-muted shrink-0" />
             <span className="font-mono text-forge-text/80 truncate">{workspace.branch}</span>
           </div>
@@ -228,6 +228,9 @@ export function WorkspaceHeader({
               </DropdownMenuItem>
               <DropdownMenuItem disabled={busy} onSelect={() => onCreateChatSession('codex', 'Codex Chat')}>
                 New Codex tab
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={busy} onSelect={() => onCreateChatSession('local_llm', 'Local LLM Chat')}>
+                New Local LLM tab
               </DropdownMenuItem>
               {localAgentProfiles.length > 0 && (
                 <DropdownMenuSub>

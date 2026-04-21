@@ -1,6 +1,7 @@
-import { memo } from 'react';
-import { GitBranch, GitPullRequest, Clock } from 'lucide-react';
+import { memo, useMemo } from 'react';
+import { GitBranch, GitPullRequest } from 'lucide-react';
 import type { Workspace } from '../../types';
+import { Tooltip } from '../ui/tooltip';
 
 interface WorkspaceListItemProps {
   workspace: Workspace;
@@ -35,68 +36,84 @@ function WorkspaceListItemBase({
 }: WorkspaceListItemProps) {
   
   const Icon = workspace.prStatus ? GitPullRequest : GitBranch;
-  const iconColorClass = 
-    workspace.status === 'Running' ? 'text-forge-orange' :
-    workspace.status === 'Review Ready' ? 'text-forge-violet' :
-    workspace.status === 'Merged' ? 'text-forge-violet opacity-60' :
-    'text-forge-muted';
+  
+  const iconColorClass = useMemo(() => {
+    if (workspace.status === 'Running') return 'text-forge-orange';
+    if (workspace.status === 'Blocked') return 'text-forge-red';
+    if (workspace.status === 'Review Ready') return 'text-forge-violet';
+    if (workspace.status === 'Merged') return 'text-forge-violet opacity-60';
+    if (workspace.status === 'Waiting') return 'text-forge-blue opacity-80';
+    
+    if (workspace.prStatus === 'Open') return 'text-forge-green';
+    if (workspace.prStatus === 'Draft') return 'text-forge-muted';
+    if (workspace.prStatus === 'Merged') return 'text-forge-violet opacity-60';
+    if (workspace.prStatus === 'Closed') return 'text-forge-red opacity-60';
+    
+    return 'text-forge-muted';
+  }, [workspace.status, workspace.prStatus]);
 
   return (
     <div
       onClick={onClick}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className={`relative rounded-md transition-all duration-200 group overflow-hidden py-2 px-2.5 cursor-pointer ${
+      className={`relative rounded-md transition-all duration-200 group overflow-hidden py-1 px-2 cursor-pointer ${
         isSelected
           ? 'bg-forge-green/12 border border-forge-green/30 shadow-sm'
           : 'border border-transparent hover:bg-forge-surface-overlay'
       } ${className}`}
     >
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-1.5">
         {prefix}
         
-        <div className={`shrink-0 transition-colors ${iconColorClass}`}>
-          <Icon className="w-3.5 h-3.5" />
-        </div>
+        <Tooltip content={`${workspace.status}${workspace.prStatus ? ` · PR ${workspace.prStatus}` : ''}`} side="right">
+          <div className={`shrink-0 transition-colors ${iconColorClass}`}>
+            <Icon className="w-3.5 h-3.5" />
+          </div>
+        </Tooltip>
         
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-4">
-            <h3 className={`text-sm font-semibold truncate ${isSelected ? 'text-forge-text' : 'text-forge-text/90'}`}>
+          <div className="flex items-center justify-between gap-2">
+            <h3 className={`text-xs font-semibold truncate ${isSelected ? 'text-forge-text' : 'text-forge-text/90'}`}>
               {workspace.name}
             </h3>
             
-            {!isHovered && (
-              <div className="flex items-center gap-2 shrink-0">
-                <div className="flex items-center gap-1.5 text-[10px] font-mono">
-                  <span className="text-forge-green">+{totalAdds}</span>
-                  <span className="text-forge-red">-{totalDels}</span>
+            {!isHovered && (totalAdds > 0 || totalDels > 0) && (
+              <div className="flex items-center gap-1.5 shrink-0">
+                <div className="flex items-center gap-1 text-[10px] font-mono">
+                  {totalAdds > 0 && <span className="text-forge-green">+{totalAdds}</span>}
+                  {totalDels > 0 && <span className="text-forge-red">-{totalDels}</span>}
                 </div>
+                {suffix}
+              </div>
+            )}
+            {!isHovered && totalAdds === 0 && totalDels === 0 && suffix && (
+              <div className="flex items-center shrink-0">
                 {suffix}
               </div>
             )}
           </div>
           
-          <div className="flex items-center gap-2.5 mt-0.5">
-            {showRepo && (
-              <>
-                <span className="text-[11px] text-forge-muted truncate max-w-[120px]">
+          {(showRepo || workspace.status === 'Running') && (
+            <div className="flex items-center gap-2 mt-0.5">
+              {showRepo && (
+                <span className="text-[10px] text-forge-muted truncate max-w-[120px]">
                   {workspace.repo}
                 </span>
+              )}
+              {showRepo && workspace.status === 'Running' && (
                 <span className="text-forge-muted/30">·</span>
-              </>
-            )}
-            <span className="text-[10px] text-forge-muted/70 flex items-center gap-1">
-              <Clock className="w-2.5 h-2.5" />
-              {workspace.lastUpdated}
-            </span>
-
-            {workspace.status === 'Running' && (
-              <span className="flex items-center gap-1 text-[10px] text-forge-orange animate-pulse">
-                <span className="w-1 h-1 rounded-full bg-forge-orange" />
-                running
-              </span>
-            )}
-          </div>
+              )}
+              {workspace.status === 'Running' && (
+                <Tooltip content="Agent Running" side="bottom">
+                  <span className="flex items-center gap-1 text-[10px] text-forge-orange animate-pulse cursor-help">
+                    <span className="w-1 h-1 rounded-full bg-forge-orange" />
+                    running
+                  </span>
+                </Tooltip>
+              )}
+            </div>
+          )}
         </div>
 
         {isHovered && actions && (
@@ -115,7 +132,6 @@ export const WorkspaceListItem = memo(WorkspaceListItemBase, (prev, next) => (
   && prev.workspace.repo === next.workspace.repo
   && prev.workspace.status === next.workspace.status
   && prev.workspace.prStatus === next.workspace.prStatus
-  && prev.workspace.lastUpdated === next.workspace.lastUpdated
   && prev.isSelected === next.isSelected
   && prev.isHovered === next.isHovered
   && prev.showRepo === next.showRepo
@@ -126,3 +142,4 @@ export const WorkspaceListItem = memo(WorkspaceListItemBase, (prev, next) => (
   && prev.suffix === next.suffix
   && prev.actions === next.actions
 ));
+

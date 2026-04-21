@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ElementType } from 'react';
 import {
+  ChevronDown,
   ChevronLeft,
+  ChevronRight,
   ClipboardCheck,
   Filter,
   FolderPlus,
@@ -32,6 +34,7 @@ import {
   SelectContent,
   SelectItem,
 } from '../ui/select';
+import { Tooltip } from '../ui/tooltip';
 import { WorkspaceListItem } from '../workspaces/WorkspaceListItem';
 
 export type NavView = 'workspaces' | 'reviews' | 'settings' | 'memory';
@@ -87,6 +90,8 @@ export function Sidebar({
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [hoveredRepoId, setHoveredRepoId] = useState<string | null>(null);
   const repoHoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Track which repository groups are collapsed. */
+  const [collapsedRepoIds, setCollapsedRepoIds] = useState<Set<string>>(new Set());
   /** Batch multi-select state */
   const [batchSelected, setBatchSelected] = useState<Set<string>>(new Set());
   const [batchPrompt, setBatchPrompt] = useState('');
@@ -105,6 +110,14 @@ export function Sidebar({
   const handleOrchestratorToggle = async (enabled: boolean) => {
     setOrchestrator((prev) => prev ? { ...prev, enabled } : prev);
     await setOrchestratorEnabled(enabled);
+  };
+
+  const toggleRepoCollapse = (repoId: string) => {
+    setCollapsedRepoIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(repoId)) next.delete(repoId); else next.add(repoId);
+      return next;
+    });
   };
 
   const toggleBatchSelect = (id: string) => {
@@ -220,16 +233,16 @@ export function Sidebar({
   const renderNavBtn = ({ id, label, icon: Icon }: { id: NavView; label: string; icon: ElementType }) => {
     const isActive = activeView === id;
     return (
-      <Button
-        key={id}
-        variant="ghost"
-        size="icon-sm"
-        onClick={() => onNavigate(id)}
-        title={label}
-        className={isActive ? 'bg-forge-surface-overlay-high text-forge-text' : 'text-forge-muted/60 hover:text-forge-text hover:bg-forge-surface-overlay'}
-      >
-        <Icon className="w-4 h-4" />
-      </Button>
+      <Tooltip key={id} content={label} side="right">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => onNavigate(id)}
+          className={isActive ? 'bg-forge-surface-overlay-high text-forge-text' : 'text-forge-muted/60 hover:text-forge-text hover:bg-forge-surface-overlay'}
+        >
+          <Icon className="w-4 h-4" />
+        </Button>
+      </Tooltip>
     );
   };
 
@@ -266,25 +279,27 @@ export function Sidebar({
           <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest">Workspaces</p>
           <div className="flex items-center gap-0.5">
             {onAddRepository && (
+              <Tooltip content="Add Repository" side="bottom">
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={onAddRepository}
+                  className="text-forge-muted/60 hover:text-forge-text hover:bg-forge-surface-overlay"
+                >
+                  <FolderPlus className="w-3 h-3" />
+                </Button>
+              </Tooltip>
+            )}
+            <Tooltip content="New Workspace" side="bottom">
               <Button
                 variant="ghost"
                 size="icon-xs"
-                onClick={onAddRepository}
-                className="text-forge-muted/60 hover:text-forge-text hover:bg-forge-surface-overlay"
-                title="Add repository"
+                onClick={() => onNewWorkspace()}
+                className="text-forge-orange hover:text-forge-text"
               >
-                <FolderPlus className="w-3 h-3" />
+                <Plus className="w-3 h-3" />
               </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={() => onNewWorkspace()}
-              className="text-forge-orange hover:text-forge-text"
-              title="New branch workspace"
-            >
-              <Plus className="w-3 h-3" />
-            </Button>
+            </Tooltip>
           </div>
         </div>
 
@@ -348,120 +363,134 @@ export function Sidebar({
               </Button>
             </div>
           )}
-          {repoGroups.map((repo) => (
-            <div key={repo.id}>
-              <div
-                className="flex items-center gap-2 px-2 mb-1.5"
-                onMouseEnter={() => {
-                  if (repoHoverTimeoutRef.current) clearTimeout(repoHoverTimeoutRef.current);
-                  setHoveredRepoId(repo.id);
-                }}
-                onMouseLeave={() => {
-                  repoHoverTimeoutRef.current = setTimeout(() => setHoveredRepoId(null), 150);
-                }}
-              >
-                <p className="text-xs font-semibold uppercase tracking-widest text-forge-muted/50 truncate">{repo.name}</p>
-                <span className="text-ui-caption text-forge-muted/35">({repo.workspaces.length})</span>
-                {hoveredRepoId === repo.id && !repo.id.startsWith('name:') && (
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onRemoveRepository(repo.id);
-                    }}
-                    className="text-forge-muted hover:bg-forge-red/15 hover:text-forge-red"
-                    title={`Remove repository "${repo.name}" from Forge`}
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  onClick={() => {
-                    const id = repo.id.startsWith('name:')
-                      ? repo.workspaces.find((w) => w.repositoryId)?.repositoryId
-                      : repo.id;
-                    onNewWorkspace(id);
+          {repoGroups.map((repo) => {
+            const isCollapsed = collapsedRepoIds.has(repo.id);
+            return (
+              <div key={repo.id}>
+                <div
+                  className="group flex items-center gap-1.5 px-2 mb-1.5 cursor-pointer"
+                  onClick={() => toggleRepoCollapse(repo.id)}
+                  onMouseEnter={() => {
+                    if (repoHoverTimeoutRef.current) clearTimeout(repoHoverTimeoutRef.current);
+                    setHoveredRepoId(repo.id);
                   }}
-                  className="ml-auto text-forge-muted hover:bg-forge-surface-overlay hover:text-forge-orange"
-                  title="New branch workspace in repository"
+                  onMouseLeave={() => {
+                    repoHoverTimeoutRef.current = setTimeout(() => setHoveredRepoId(null), 150);
+                  }}
                 >
-                  <Plus className="w-3 h-3" />
-                </Button>
-              </div>
+                  <div className="shrink-0 text-forge-muted/40 group-hover:text-forge-muted/70 transition-colors">
+                    {isCollapsed ? <ChevronRight className="w-3 h-3" strokeWidth={2.5} /> : <ChevronDown className="w-3 h-3" strokeWidth={2.5} />}
+                  </div>
+                  <p className="text-xs font-semibold uppercase tracking-widest text-forge-muted/50 truncate group-hover:text-forge-muted/80 transition-colors">
+                    {repo.name}
+                  </p>
+                  <span className="text-ui-caption text-forge-muted/35">({repo.workspaces.length})</span>
+                  {hoveredRepoId === repo.id && !repo.id.startsWith('name:') && (
+                    <Tooltip content="Remove Repository" side="top">
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemoveRepository(repo.id);
+                        }}
+                        className="text-forge-muted hover:bg-forge-red/15 hover:text-forge-red"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </Tooltip>
+                  )}
+                  <Tooltip content="New Workspace" side="top">
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const id = repo.id.startsWith('name:')
+                          ? repo.workspaces.find((w) => w.repositoryId)?.repositoryId
+                          : repo.id;
+                        onNewWorkspace(id);
+                      }}
+                      className="ml-auto text-forge-muted hover:bg-forge-surface-overlay hover:text-forge-orange"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </Button>
+                  </Tooltip>                </div>
 
-              <div className="space-y-1">
-                {repo.workspaces.length === 0 ? (
-                  <p className="px-2 py-1 text-xs text-forge-muted leading-relaxed">No workspaces in this repo yet. Use + to create one.</p>
-                ) : (
-                  repo.workspaces.map((workspace) => {
-                    const isSelected = workspace.id === selectedWorkspaceId;
-                    const isHovered = hoveredId === workspace.id;
-                    const attention = workspaceAttention[workspace.id];
-                    const isArchived = archivedSet.has(workspace.id);
-                    const totals = workspaceChangeTotals[workspace.id] ?? { additions: 0, deletions: 0 };
+                {!isCollapsed && (
+                  <div className="space-y-1">
+                    {repo.workspaces.length === 0 ? (
+                      <p className="px-2 py-1 text-xs text-forge-muted leading-relaxed">No workspaces in this repo yet. Use + to create one.</p>
+                    ) : (
+                      repo.workspaces.map((workspace) => {
+                        const isSelected = workspace.id === selectedWorkspaceId;
+                        const isHovered = hoveredId === workspace.id;
+                        const attention = workspaceAttention[workspace.id];
+                        const isArchived = archivedSet.has(workspace.id);
+                        const totals = workspaceChangeTotals[workspace.id] ?? { additions: 0, deletions: 0 };
 
-                    return (
-                      <WorkspaceListItem
-                        key={workspace.id}
-                        workspace={workspace}
-                        isSelected={isSelected}
-                        isHovered={isHovered}
-                        showRepo={false}
-                        totalAdds={totals.additions}
-                        totalDels={totals.deletions}
-                        onMouseEnter={() => {
-                          if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-                          setHoveredId(workspace.id);
-                        }}
-                        onMouseLeave={() => {
-                          hoverTimeoutRef.current = setTimeout(() => setHoveredId(null), 150);
-                        }}
-                        onClick={() => {
-                          onNavigate('workspaces');
-                          onSelectWorkspace(workspace.id);
-                        }}
-                        prefix={
-                          <button
-                            onClick={(e) => { e.stopPropagation(); toggleBatchSelect(workspace.id); }}
-                            className={`mt-0.5 shrink-0 transition-opacity ${batchMode || isHovered ? 'opacity-100' : 'opacity-0'}`}
-                            title="Select for batch send"
-                          >
-                            {batchSelected.has(workspace.id)
-                              ? <CheckSquare className="w-3.5 h-3.5 text-forge-green" />
-                              : <SquareIcon className="w-3.5 h-3.5 text-forge-muted" />}
-                          </button>
-                        }
-                        suffix={
-                          !!attention?.unreadCount && (
-                            <span className="shrink-0 rounded-full bg-forge-orange px-1.5 py-0.5 text-[10px] font-bold text-white shadow-amber-glow">
-                              {attention.unreadCount > 99 ? '99+' : attention.unreadCount}
-                            </span>
-                          )
-                        }
-                        actions={
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onArchiveWorkspace(workspace.id);
+                        return (
+                          <WorkspaceListItem
+                            key={workspace.id}
+                            workspace={workspace}
+                            isSelected={isSelected}
+                            isHovered={isHovered}
+                            showRepo={false}
+                            totalAdds={totals.additions}
+                            totalDels={totals.deletions}
+                            onMouseEnter={() => {
+                              if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                              setHoveredId(workspace.id);
                             }}
-                            className="text-forge-muted hover:bg-forge-green/15 hover:text-forge-green"
-                            title={`${isArchived ? 'Unarchive' : 'Archive'} workspace "${workspace.name}" — keeps branch/worktree/files`}
-                          >
-                            {isArchived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
-                          </Button>
-                        }
-                      />
-                    );
-                  })
+                            onMouseLeave={() => {
+                              hoverTimeoutRef.current = setTimeout(() => setHoveredId(null), 150);
+                            }}
+                            onClick={() => {
+                              onNavigate('workspaces');
+                              onSelectWorkspace(workspace.id);
+                            }}
+                            prefix={
+                              <button
+                                onClick={(e) => { e.stopPropagation(); toggleBatchSelect(workspace.id); }}
+                                className={`mt-0.5 shrink-0 transition-opacity ${batchMode || isHovered ? 'opacity-100' : 'opacity-0'}`}
+                                title="Select for batch send"
+                              >
+                                {batchSelected.has(workspace.id)
+                                  ? <CheckSquare className="w-3.5 h-3.5 text-forge-green" />
+                                  : <SquareIcon className="w-3.5 h-3.5 text-forge-muted" />}
+                              </button>
+                            }
+                            suffix={
+                              !!attention?.unreadCount && (
+                                <span className="shrink-0 rounded-full bg-forge-orange px-1.5 py-0.5 text-[10px] font-bold text-white shadow-amber-glow">
+                                  {attention.unreadCount > 99 ? '99+' : attention.unreadCount}
+                                </span>
+                              )
+                            }
+                            actions={
+                              <Tooltip content={isArchived ? 'Restore Workspace' : 'Archive Workspace'} side="left">
+                                <Button
+                                  variant="ghost"
+                                  size="icon-xs"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onArchiveWorkspace(workspace.id);
+                                  }}
+                                  className="text-forge-muted hover:bg-forge-green/15 hover:text-forge-green"
+                                >
+                                  {isArchived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
+                                </Button>
+                              </Tooltip>
+                            }
+                          />
+                        );
+                      })
+                    )}
+                  </div>
                 )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

@@ -226,17 +226,6 @@ pub fn create_workspace_terminal(
         .map_err(|_| "Terminal registry lock poisoned".to_string())?
         .insert(session.id.clone(), active);
 
-    append_log_line(
-        state,
-        &input.workspace_id,
-        &session_id,
-        "system",
-        &format!(
-            "[forge] Terminal started · profile: {} · command: {}\r\n",
-            resolved_profile.label, launch_preview
-        ),
-    );
-
     spawn_terminal_reader(
         state.app_handle.clone(),
         state.db.clone(),

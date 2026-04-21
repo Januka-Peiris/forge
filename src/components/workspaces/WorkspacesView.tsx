@@ -1,5 +1,5 @@
-import { Search, Plus, FolderPlus, Bot, ClipboardCheck, LayoutGrid } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { Search, Plus, FolderPlus, Bot, ClipboardCheck, LayoutGrid, ChevronDown, ChevronRight } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReviewItem, Workspace } from '../../types';
 import { PendingReviews } from '../reviews/PendingReviews';
 import { WorkspaceCard } from './WorkspaceCard';
@@ -39,6 +39,7 @@ export function WorkspacesView({
   showPendingReviews = true,
 }: WorkspacesViewProps) {
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!selectedId) return;
@@ -47,6 +48,17 @@ export function WorkspacesView({
       behavior: 'smooth',
     });
   }, [selectedId]);
+
+  const toggleSection = (id: string) => {
+    setCollapsedSections(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const isPendingCollapsed = collapsedSections.has('pending');
+  const isWorkspacesCollapsed = collapsedSections.has('workspaces');
 
   return (
     <div className="flex flex-col flex-1 min-h-0 bg-forge-bg">
@@ -99,36 +111,53 @@ export function WorkspacesView({
           <>
             {showPendingReviews && pendingReviews.length > 0 && (
               <section className="space-y-4">
-                <div className="flex items-center gap-2 px-1">
+                <div 
+                  className="flex items-center gap-2 px-1 cursor-pointer group"
+                  onClick={() => toggleSection('pending')}
+                >
+                  <div className="text-forge-muted/40 group-hover:text-forge-muted/70 transition-colors">
+                    {isPendingCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </div>
                   <ClipboardCheck className="h-4 w-4 text-forge-blue" />
                   <h2 className="text-ui-subhead font-bold text-forge-text uppercase tracking-wider">Pending Reviews</h2>
                   <span className="rounded-full bg-forge-blue/10 px-2 py-0.5 text-ui-caption font-bold text-forge-blue border border-forge-blue/20">
                     {pendingReviews.length}
                   </span>
                 </div>
-                <PendingReviews reviews={pendingReviews} onOpenWorkspace={onSelect} />
+                {!isPendingCollapsed && (
+                  <PendingReviews reviews={pendingReviews} onOpenWorkspace={onSelect} />
+                )}
               </section>
             )}
 
             <section className="space-y-4 pb-10">
-              <div className="flex items-center gap-2 px-1">
+              <div 
+                className="flex items-center gap-2 px-1 cursor-pointer group"
+                onClick={() => toggleSection('workspaces')}
+              >
+                <div className="text-forge-muted/40 group-hover:text-forge-muted/70 transition-colors">
+                  {isWorkspacesCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </div>
                 <LayoutGrid className="h-4 w-4 text-forge-green" />
                 <h2 className="text-ui-subhead font-bold text-forge-text uppercase tracking-wider">All Workspaces</h2>
+                <span className="text-ui-caption text-forge-muted/35">({workspaces.length})</span>
               </div>
-              <div className="flex flex-col gap-2">
-                {workspaces.map((workspace) => (
-                  <div
-                    key={workspace.id}
-                    ref={(el) => (cardRefs.current[workspace.id] = el)}
-                  >
-                    <WorkspaceCard
-                      workspace={workspace}
-                      isSelected={workspace.id === selectedId}
-                      onSelect={() => onSelect(workspace.id)}
-                    />
-                  </div>
-                ))}
-              </div>
+              {!isWorkspacesCollapsed && (
+                <div className="flex flex-col gap-2">
+                  {workspaces.map((workspace) => (
+                    <div
+                      key={workspace.id}
+                      ref={(el) => (cardRefs.current[workspace.id] = el)}
+                    >
+                      <WorkspaceCard
+                        workspace={workspace}
+                        isSelected={workspace.id === selectedId}
+                        onSelect={() => onSelect(workspace.id)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           </>
         )}
@@ -136,3 +165,4 @@ export function WorkspacesView({
     </div>
   );
 }
+

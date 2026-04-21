@@ -21,13 +21,14 @@ export function deriveWorkspaceCockpit(
   } = {},
 ): WorkspaceCockpitSummary {
   const { attention, hasConflict = false, isArchived = false } = options;
-  const changedCount = workspace.changedFiles.length;
-  const additions = workspace.changedFiles.reduce((sum, file) => sum + (file.additions ?? 0), 0);
-  const deletions = workspace.changedFiles.reduce((sum, file) => sum + (file.deletions ?? 0), 0);
+  const changedFiles = Array.isArray(workspace.changedFiles) ? workspace.changedFiles : [];
+  const changedCount = changedFiles.length;
+  const additions = changedFiles.reduce((sum, file) => sum + (file.additions ?? 0), 0);
+  const deletions = changedFiles.reduce((sum, file) => sum + (file.deletions ?? 0), 0);
   const unread = attention?.unreadCount ?? 0;
   const runningCount = attention?.runningCount ?? 0;
   const queuedCount = attention?.queuedCount ?? 0;
-  const status = attention?.status ?? workspace.status;
+  const status = attention?.status ?? (workspace.status || 'idle');
 
   const agentState = (() => {
     if (isArchived) return 'Archived';
@@ -48,7 +49,8 @@ export function deriveWorkspaceCockpit(
       : 'No local changes yet';
 
   const checkSummary = (() => {
-    if (workspace.completedSteps.includes('Testing')) return 'Checks completed';
+    const completedSteps = Array.isArray(workspace.completedSteps) ? workspace.completedSteps : [];
+    if (completedSteps.includes('Testing')) return 'Checks completed';
     if (workspace.currentStep === 'Testing') return 'Checks running';
     if (changedCount > 0) return 'Checks not run yet';
     return 'No checks yet';

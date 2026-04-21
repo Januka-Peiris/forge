@@ -555,6 +555,22 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
           setFocusedChatId(sessionId);
           focusedIdRef.current = null;
           setFocusedId(null);
+          
+          const session = chatSessions.find(s => s.id === sessionId);
+          if (session?.provider === 'codex') {
+            setComposerSettings(current => ({
+              ...current,
+              selectedModel: 'gpt-5.4',
+              selectedReasoning: 'medium'
+            }));
+          } else if (session?.provider === 'claude_code') {
+            setComposerSettings(current => ({
+              ...current,
+              selectedModel: 'claude-sonnet-4-6',
+              selectedReasoning: 'Default'
+            }));
+          }
+
           if (!chatEvents[sessionId]) void listAgentChatEvents(sessionId).then((events) => setChatEvents((current) => ({ ...current, [sessionId]: events })));
         }}
         onSetError={setError}
@@ -569,6 +585,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
               localAgentProfiles={localAgentProfiles}
               onStartClaude={() => void createChatSession('claude_code', 'Claude Chat')}
               onStartCodex={() => void createChatSession('codex', 'Codex Chat')}
+              onStartLocalLLM={() => void createChatSession('local_llm', 'Local LLM Chat')}
               onStartLocalProfile={(profile) => void createTerminal('agent', profile.agent as TerminalProfile, profile.label, profile.id)}
               onStartShell={() => void createTerminal('shell', 'shell', 'Shell')}
             />

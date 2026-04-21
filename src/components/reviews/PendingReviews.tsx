@@ -33,10 +33,10 @@ function ReviewCard({ review, onOpenWorkspace }: { review: ReviewItem; onOpenWor
           <h4 className="text-ui-body font-semibold text-forge-text group-hover:text-forge-text transition-colors">
             {review.workspaceName}
           </h4>
-          <div className="flex items-center gap-1.5 text-ui-label text-forge-muted mt-0.5">
-            <span className="font-medium text-forge-text/88">{review.repo}</span>
-            <span className="text-forge-muted">/</span>
-            <GitBranch className="w-3 h-3" />
+          <div className="flex items-center gap-1 text-[10px] text-forge-muted mt-0.5">
+            <span className="font-medium text-forge-text/88 truncate max-w-[100px]">{review.repo}</span>
+            <span className="text-forge-muted/40">/</span>
+            <GitBranch className="w-2.5 h-2.5" />
             <span className="font-mono truncate">{review.branch}</span>
           </div>
         </div>
@@ -50,7 +50,6 @@ function ReviewCard({ review, onOpenWorkspace }: { review: ReviewItem; onOpenWor
         </span>
         <span className="font-mono text-forge-green">+{review.additions}</span>
         <span className="font-mono text-forge-red">-{review.deletions}</span>
-        <span className="ml-auto text-forge-muted">{review.createdAt}</span>
       </div>
 
       <div className="bg-forge-surface/60 rounded-lg px-3 py-2 mb-3 border border-forge-border/50">

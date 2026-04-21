@@ -230,7 +230,7 @@ fn start_adapter_process(
     input: SendAgentChatMessageInput,
     resume_provider_session: bool,
 ) -> Result<(), String> {
-    let mut command = command_for_session(&session, &prompt, &input, resume_provider_session)?;
+    let mut command = command_for_session(&state, &session, &prompt, &input, resume_provider_session)?;
     command
         .current_dir(&session.cwd)
         .env("PATH", terminal_service::enriched_path())
@@ -265,6 +265,7 @@ fn start_adapter_process(
 }
 
 fn command_for_session(
+    state: &AppState,
     session: &AgentChatSession,
     prompt: &str,
     input: &SendAgentChatMessageInput,
@@ -323,6 +324,29 @@ fn command_for_session(
             {
                 command.args(["-c", &format!("model_reasoning_effort=\"{reasoning}\"")]);
             }
+            command.arg(prompt);
+            Ok(command)
+        }
+        "local_llm" => {
+            let profile = agent_profile_service::resolve_agent_profile(
+                &state,
+                Some(&session.workspace_id),
+                input.profile_id.as_deref(),
+                None,
+            )?;
+            let command_path = resolve_binary(&profile.command)?;
+            let mut command = Command::new(command_path);
+            command.current_dir(&session.cwd);
+            
+            // For Ollama/local LLMs, we usually just pass the prompt as an argument or via stdin.
+            // Here we'll follow the same pattern as Codex/Claude for consistency if the CLI supports it,
+            // or fallback to a simple 'run' or 'chat' command.
+            if profile.command == "ollama" {
+                command.args(["run", profile.model.as_deref().unwrap_or("llama3")]);
+            } else {
+                command.args(&profile.args);
+            }
+            
             command.arg(prompt);
             Ok(command)
         }
@@ -498,6 +522,7 @@ fn normalize_provider(provider: &str) -> String {
     match provider.trim().to_lowercase().as_str() {
         "claude" | "claude-code" | "claude_code" => "claude_code".to_string(),
         "codex" => "codex".to_string(),
+        "local" | "local_llm" | "ollama" => "local_llm".to_string(),
         _ => "claude_code".to_string(),
     }
 }
@@ -505,6 +530,7 @@ fn normalize_provider(provider: &str) -> String {
 fn default_title(provider: &str) -> &'static str {
     match provider {
         "codex" => "Codex Chat",
+        "local_llm" => "Local LLM Chat",
         _ => "Claude Chat",
     }
 }
@@ -641,5 +667,14 @@ mod tests {
         let events =
             parse_adapter_line("codex", r#"{"type":"exec_command","command":"cargo test"}"#);
         assert_eq!(events[0].event_type, "command");
+    }
+
+    #[test]
+    fn parses_local_llm_markdown_output() {
+        let text = "Here is the fix:\n\n```rust\nfn main() {}\n```";
+        let events = parse_adapter_line("local_llm", text);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "assistant_message");
+        assert_eq!(events[0].body, text);
     }
 }

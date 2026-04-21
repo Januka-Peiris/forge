@@ -39,7 +39,7 @@ export function useWorkspaceTerminalEvents({
       if (disposed || event.payload.workspaceId !== workspaceId) return;
       setPendingCommand(event.payload);
     }).then((fn) => {
-      unlistenApproval = fn;
+      if (disposed) fn(); else unlistenApproval = fn;
     }).catch(() => undefined);
 
     void listen<TerminalOutputEvent>('forge://terminal-output', (event) => {
@@ -48,11 +48,7 @@ export function useWorkspaceTerminalEvents({
       enqueueOutput(chunk.sessionId, [chunk]);
       bumpNextSeqFromChunk(chunk.sessionId, chunk.seq);
     }).then((fn) => {
-      if (disposed) {
-        fn();
-      } else {
-        unlistenTerminalOutput = fn;
-      }
+      if (disposed) fn(); else unlistenTerminalOutput = fn;
     }).catch(() => undefined);
 
     void listen<AgentChatEventEnvelope>('forge://agent-chat-event', (event) => {
@@ -78,11 +74,7 @@ export function useWorkspaceTerminalEvents({
         }, 600);
       }
     }).then((fn) => {
-      if (disposed) {
-        fn();
-      } else {
-        unlistenAgentChat = fn;
-      }
+      if (disposed) fn(); else unlistenAgentChat = fn;
     }).catch(() => undefined);
 
     return () => {

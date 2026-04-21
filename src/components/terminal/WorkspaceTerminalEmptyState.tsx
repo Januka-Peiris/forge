@@ -7,6 +7,7 @@ interface WorkspaceTerminalEmptyStateProps {
   localAgentProfiles: AgentProfile[];
   onStartClaude: () => void;
   onStartCodex: () => void;
+  onStartLocalLLM: () => void;
   onStartLocalProfile: (profile: AgentProfile) => void;
   onStartShell: () => void;
 }
@@ -16,6 +17,7 @@ export function WorkspaceTerminalEmptyState({
   localAgentProfiles,
   onStartClaude,
   onStartCodex,
+  onStartLocalLLM,
   onStartLocalProfile,
   onStartShell,
 }: WorkspaceTerminalEmptyStateProps) {
@@ -28,24 +30,22 @@ export function WorkspaceTerminalEmptyState({
         <div className="mt-4 flex flex-wrap justify-center gap-2">
           <button disabled={busy} onClick={onStartClaude} className="rounded-lg bg-forge-green px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Start Claude</button>
           <button disabled={busy} onClick={onStartCodex} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">Start Codex</button>
-          {localAgentProfiles.length > 0 && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">
-                  Other agents
-                  <ChevronDown className="h-3.5 w-3.5 text-forge-muted" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="center">
-                {localAgentProfiles.map((profile) => (
-                  <DropdownMenuItem key={profile.id} disabled={busy} onSelect={() => onStartLocalProfile(profile)}>
-                    Start {profile.label}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-          <button disabled={busy} onClick={onStartShell} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">New Shell</button>
+          
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">
+                More options
+                <ChevronDown className="h-3.5 w-3.5 text-forge-muted" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="center">
+              {localAgentProfiles.map((profile) => (
+                <DropdownMenuItem key={profile.id} disabled={busy} onSelect={() => onStartLocalProfile(profile)}>
+                  Start {profile.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </div>

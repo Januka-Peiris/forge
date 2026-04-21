@@ -63,6 +63,8 @@ fn unread_count_for_workspace(state: &AppState, workspace_id: &str) -> Result<i6
             JOIN terminal_sessions sessions ON sessions.id = chunks.session_id
             LEFT JOIN workspace_attention_reads reads ON reads.workspace_id = sessions.workspace_id
             WHERE sessions.workspace_id = ?1
+              AND sessions.is_visible = 1
+              AND sessions.closed_at IS NULL
               AND chunks.stream_type != 'pty_snapshot'
               AND (reads.last_read_at IS NULL OR chunks.created_at > reads.last_read_at)
             "#,

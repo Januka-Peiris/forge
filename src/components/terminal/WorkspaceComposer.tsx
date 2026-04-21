@@ -40,7 +40,25 @@ const CLAUDE_MODEL_OPTIONS = [
   { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
 ];
 
-function compactLabel(model: string) {
+const CODEX_MODEL_OPTIONS = [
+  { value: 'gpt-5.4', label: 'GPT-5.4 (Flagship)' },
+  { value: 'gpt-5.4-mini', label: 'GPT-5.4 mini' },
+  { value: 'gpt-5.3-codex', label: 'GPT-5.3 Codex' },
+  { value: 'gpt-5.3-codex-spark', label: 'GPT-5.3 Spark' },
+  { value: 'o4-mini', label: 'o4-mini' },
+];
+
+const CODEX_REASONING_OPTIONS = [
+  { value: 'low', label: 'Low', hint: 'faster response' },
+  { value: 'medium', label: 'Medium', hint: 'balanced' },
+  { value: 'high', label: 'High', hint: 'deep thinking' },
+  { value: 'xhigh', label: 'Extra High', hint: 'maximum reasoning' },
+];
+
+function compactLabel(model: string, provider?: string) {
+  if (provider === 'codex') {
+    return CODEX_MODEL_OPTIONS.find((o) => o.value === model)?.label ?? model;
+  }
   return CLAUDE_MODEL_OPTIONS.find((o) => o.value === model)?.label
     ?? model.replace(/^claude-/, '').replace(/-/g, ' ').replace(/\b(opus|sonnet|haiku)\b/i, (m) => m[0].toUpperCase() + m.slice(1));
 }
@@ -228,6 +246,10 @@ export function WorkspaceComposer({
     setPromptInput(option.body);
   };
 
+  const provider = focusedChatSession?.provider ?? 'claude_code';
+  const modelOptions = provider === 'codex' ? CODEX_MODEL_OPTIONS : CLAUDE_MODEL_OPTIONS;
+  const thinkingOptions = provider === 'codex' ? CODEX_REASONING_OPTIONS : CLAUDE_THINKING_OPTIONS;
+
   return (
     <div className="shrink-0 border-t border-forge-border bg-forge-surface" style={{ height: `${composerHeight}px` }}>
       <div
@@ -240,23 +262,27 @@ export function WorkspaceComposer({
         <div className="shrink-0 flex items-center gap-2 overflow-x-auto">
           {focusedChatSession && (
             <div className="flex shrink-0 items-center gap-1 rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-muted">
-              <button
-                onClick={onTogglePlanMode}
-                title="Toggle Plan mode (Shift+Tab)"
-                className={`flex items-center gap-1 rounded px-1 py-0.5 transition-colors ${settings.selectedTaskMode === 'Plan' ? 'text-forge-blue' : 'text-forge-muted/40 hover:text-forge-muted'}`}
-              >
-                <ListChecks className="h-3 w-3" />
-                {settings.selectedTaskMode === 'Plan' && <span className="font-semibold">Plan</span>}
-              </button>
-              <span>·</span>
+              {provider === 'claude_code' && (
+                <>
+                  <button
+                    onClick={onTogglePlanMode}
+                    title="Toggle Plan mode (Shift+Tab)"
+                    className={`flex items-center gap-1 rounded px-1 py-0.5 transition-colors ${settings.selectedTaskMode === 'Plan' ? 'text-forge-blue' : 'text-forge-muted/40 hover:text-forge-muted'}`}
+                  >
+                    <ListChecks className="h-3 w-3" />
+                    {settings.selectedTaskMode === 'Plan' && <span className="font-semibold">Plan</span>}
+                  </button>
+                  <span>·</span>
+                </>
+              )}
               <Select value={settings.selectedModel} onValueChange={(v) => onSettingsChange({ selectedModel: v })}>
-                <SelectTrigger compact title="Claude model"><SelectValue /></SelectTrigger>
+                <SelectTrigger compact title={`${provider === 'codex' ? 'Codex' : 'Claude'} model`}><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {CLAUDE_MODEL_OPTIONS.map((model) => (
-                    <SelectItem key={model.value} value={model.value}>{compactLabel(model.value)}</SelectItem>
+                  {modelOptions.map((model) => (
+                    <SelectItem key={model.value} value={model.value}>{compactLabel(model.value, provider)}</SelectItem>
                   ))}
-                  {!CLAUDE_MODEL_OPTIONS.some((m) => m.value === settings.selectedModel) && (
-                    <SelectItem value={settings.selectedModel}>{compactLabel(settings.selectedModel)}</SelectItem>
+                  {!modelOptions.some((m) => m.value === settings.selectedModel) && (
+                    <SelectItem value={settings.selectedModel}>{compactLabel(settings.selectedModel, provider)}</SelectItem>
                   )}
                 </SelectContent>
               </Select>
@@ -267,14 +293,14 @@ export function WorkspaceComposer({
               >
                 <SelectTrigger
                   compact
-                  title="Claude thinking / effort"
-                  className={settings.selectedReasoning === 'Default' ? 'text-forge-muted' : settings.selectedReasoning === 'Max' || settings.selectedReasoning === 'Extra High' ? 'bg-forge-violet/15 text-forge-violet' : 'bg-forge-blue/10 text-forge-blue'}
+                  title={`${provider === 'codex' ? 'Codex' : 'Claude'} thinking / effort`}
+                  className={settings.selectedReasoning === 'Default' || settings.selectedReasoning === 'medium' ? 'text-forge-muted' : settings.selectedReasoning === 'Max' || settings.selectedReasoning === 'Extra High' || settings.selectedReasoning === 'high' ? 'bg-forge-violet/15 text-forge-violet' : 'bg-forge-blue/10 text-forge-blue'}
                 >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {CLAUDE_THINKING_OPTIONS.map((level) => (
-                    <SelectItem key={level.value} value={level.value}>Thinking: {level.label}</SelectItem>
+                  {thinkingOptions.map((level) => (
+                    <SelectItem key={level.value} value={level.value}>{provider === 'codex' ? '' : 'Thinking: '}{level.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -302,29 +328,31 @@ export function WorkspaceComposer({
               </Button>
             </PopoverTrigger>
             <PopoverContent align="start" className="min-w-[240px] max-h-[min(480px,80vh)] overflow-y-auto">
-              <p className="mb-2 text-xs font-bold uppercase tracking-widest text-forge-muted">Agent Settings</p>
+              <p className="mb-2 text-xs font-bold uppercase tracking-widest text-forge-muted">{provider === 'codex' ? 'Codex' : 'Claude'} Agent Settings</p>
               <div className="space-y-2">
-                <div>
-                  <label className="mb-1 block text-xs text-forge-muted">Claude agent</label>
-                  <Select value={settings.selectedClaudeAgent} onValueChange={(v) => onSettingsChange({ selectedClaudeAgent: v })}>
-                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {CLAUDE_AGENT_OPTIONS.map((a) => <SelectItem key={a.value} value={a.value}>{a.label} · {a.hint}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {provider === 'claude_code' && (
+                  <div>
+                    <label className="mb-1 block text-xs text-forge-muted">Claude agent</label>
+                    <Select value={settings.selectedClaudeAgent} onValueChange={(v) => onSettingsChange({ selectedClaudeAgent: v })}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {CLAUDE_AGENT_OPTIONS.map((a) => <SelectItem key={a.value} value={a.value}>{a.label} · {a.hint}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div>
                   <label className="mb-1 block text-xs text-forge-muted">Model</label>
                   <Select value={settings.selectedModel} onValueChange={(v) => onSettingsChange({ selectedModel: v })}>
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {CLAUDE_MODEL_OPTIONS.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
-                      {!CLAUDE_MODEL_OPTIONS.some((m) => m.value === settings.selectedModel) && (
-                        <SelectItem value={settings.selectedModel}>{compactLabel(settings.selectedModel)}</SelectItem>
+                      {modelOptions.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                      {!modelOptions.some((m) => m.value === settings.selectedModel) && (
+                        <SelectItem value={settings.selectedModel}>{compactLabel(settings.selectedModel, provider)}</SelectItem>
                       )}
                     </SelectContent>
                   </Select>
-                  <p className="mt-1 text-xs text-forge-muted">Passed to Claude as <span className="font-mono">--model</span>.</p>
+                  <p className="mt-1 text-xs text-forge-muted">Passed to {provider === 'codex' ? 'Codex' : 'Claude'} as <span className="font-mono">--model</span>.</p>
                 </div>
                 <div>
                   <label className="mb-1 block text-xs text-forge-muted">Task mode</label>
@@ -332,9 +360,11 @@ export function WorkspaceComposer({
                     value={settings.selectedTaskMode}
                     onValueChange={(next) => {
                       const patch: Partial<ComposerSettings> = { selectedTaskMode: next };
-                      if (next === 'Plan') patch.selectedClaudeAgent = 'Plan';
-                      if (next === 'Review') patch.selectedClaudeAgent = 'superpowers:code-reviewer';
-                      if (next === 'Act' && settings.selectedClaudeAgent === 'Plan') patch.selectedClaudeAgent = 'general-purpose';
+                      if (provider === 'claude_code') {
+                        if (next === 'Plan') patch.selectedClaudeAgent = 'Plan';
+                        if (next === 'Review') patch.selectedClaudeAgent = 'superpowers:code-reviewer';
+                        if (next === 'Act' && settings.selectedClaudeAgent === 'Plan') patch.selectedClaudeAgent = 'general-purpose';
+                      }
                       onSettingsChange(patch);
                     }}
                   >
@@ -350,10 +380,10 @@ export function WorkspaceComposer({
                   <Select value={settings.selectedReasoning} onValueChange={(v) => onSettingsChange({ selectedReasoning: v })}>
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {CLAUDE_THINKING_OPTIONS.map((l) => <SelectItem key={l.value} value={l.value}>{l.label} · {l.hint}</SelectItem>)}
+                      {thinkingOptions.map((l) => <SelectItem key={l.value} value={l.value}>{l.label} · {l.hint}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <p className="mt-1 text-xs text-forge-muted">Maps to Claude <span className="font-mono">--effort</span>: low, medium, high, xhigh, max.</p>
+                  <p className="mt-1 text-xs text-forge-muted">Maps to {provider === 'codex' ? 'Codex model_reasoning_effort' : 'Claude --effort'}.</p>
                 </div>
                 <div>
                   <label className="mb-1 block text-xs text-forge-muted">Send behavior</label>

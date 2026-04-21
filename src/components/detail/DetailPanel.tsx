@@ -8,6 +8,8 @@ import {
   CheckCircle2,
   Circle,
   ChevronRight,
+  RefreshCw,
+  GitPullRequest,
 } from 'lucide-react';
 import type {
   ActivityItem as ForgeActivityItem,
@@ -164,6 +166,18 @@ export function DetailPanel({
     })).filter((group) => group.worktrees.length > 0);
   }, [linkedById, linkedSearch, primaryPath, repositories, workspaceRepositoryId]);
 
+  const cockpit = deriveWorkspaceCockpit(workspace || ({} as Workspace), { isArchived });
+  const changedFileCount = workspaceReadiness?.changedFiles
+    ?? (Array.isArray(workspace?.changedFiles) ? workspace?.changedFiles.length : workspace?.changedFiles ?? 0);
+
+  const primaryAction = useMemo(() => {
+    if (!workspace) return null;
+    if (workspace.behindBy > 0) return { label: 'Pull', icon: RefreshCw, onClick: () => {}, variant: 'outline' as const };
+    if (!workspacePrStatus?.found && changedFileCount > 0) return { label: 'Draft PR', icon: GitPullRequest, onClick: createPrFromCockpit, variant: 'default' as const };
+    if (workspacePrStatus?.url) return { label: 'View PR', icon: ExternalLink, onClick: () => window.open(workspacePrStatus.url!, '_blank'), variant: 'outline' as const };
+    return null;
+  }, [workspace, workspacePrStatus, changedFileCount, createPrFromCockpit]);
+
   if (!workspace) {
     return (
       <aside className="w-[300px] shrink-0 h-full bg-forge-surface flex flex-col items-center justify-center">
@@ -185,10 +199,7 @@ export function DetailPanel({
   }[workspace.mergeRisk];
 
   const sessionStatus = workspace.agentSession?.status ?? 'idle';
-  const sessionModel = workspace.agentSession?.model ?? 'not started';
-  const cockpit = deriveWorkspaceCockpit(workspace, { isArchived });
-  const changedFileCount = workspaceReadiness?.changedFiles
-    ?? (Array.isArray(workspace.changedFiles) ? workspace.changedFiles.length : workspace.changedFiles);
+
   const activityRows = activityItems.slice(0, 8).map((item) => {
     const tone = item.level === 'error'
       ? { icon: AlertCircle, color: 'bg-forge-red/70' }
@@ -207,35 +218,83 @@ export function DetailPanel({
 
   return (
     <aside className="w-full shrink-0 h-full bg-forge-surface flex flex-col overflow-hidden">
-      {/* Header — always visible */}
-      <div className="px-4 py-4 shrink-0">
-        <div className="flex items-center gap-2 mb-1">
-          <h2 className="text-sm font-bold text-forge-text truncate flex-1">{workspace.name}</h2>
-          {onCollapse && (
-            <Button
-              variant="outline"
-              size="icon-xs"
-              onClick={onCollapse}
-              title="Collapse detail panel"
-            >
-              <ChevronRight className="h-3.5 w-3.5" />
-            </Button>
+      {/* Dynamic Header */}
+      <div className="px-4 pt-4 pb-3 shrink-0 border-b border-forge-border/40 bg-forge-bg shadow-sm">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <h2 className="text-sm font-bold text-forge-text truncate">{workspace.name}</h2>
+              {workspacePrStatus?.found && (
+                <span className="text-xs font-mono text-forge-muted shrink-0">#{workspacePrStatus.number}</span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 text-[11px] text-forge-muted">
+              <span className="truncate max-w-[80px]">{workspace.repo}</span>
+              <span>/</span>
+              <GitBranch className="w-2.5 h-2.5 shrink-0" />
+              <span className="font-mono truncate">{workspace.branch}</span>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-1.5 shrink-0">
+            {onOpenInCursor && (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={onOpenInCursor}
+                className="text-forge-muted hover:text-forge-blue hover:bg-forge-blue/10"
+                title="Open in Cursor"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Button>
+            )}
+            {primaryAction && (
+              <Button 
+                variant={primaryAction.variant} 
+                size="xs" 
+                onClick={primaryAction.onClick}
+                className={primaryAction.variant === 'default' ? 'bg-forge-green hover:bg-forge-green-high text-white shadow-electric-glow' : ''}
+              >
+                <primaryAction.icon className="w-3 h-3 mr-1" />
+                {primaryAction.label}
+              </Button>
+            )}
+            {onCollapse && (
+              <Button variant="ghost" size="icon-xs" onClick={onCollapse} className="text-forge-muted">
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Primary Status Banner */}
+        <div className="flex items-center gap-3">
+          {workspace.behindBy > 0 ? (
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-forge-orange">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              Behind by {workspace.behindBy} commit{workspace.behindBy === 1 ? '' : 's'}
+            </div>
+          ) : workspacePrStatus?.found ? (
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-forge-green">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              {workspacePrStatus.checksSummary === 'success' ? 'All checks passed' : workspacePrStatus.state}
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-forge-muted">
+              <Circle className="w-3 h-3" />
+              {changedFileCount > 0 ? `${changedFileCount} files changed` : 'Clean workspace'}
+            </div>
           )}
-        </div>
-        <div className="flex items-center gap-1.5 text-sm text-forge-muted mt-1">
-          <span className="text-forge-text/90 font-medium">{workspace.repo}</span>
-          <span className="text-forge-muted">/</span>
-          <GitBranch className="w-3 h-3 shrink-0 text-forge-muted" />
-          <span className="font-mono truncate text-forge-text/90">{workspace.branch}</span>
-        </div>
-        <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-forge-muted">{sessionStatus} · {sessionModel}</span>
+          <div className="ml-auto flex items-center gap-1.5 text-[10px] text-forge-muted/60 uppercase tracking-wider">
+            <span className="w-1.5 h-1.5 rounded-full bg-forge-green/40" />
+            {sessionStatus}
+          </div>
         </div>
       </div>
 
       {/* Tab bar */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'status' | 'config')} className="flex flex-col flex-1 min-h-0">
-        <TabsList className="px-4">
+        <TabsList className="px-4 bg-black/20 border-b border-forge-border/40">
           <TabsTrigger value="status">Status</TabsTrigger>
           <TabsTrigger value="config">Config</TabsTrigger>
         </TabsList>
@@ -330,38 +389,6 @@ export function DetailPanel({
           </TabsContent>
         </div>
       </Tabs>
-
-      {/* Footer — always visible */}
-      <div className="px-4 py-3 shrink-0 space-y-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onOpenInCursor}
-          className="w-full text-forge-blue hover:bg-forge-blue/15 border border-forge-blue/20"
-        >
-          <ExternalLink className="w-3.5 h-3.5" />
-          Open in Cursor
-        </Button>
-        <div className="flex gap-2">
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={archiveFromCockpit}
-            disabled={!onArchiveWorkspace}
-            className="flex-1"
-          >
-            {isArchived ? 'Unarchive' : 'Archive'}
-          </Button>
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={onDeleteWorkspace}
-            className="flex-1 text-forge-red/70 hover:text-forge-red hover:bg-forge-red/10"
-          >
-            Forget
-          </Button>
-        </div>
-      </div>
     </aside>
   );
 }
