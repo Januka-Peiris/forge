@@ -13,8 +13,8 @@ use commands::{
     deep_links, environment, git_review, local_llms, merge_readiness,
     orchestrator as orchestrator_commands, pr_draft, prompt_templates,
     repositories as repository_commands, review_cockpit, review_summary, reviews, settings,
-    terminal, workspace_attention, workspace_cleanup, workspace_health, workspace_ports,
-    workspace_readiness, workspace_scripts, workspace_templates, workspaces,
+    terminal, workspace_attention, workspace_cleanup, workspace_file_tree, workspace_health,
+    workspace_ports, workspace_readiness, workspace_scripts, workspace_templates, workspaces,
 };
 use services::{orchestrator_service, rebase_service};
 use state::AppState;
@@ -174,6 +174,9 @@ pub fn run() {
             workspace_health::recover_workspace_sessions,
             workspace_readiness::get_workspace_readiness,
             workspace_cleanup::cleanup_workspace,
+            workspace_file_tree::list_workspace_file_tree,
+            workspace_file_tree::read_workspace_file,
+            workspace_file_tree::write_workspace_file,
             workspace_ports::list_workspace_ports,
             workspace_ports::open_workspace_port,
             workspace_ports::kill_workspace_port_process,

@@ -29,7 +29,8 @@ pub fn get(db: &Database, workspace_id: &str) -> Result<Option<WorkspaceMergeRea
                         behind_count: row.get("behind_count")?,
                         active_run_status: row.get("active_run_status")?,
                         review_risk_level: row.get("review_risk_level")?,
-                        pre_flight_checks: serde_json::from_str(&pre_flight_checks).unwrap_or_default(),
+                        pre_flight_checks: serde_json::from_str(&pre_flight_checks)
+                            .unwrap_or_default(),
                         generated_at: row.get("generated_at")?,
                     })
                 },

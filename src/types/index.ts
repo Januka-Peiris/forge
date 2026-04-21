@@ -51,6 +51,7 @@ export type {
 export type { WorkspaceReadiness } from './workspace-readiness';
 export type { CleanupWorkspaceInput, CleanupWorkspaceResult } from './workspace-cleanup';
 export type { WorkspacePort } from './workspace-ports';
+export type { ListWorkspaceFileTreeInput, WorkspaceFileTreeNode, WorkspaceFileTreeNodeKind } from './workspace-file-tree';
 export type { ForgeWorkspaceConfig, WorkspaceScriptTerminalSession } from './workspace-scripts';
 export type {
   AgentPromptEntry,

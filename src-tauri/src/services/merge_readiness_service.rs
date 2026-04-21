@@ -2,7 +2,7 @@ use std::path::Path;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::models::{WorkspaceMergeReadiness, PreFlightCheck};
+use crate::models::{PreFlightCheck, WorkspaceMergeReadiness};
 use crate::repositories::{agent_run_repository, merge_readiness_repository, workspace_repository};
 use crate::services::{git_review_service, review_summary_service};
 use crate::state::AppState;
@@ -44,13 +44,17 @@ pub fn refresh_workspace_merge_readiness(
         .unwrap_or(false)
     {
         reasons.push("Workspace path is a valid git worktree.".to_string());
-        
+
         // --- 1. Git Diff Check ---
         let git_check = git(root_path, &["diff", "--check"]);
         pre_flight_checks.push(PreFlightCheck {
             id: "git_diff_check".to_string(),
             label: "Git Check".to_string(),
-            status: if git_check.is_ok() { "pass".to_string() } else { "fail".to_string() },
+            status: if git_check.is_ok() {
+                "pass".to_string()
+            } else {
+                "fail".to_string()
+            },
             message: git_check.unwrap_or_else(|e| e),
         });
 

@@ -311,7 +311,9 @@ pub fn reconnect_workspace_utility_terminal_session(
 }
 
 #[tauri::command]
-pub fn check_shell_command_safety(command: String) -> Result<crate::services::command_safety_service::CommandSafetyResult, String> {
+pub fn check_shell_command_safety(
+    command: String,
+) -> Result<crate::services::command_safety_service::CommandSafetyResult, String> {
     Ok(crate::services::command_safety_service::check_command_safety(&command))
 }
 

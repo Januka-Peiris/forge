@@ -36,13 +36,29 @@ const DESTRUCTIVE_PATTERNS: &[(&str, &str)] = &[
 const GIT_RISKY_PATTERNS: &[(&str, &str)] = &[
     ("push --force", "Force-pushing can overwrite remote history"),
     ("push -f", "Force-pushing can overwrite remote history"),
-    ("reset --hard", "Hard reset discards all uncommitted changes"),
+    (
+        "reset --hard",
+        "Hard reset discards all uncommitted changes",
+    ),
     ("clean -f", "Force-cleaning removes untracked files"),
-    ("clean -fd", "Force-cleaning removes untracked files and directories"),
+    (
+        "clean -fd",
+        "Force-cleaning removes untracked files and directories",
+    ),
 ];
 
 const SAFE_PATTERNS: &[&str] = &[
-    "ls", "git status", "git log", "git diff", "cat", "grep", "pwd", "whoami", "npm list", "cargo list", "echo",
+    "ls",
+    "git status",
+    "git log",
+    "git diff",
+    "cat",
+    "grep",
+    "pwd",
+    "whoami",
+    "npm list",
+    "cargo list",
+    "echo",
 ];
 
 pub fn check_command_safety(command: &str) -> CommandSafetyResult {
@@ -76,10 +92,14 @@ pub fn check_command_safety(command: &str) -> CommandSafetyResult {
     if category == "general" {
         if lower.starts_with("git ") {
             category = "git".to_string();
-        } else if lower.starts_with("npm ") || lower.starts_with("pnpm ") || lower.starts_with("yarn ") {
+        } else if lower.starts_with("npm ")
+            || lower.starts_with("pnpm ")
+            || lower.starts_with("yarn ")
+        {
             category = "node".to_string();
             safety_level = SafetyLevel::Informational;
-            explanation = "This command involves Node.js package management or scripts.".to_string();
+            explanation =
+                "This command involves Node.js package management or scripts.".to_string();
         } else if lower.starts_with("cargo ") {
             category = "rust".to_string();
             safety_level = SafetyLevel::Informational;
@@ -90,9 +110,13 @@ pub fn check_command_safety(command: &str) -> CommandSafetyResult {
     // 4. Override to Safe if it matches known safe patterns (and no risks found)
     if risks.is_empty() {
         let cmd_start = lower.split_whitespace().next().unwrap_or("");
-        if SAFE_PATTERNS.contains(&cmd_start) || (lower.starts_with("git ") && SAFE_PATTERNS.contains(&lower.split_whitespace().nth(1).unwrap_or(""))) {
+        if SAFE_PATTERNS.contains(&cmd_start)
+            || (lower.starts_with("git ")
+                && SAFE_PATTERNS.contains(&lower.split_whitespace().nth(1).unwrap_or("")))
+        {
             safety_level = SafetyLevel::Safe;
-            explanation = "This is a recognized safe command for inspection or reporting.".to_string();
+            explanation =
+                "This is a recognized safe command for inspection or reporting.".to_string();
         }
     }
 
@@ -126,7 +150,7 @@ mod tests {
         let result = check_command_safety("rm -rf /");
         assert_eq!(result.safety_level, SafetyLevel::Risky);
         assert!(result.explanation.contains("destructive"));
-        
+
         let safe = check_command_safety("git status");
         assert_eq!(safe.safety_level, SafetyLevel::Safe);
     }

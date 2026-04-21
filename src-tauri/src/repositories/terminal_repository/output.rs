@@ -94,11 +94,12 @@ pub fn list_output_chunks(
                 LIMIT ?3
                 "#,
             )?;
-            let chunks = stmt.query_map(
-                params![session_id, since_seq as i64, INCREMENTAL_LIMIT],
-                terminal_output_chunk_from_row,
-            )?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
+            let chunks = stmt
+                .query_map(
+                    params![session_id, since_seq as i64, INCREMENTAL_LIMIT],
+                    terminal_output_chunk_from_row,
+                )?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
             chunks
         };
         Ok(rows)

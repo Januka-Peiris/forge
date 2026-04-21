@@ -1,5 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Terminal as TerminalIcon } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { Save, Terminal as TerminalIcon, X } from 'lucide-react';
+import Prism from 'prismjs';
+import Editor from 'react-simple-code-editor';
+import 'prismjs/components/prism-bash';
+import 'prismjs/components/prism-css';
+import 'prismjs/components/prism-json';
+import 'prismjs/components/prism-jsx';
+import 'prismjs/components/prism-markdown';
+import 'prismjs/components/prism-rust';
+import 'prismjs/components/prism-tsx';
+import 'prismjs/components/prism-typescript';
 import type { AgentProfile, ForgeWorkspaceConfig, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
 import type { AgentChatEvent, AgentChatSession } from '../../types/agent-chat';
 import type { WorkspaceChangedFile } from '../../types/git-review';
@@ -55,6 +65,7 @@ import { useWorkspaceTerminalComposerActions } from './useWorkspaceTerminalCompo
 import { useWorkspaceTerminalSessionActions } from './useWorkspaceTerminalSessionActions';
 import { useWorkspaceTerminalPolling } from './useWorkspaceTerminalPolling';
 import { useWorkspaceTerminalEvents } from './useWorkspaceTerminalEvents';
+import { readWorkspaceFile, writeWorkspaceFile } from '../../lib/tauri-api/workspace-file-tree';
 
 const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-6';
 const DEFAULT_CODEX_MODEL = 'gpt-5.4';
@@ -66,12 +77,45 @@ function isLikelyCodexModel(model: string): boolean {
   return lower.startsWith('gpt-') || lower.startsWith('o3') || lower.startsWith('o4') || lower.includes('codex');
 }
 
+interface EditorTab {
+  path: string;
+  content: string;
+  savedContent: string;
+  loading: boolean;
+  error: string | null;
+}
+
+const FILE_PREVIEW_WIDTH_KEY = 'forge:file-preview-width';
+
+function detectPrismLanguage(path: string): string {
+  const ext = path.split('.').pop()?.toLowerCase() ?? '';
+  if (ext === 'ts' || ext === 'mts' || ext === 'cts') return 'typescript';
+  if (ext === 'tsx') return 'tsx';
+  if (ext === 'js' || ext === 'mjs' || ext === 'cjs') return 'javascript';
+  if (ext === 'jsx') return 'jsx';
+  if (ext === 'json') return 'json';
+  if (ext === 'css' || ext === 'scss') return 'css';
+  if (ext === 'md') return 'markdown';
+  if (ext === 'rs') return 'rust';
+  if (ext === 'sh' || ext === 'bash' || ext === 'zsh') return 'bash';
+  return 'clike';
+}
+
 interface WorkspaceTerminalProps {
   workspace: Workspace | null;
+  requestedFilePath: string | null;
+  onRequestedFilePathHandled: () => void;
+  onActiveEditorFileChange?: (path: string | null) => void;
   onOpenInCursor?: () => void;
 }
 
-export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTerminalProps) {
+export function WorkspaceTerminal({
+  workspace,
+  requestedFilePath,
+  onRequestedFilePathHandled,
+  onActiveEditorFileChange,
+  onOpenInCursor,
+}: WorkspaceTerminalProps) {
   const [visibleSessions, setVisibleSessions] = useState<TerminalSession[]>([]);
   const [allSessions, setAllSessions] = useState<TerminalSession[]>([]);
   const [chatSessions, setChatSessions] = useState<AgentChatSession[]>([]);
@@ -107,6 +151,14 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   });
   const [error, setError] = useState<string | null>(null);
   const [pendingCommand, setPendingCommand] = useState<PendingCommand | null>(null);
+  const [openEditors, setOpenEditors] = useState<EditorTab[]>([]);
+  const [activeEditorPath, setActiveEditorPath] = useState<string | null>(null);
+  const [savingEditorPaths, setSavingEditorPaths] = useState<Set<string>>(new Set());
+  const [filePreviewWidth, setFilePreviewWidth] = useState<number>(() => {
+    const raw = window.localStorage.getItem(FILE_PREVIEW_WIDTH_KEY);
+    const parsed = raw ? Number(raw) : NaN;
+    return Number.isFinite(parsed) ? Math.min(640, Math.max(280, parsed)) : 420;
+  });
   const {
     outputs,
     appendOutput,
@@ -174,6 +226,18 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     const visibleIds = new Set(visibleSessions.map((s) => s.id));
     return allSessions.filter((s) => !s.closedAt && !visibleIds.has(s.id));
   }, [allSessions, visibleSessions]);
+  const activeEditor = useMemo(
+    () => (activeEditorPath ? openEditors.find((editor) => editor.path === activeEditorPath) ?? null : null),
+    [activeEditorPath, openEditors],
+  );
+  const activeEditorLanguage = useMemo(
+    () => (activeEditor ? detectPrismLanguage(activeEditor.path) : 'clike'),
+    [activeEditor],
+  );
+  const highlightEditorCode = useCallback((code: string) => {
+    const grammar = Prism.languages[activeEditorLanguage] ?? Prism.languages.clike;
+    return Prism.highlight(code, grammar, activeEditorLanguage);
+  }, [activeEditorLanguage]);
 
   const refreshSessions = useCallback(async (fetchOutput = false, preferredFocusId?: string | null) => {
     if (!workspaceId) return;
@@ -381,6 +445,89 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     }
   }, []);
 
+  const startFilePreviewResize = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = filePreviewWidth;
+    const onMove = (moveEvent: globalThis.MouseEvent) => {
+      const delta = moveEvent.clientX - startX;
+      setFilePreviewWidth(Math.min(640, Math.max(280, startWidth - delta)));
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [filePreviewWidth]);
+
+  const openEditorFile = useCallback(async (path: string) => {
+    if (!workspaceId) return;
+    const normalizedPath = path.trim();
+    if (!normalizedPath) return;
+
+    setOpenEditors((current) => {
+      const existing = current.find((editor) => editor.path === normalizedPath);
+      if (existing) return current;
+      return [
+        ...current,
+        {
+          path: normalizedPath,
+          content: '',
+          savedContent: '',
+          loading: true,
+          error: null,
+        },
+      ];
+    });
+    setActiveEditorPath(normalizedPath);
+
+    try {
+      const content = await readWorkspaceFile(workspaceId, normalizedPath);
+      setOpenEditors((current) => current.map((editor) => (
+        editor.path === normalizedPath
+          ? { ...editor, content, savedContent: content, loading: false, error: null }
+          : editor
+      )));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setOpenEditors((current) => current.map((editor) => (
+        editor.path === normalizedPath
+          ? { ...editor, loading: false, error: message }
+          : editor
+      )));
+    }
+  }, [workspaceId]);
+
+  const saveEditorFile = useCallback(async (path: string) => {
+    if (!workspaceId) return;
+    const editor = openEditors.find((item) => item.path === path);
+    if (!editor || editor.loading || editor.error) return;
+
+    setSavingEditorPaths((current) => {
+      const next = new Set(current);
+      next.add(path);
+      return next;
+    });
+    try {
+      await writeWorkspaceFile(workspaceId, path, editor.content);
+      setOpenEditors((current) => current.map((item) => (
+        item.path === path ? { ...item, savedContent: item.content, error: null } : item
+      )));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setOpenEditors((current) => current.map((item) => (
+        item.path === path ? { ...item, error: message } : item
+      )));
+    } finally {
+      setSavingEditorPaths((current) => {
+        const next = new Set(current);
+        next.delete(path);
+        return next;
+      });
+    }
+  }, [openEditors, workspaceId]);
+
   const resetWorkspaceState = useCallback(() => {
     resetOutputState();
     promptSendChainRef.current = Promise.resolve();
@@ -401,6 +548,9 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     setReviewCockpit(null);
     setAcceptedPlans({});
     setQueuedPrompts({});
+    setOpenEditors([]);
+    setActiveEditorPath(null);
+    setSavingEditorPaths(new Set());
     setFocusedId(null);
     setError(null);
     setComposerSettings((current) => ({ ...current, selectedClaudeAgent: 'general-purpose' }));
@@ -456,6 +606,10 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       return current;
     });
   }, [focusedChatSession?.provider, providerModelDefaults.claude, providerModelDefaults.codex]);
+
+  useEffect(() => {
+    window.localStorage.setItem(FILE_PREVIEW_WIDTH_KEY, String(filePreviewWidth));
+  }, [filePreviewWidth]);
 
   useWorkspaceTerminalPolling({
     workspaceId,
@@ -558,6 +712,33 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     sendPrompt(nextPrompt, { forceImmediate: true });
   }, [focusedChatSession, queuedPrompts, sendPrompt]);
 
+  useEffect(() => {
+    if (!requestedFilePath) return;
+    void openEditorFile(requestedFilePath);
+    onRequestedFilePathHandled();
+  }, [onRequestedFilePathHandled, openEditorFile, requestedFilePath]);
+
+  useEffect(() => {
+    onActiveEditorFileChange?.(activeEditorPath);
+  }, [activeEditorPath, onActiveEditorFileChange]);
+
+  useEffect(() => {
+    if (!activeEditorPath) return;
+    if (openEditors.some((editor) => editor.path === activeEditorPath)) return;
+    setActiveEditorPath(openEditors[0]?.path ?? null);
+  }, [activeEditorPath, openEditors]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 's') return;
+      if (!activeEditorPath) return;
+      event.preventDefault();
+      void saveEditorFile(activeEditorPath);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [activeEditorPath, saveEditorFile]);
+
   if (!workspace) {
     return (
       <div className="flex flex-1 min-h-0 items-center justify-center p-8">
@@ -622,7 +803,6 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       />
 
       <div className="flex min-h-0 flex-1 gap-2 p-2">
-        {/* Main content area */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
           {visibleSessions.length === 0 && chatSessions.length === 0 ? (
             <WorkspaceTerminalEmptyState
@@ -633,40 +813,126 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
               onStartLocalProfile={(profile) => void createTerminal('agent', profile.agent as TerminalProfile, profile.label, profile.id)}
               onStartShell={() => void createTerminal('shell', 'shell', 'Shell')}
             />
+          ) : focusedChatSession ? (
+            <AgentChatPanel
+              session={focusedChatSession}
+              events={focusedChatEvents}
+              sections={focusedRunSections}
+              summary={focusedWorkbenchSummary.changedFileCount > 0 || focusedChatSession.status === 'succeeded' ? focusedWorkbenchSummary : null}
+              nextActions={focusedNextActions}
+              acceptedPlanId={acceptedPlans[focusedChatSession.id] ? latestPlanEvent(focusedChatEvents)?.id ?? null : null}
+              onAction={(action, event) => void handleWorkbenchAction(action, event)}
+            />
+          ) : focusedSession ? (
+            <TerminalPane
+              key={focusedSession.id}
+              session={focusedSession}
+              chunks={outputs[focusedSession.id] ?? []}
+              focused
+              stuckSince={workspaceHealth?.terminals.find((t) => t.sessionId === focusedSession.id)?.stuckSince ?? null}
+              onFocus={() => { focusedIdRef.current = focusedSession.id; setFocusedId(focusedSession.id); }}
+              onStop={() => void stopTerminal(focusedSession.id)}
+              onClose={() => void closeTerminal(focusedSession.id)}
+              onData={(data) => void writeWorkspaceTerminalSessionInput(focusedSession.id, data).catch(setActionError)}
+              onResize={(cols, rows) => void resizeWorkspaceTerminalSession(focusedSession.id, cols, rows).catch(() => undefined)}
+            />
           ) : (
-            <>
-              {/* Content */}
-              {focusedChatSession ? (
-                <AgentChatPanel
-                  session={focusedChatSession}
-                  events={focusedChatEvents}
-                  sections={focusedRunSections}
-                  summary={focusedWorkbenchSummary.changedFileCount > 0 || focusedChatSession.status === 'succeeded' ? focusedWorkbenchSummary : null}
-                  nextActions={focusedNextActions}
-                  acceptedPlanId={acceptedPlans[focusedChatSession.id] ? latestPlanEvent(focusedChatEvents)?.id ?? null : null}
-                  onAction={(action, event) => void handleWorkbenchAction(action, event)}
-                />
-              ) : focusedSession ? (
-                <TerminalPane
-                  key={focusedSession.id}
-                  session={focusedSession}
-                  chunks={outputs[focusedSession.id] ?? []}
-                  focused
-                  stuckSince={workspaceHealth?.terminals.find((t) => t.sessionId === focusedSession.id)?.stuckSince ?? null}
-                  onFocus={() => { focusedIdRef.current = focusedSession.id; setFocusedId(focusedSession.id); }}
-                  onStop={() => void stopTerminal(focusedSession.id)}
-                  onClose={() => void closeTerminal(focusedSession.id)}
-                  onData={(data) => void writeWorkspaceTerminalSessionInput(focusedSession.id, data).catch(setActionError)}
-                  onResize={(cols, rows) => void resizeWorkspaceTerminalSession(focusedSession.id, cols, rows).catch(() => undefined)}
-                />
-              ) : (
-                <div className="flex h-full items-center justify-center text-sm text-forge-muted">
-                  Select a session above.
-                </div>
-              )}
-            </>
+            <div className="flex h-full items-center justify-center text-sm text-forge-muted">
+              Select a session above.
+            </div>
           )}
         </div>
+
+        {openEditors.length > 0 && (
+          <>
+            <div
+              role="separator"
+              aria-label="Resize file preview panel"
+              onMouseDown={startFilePreviewResize}
+              onDoubleClick={() => setFilePreviewWidth(420)}
+              className="w-1 shrink-0 cursor-col-resize rounded bg-transparent hover:bg-forge-border/70 active:bg-forge-green/60"
+              title="Double-click to reset width"
+            />
+            <div className="flex min-h-0 shrink-0 flex-col rounded-xl border border-forge-border bg-forge-card/70" style={{ width: `${filePreviewWidth}px` }}>
+              <div className="flex items-center gap-1 overflow-x-auto border-b border-forge-border px-2 py-2">
+                {openEditors.map((editor) => {
+                  const dirty = editor.content !== editor.savedContent;
+                  const active = activeEditorPath === editor.path;
+                  return (
+                    <div key={editor.path} className={`flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs ${active ? 'border-forge-green/30 bg-forge-green/10 text-forge-green' : 'border-forge-border bg-forge-card/70 text-forge-muted'}`}>
+                      <button
+                        type="button"
+                        onClick={() => setActiveEditorPath(editor.path)}
+                        className="truncate text-left hover:text-forge-text"
+                        title={editor.path}
+                      >
+                        {dirty ? '● ' : ''}{editor.path.split('/').pop() ?? editor.path}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenEditors((current) => {
+                            const nextEditors = current.filter((item) => item.path !== editor.path);
+                            setActiveEditorPath((currentActive) => {
+                              if (currentActive !== editor.path) return currentActive;
+                              return nextEditors[0]?.path ?? null;
+                            });
+                            return nextEditors;
+                          });
+                        }}
+                        className="rounded p-0.5 hover:bg-forge-surface-overlay"
+                        title="Close file"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {!activeEditor ? (
+                <div className="flex flex-1 items-center justify-center text-sm text-forge-muted">Select a file from the Files tab.</div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between border-b border-forge-border px-3 py-2">
+                    <p className="truncate font-mono text-xs text-forge-text" title={activeEditor.path}>{activeEditor.path}</p>
+                    <button
+                      type="button"
+                      onClick={() => void saveEditorFile(activeEditor.path)}
+                      disabled={activeEditor.loading || !!activeEditor.error || savingEditorPaths.has(activeEditor.path)}
+                      className="inline-flex items-center gap-1 rounded-md border border-forge-green/30 bg-forge-green/10 px-2 py-1 text-xs font-semibold text-forge-green disabled:opacity-50"
+                    >
+                      <Save className="h-3 w-3" />
+                      {savingEditorPaths.has(activeEditor.path) ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+
+                  {activeEditor.loading ? (
+                    <div className="flex flex-1 items-center justify-center text-sm text-forge-muted">Loading file…</div>
+                  ) : activeEditor.error ? (
+                    <div className="p-3 text-sm text-forge-red">{activeEditor.error}</div>
+                  ) : (
+                    <div className="min-h-0 flex-1 overflow-auto bg-black/35 p-3 text-xs">
+                      <Editor
+                        value={activeEditor.content}
+                        onValueChange={(nextContent) => {
+                          setOpenEditors((current) => current.map((editor) => (
+                            editor.path === activeEditor.path ? { ...editor, content: nextContent, error: null } : editor
+                          )));
+                        }}
+                        highlight={highlightEditorCode}
+                        padding={0}
+                        textareaClassName="outline-none font-mono"
+                        preClassName="font-mono m-0"
+                        className="min-h-full font-mono text-xs text-forge-text"
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       <WorkspaceContextFooter workspaceId={workspace.id} />

@@ -58,10 +58,7 @@ impl TerminalProfile {
     }
 }
 
-pub(super) fn workspace_root_path(
-    state: &AppState,
-    workspace_id: &str,
-) -> Result<PathBuf, String> {
+pub(super) fn workspace_root_path(state: &AppState, workspace_id: &str) -> Result<PathBuf, String> {
     let workspace = workspace_repository::get_detail(&state.db, workspace_id)?
         .ok_or_else(|| format!("Workspace {workspace_id} was not found"))?;
     let cwd = workspace

@@ -11,9 +11,7 @@ use crate::models::{
 };
 use crate::repositories::settings_repository;
 use crate::repositories::{activity_repository, terminal_repository};
-use crate::services::{
-    agent_profile_service, command_safety_service,
-};
+use crate::services::{agent_profile_service, command_safety_service};
 use crate::state::{ActiveTerminal, AppState};
 use tauri::Emitter;
 
@@ -25,8 +23,8 @@ mod queue;
 mod runtime;
 
 use activity::{
-    command_preview, record_blocked_terminal_launch_activity,
-    record_terminal_lifecycle_activity, record_terminal_start_activity,
+    command_preview, record_blocked_terminal_launch_activity, record_terminal_lifecycle_activity,
+    record_terminal_start_activity,
 };
 use launch::{
     default_terminal_title, normalize_terminal_kind, resolve_session_role, workspace_root_path,

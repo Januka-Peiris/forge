@@ -20,7 +20,8 @@ pub(super) fn queue_workspace_agent_prompt(
     if prompt.is_empty() {
         return Err("Prompt is required".to_string());
     }
-    if let Ok(context) = agent_context_service::get_workspace_agent_context(state, &input.workspace_id)
+    if let Ok(context) =
+        agent_context_service::get_workspace_agent_context(state, &input.workspace_id)
     {
         if !context.prompt_preamble.trim().is_empty()
             && !prompt.contains("Forge linked repository context:")
@@ -37,9 +38,11 @@ pub(super) fn queue_workspace_agent_prompt(
 
     if context_enabled {
         let is_first_prompt = {
-            let active_session =
-                terminal_repository::get_active_session_id_for_workspace(&state.db, &input.workspace_id)
-                    .unwrap_or(None);
+            let active_session = terminal_repository::get_active_session_id_for_workspace(
+                &state.db,
+                &input.workspace_id,
+            )
+            .unwrap_or(None);
             match active_session {
                 None => true,
                 Some(session_id) => {
@@ -152,13 +155,11 @@ pub(super) fn run_next_workspace_agent_prompt(
     state: &AppState,
     workspace_id: &str,
 ) -> Result<Option<AgentPromptEntry>, String> {
-    let mut entry = match terminal_repository::latest_queued_prompt_for_workspace(
-        &state.db,
-        workspace_id,
-    )? {
-        Some(entry) => entry,
-        None => return Ok(None),
-    };
+    let mut entry =
+        match terminal_repository::latest_queued_prompt_for_workspace(&state.db, workspace_id)? {
+            Some(entry) => entry,
+            None => return Ok(None),
+        };
     dispatch_prompt_entry(state, &mut entry)?;
     Ok(Some(entry))
 }
@@ -172,9 +173,11 @@ pub(super) fn list_workspace_agent_prompts(
 }
 
 fn dispatch_prompt_entry(state: &AppState, entry: &mut AgentPromptEntry) -> Result<(), String> {
-    if let Err(err) =
-        checkpoint_service::create_checkpoint_if_dirty(state, &entry.workspace_id, "before agent prompt")
-    {
+    if let Err(err) = checkpoint_service::create_checkpoint_if_dirty(
+        state,
+        &entry.workspace_id,
+        "before agent prompt",
+    ) {
         log::warn!(
             target: "forge_lib",
             "failed to create pre-prompt checkpoint for workspace {}: {err}",

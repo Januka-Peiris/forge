@@ -51,7 +51,8 @@ pub(super) fn append_log_line(
     stream_type: &str,
     data: &str,
 ) {
-    let next_seq = AtomicU64::new(terminal_repository::next_seq(&state.db, session_id).unwrap_or(0));
+    let next_seq =
+        AtomicU64::new(terminal_repository::next_seq(&state.db, session_id).unwrap_or(0));
     append_output(
         Some(&state.app_handle),
         &state.db,

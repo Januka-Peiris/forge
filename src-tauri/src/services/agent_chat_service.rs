@@ -230,7 +230,8 @@ fn start_adapter_process(
     input: SendAgentChatMessageInput,
     resume_provider_session: bool,
 ) -> Result<(), String> {
-    let mut command = command_for_session(&state, &session, &prompt, &input, resume_provider_session)?;
+    let mut command =
+        command_for_session(&state, &session, &prompt, &input, resume_provider_session)?;
     command
         .current_dir(&session.cwd)
         .env("PATH", terminal_service::enriched_path())
@@ -337,7 +338,7 @@ fn command_for_session(
             let command_path = resolve_binary(&profile.command)?;
             let mut command = Command::new(command_path);
             command.current_dir(&session.cwd);
-            
+
             // For Ollama/local LLMs, we usually just pass the prompt as an argument or via stdin.
             // Here we'll follow the same pattern as Codex/Claude for consistency if the CLI supports it,
             // or fallback to a simple 'run' or 'chat' command.
@@ -346,7 +347,7 @@ fn command_for_session(
             } else {
                 command.args(&profile.args);
             }
-            
+
             command.arg(prompt);
             Ok(command)
         }

@@ -79,7 +79,11 @@ pub(super) fn format_blocked_terminal_launch_details(
     if profile.local {
         details.push("runtime: local".to_string());
     }
-    if let Some(provider) = profile.provider.as_deref().filter(|value| !value.is_empty()) {
+    if let Some(provider) = profile
+        .provider
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
         details.push(format!("provider: {provider}"));
     }
     format!(
@@ -104,13 +108,21 @@ pub(super) fn format_terminal_start_activity_details(
     if profile.local {
         parts.push("runtime: local".to_string());
     }
-    if let Some(provider) = profile.provider.as_deref().filter(|value| !value.is_empty()) {
+    if let Some(provider) = profile
+        .provider
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
         parts.push(format!("provider: {provider}"));
     }
     if let Some(model) = profile.model.as_deref().filter(|value| !value.is_empty()) {
         parts.push(format!("model: {model}"));
     }
-    if let Some(endpoint) = profile.endpoint.as_deref().filter(|value| !value.is_empty()) {
+    if let Some(endpoint) = profile
+        .endpoint
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
         parts.push(format!("endpoint: {endpoint}"));
     }
     parts.push(format!("cwd: {}", session.cwd));

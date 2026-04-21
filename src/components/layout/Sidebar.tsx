@@ -6,6 +6,7 @@ import {
   ClipboardCheck,
   Filter,
   FolderPlus,
+  FolderTree,
   LayoutGrid,
   Plus,
   Search,
@@ -36,8 +37,9 @@ import {
 } from '../ui/select';
 import { Tooltip } from '../ui/tooltip';
 import { WorkspaceListItem } from '../workspaces/WorkspaceListItem';
+import { WorkspaceFilesPanel } from '../terminal/WorkspaceFilesPanel';
 
-export type NavView = 'workspaces' | 'reviews' | 'settings' | 'memory';
+export type NavView = 'workspaces' | 'files' | 'reviews' | 'settings' | 'memory';
 
 interface SidebarProps {
   activeView: NavView;
@@ -55,10 +57,13 @@ interface SidebarProps {
   onAddRepository?: () => void;
   onCollapse?: () => void;
   onFilteredWorkspacesChange?: (workspaces: Workspace[]) => void;
+  onOpenFile?: (path: string) => void;
+  selectedFilePath?: string | null;
 }
 
 const primaryNav: { id: NavView; label: string; icon: ElementType }[] = [
   { id: 'workspaces', label: 'Workspaces', icon: LayoutGrid },
+  { id: 'files', label: 'Files', icon: FolderTree },
   { id: 'reviews', label: 'Reviews', icon: ClipboardCheck },
 ];
 const secondaryNav: { id: NavView; label: string; icon: ElementType }[] = [
@@ -81,6 +86,8 @@ export function Sidebar({
   onAddRepository,
   onCollapse,
   onFilteredWorkspacesChange,
+  onOpenFile,
+  selectedFilePath,
 }: SidebarProps) {
   const [filter, setFilter] = useState<'all' | 'active' | 'archived'>('all');
   const [sort, setSort] = useState<'recent' | 'name' | 'status'>('recent');
@@ -229,6 +236,10 @@ export function Sidebar({
     }
     return cents > 0 ? `$${(cents / 100).toFixed(2)}` : null;
   }, [workspaces]);
+  const selectedWorkspace = useMemo(
+    () => workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? null,
+    [selectedWorkspaceId, workspaces],
+  );
 
   const renderNavBtn = ({ id, label, icon: Icon }: { id: NavView; label: string; icon: ElementType }) => {
     const isActive = activeView === id;
@@ -275,6 +286,30 @@ export function Sidebar({
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3">
+        {activeView === 'files' ? (
+          <div className="flex h-full min-h-0 flex-col gap-2">
+            <div className="px-2">
+              <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest">Files</p>
+              <p className="mt-1 truncate text-ui-label text-forge-text/90" title={selectedWorkspace?.name ?? ''}>
+                {selectedWorkspace ? `${selectedWorkspace.repo} / ${selectedWorkspace.name}` : 'Select a workspace to browse files'}
+              </p>
+            </div>
+            {selectedWorkspace ? (
+              <div className="min-h-0 flex-1">
+                <WorkspaceFilesPanel
+                  workspaceId={selectedWorkspace.id}
+                  selectedFilePath={selectedFilePath}
+                  onFileSelect={onOpenFile}
+                />
+              </div>
+            ) : (
+              <div className="rounded-xl border border-forge-border bg-forge-card/50 px-3 py-2 text-ui-label text-forge-muted">
+                Select a workspace from <span className="font-semibold text-forge-text">Workspaces</span> first.
+              </div>
+            )}
+          </div>
+        ) : (
+        <>
         <div className="flex items-center justify-between px-2">
           <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest">Workspaces</p>
           <div className="flex items-center gap-0.5">
@@ -492,6 +527,8 @@ export function Sidebar({
             );
           })}
         </div>
+        </>
+        )}
       </div>
 
       {/* Orchestrator panel */}

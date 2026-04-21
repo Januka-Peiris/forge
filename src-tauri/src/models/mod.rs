@@ -23,6 +23,7 @@ pub mod workspace;
 pub mod workspace_attention;
 pub mod workspace_cleanup;
 pub mod workspace_conflict;
+pub mod workspace_file_tree;
 pub mod workspace_health;
 pub mod workspace_port;
 pub mod workspace_readiness;
@@ -74,6 +75,7 @@ pub use workspace::{
 pub use workspace_attention::WorkspaceAttention;
 pub use workspace_cleanup::{CleanupWorkspaceInput, CleanupWorkspaceResult};
 pub use workspace_conflict::{WorkspaceConflict, WorkspaceConflicts};
+pub use workspace_file_tree::WorkspaceFileTreeNode;
 pub use workspace_health::{
     WorkspaceHealth, WorkspaceSessionRecoveryAction, WorkspaceSessionRecoveryResult,
     WorkspaceTerminalHealth,

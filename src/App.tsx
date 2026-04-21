@@ -55,6 +55,8 @@ export default function App() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [reviewTargetCommentId, setReviewTargetCommentId] = useState<string | null>(null);
+  const [requestedEditorFilePath, setRequestedEditorFilePath] = useState<string | null>(null);
+  const [activeEditorFilePath, setActiveEditorFilePath] = useState<string | null>(null);
 
   const {
     addRepositoryToSettings,
@@ -247,9 +249,15 @@ export default function App() {
     if (loading) return <LoadingView />;
     if (error) return <ErrorView message={error} onRetry={loadBackendState} />;
 
-    if (view === 'workspaces') {
+    if (view === 'workspaces' || view === 'files') {
       return (
-        <WorkspaceTerminal workspace={selected} onOpenInCursor={() => void openWorkspaceInCursor()} />
+        <WorkspaceTerminal
+          workspace={selected}
+          requestedFilePath={requestedEditorFilePath}
+          onRequestedFilePathHandled={() => setRequestedEditorFilePath(null)}
+          onActiveEditorFileChange={setActiveEditorFilePath}
+          onOpenInCursor={() => void openWorkspaceInCursor()}
+        />
       );
     }
 
@@ -337,6 +345,11 @@ export default function App() {
           onAddRepository={() => void addRepositoryToSettings()}
           onCollapse={() => setSidebarCollapsed(true)}
           onFilteredWorkspacesChange={setDisplayedWorkspaces}
+          selectedFilePath={activeEditorFilePath}
+          onOpenFile={(path) => {
+            setView('files');
+            setRequestedEditorFilePath(path);
+          }}
         />
         )}
         sidebarCollapsed={sidebarCollapsed}

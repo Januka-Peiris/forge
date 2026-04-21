@@ -29,6 +29,7 @@ pub mod rebase_service;
 pub mod terminal_service;
 pub mod workspace_attention_service;
 pub mod workspace_cleanup_service;
+pub mod workspace_file_tree_service;
 pub mod workspace_health_service;
 pub mod workspace_port_service;
 pub mod workspace_readiness_service;

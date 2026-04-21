@@ -25,6 +25,7 @@ pub mod settings;
 pub mod terminal;
 pub mod workspace_attention;
 pub mod workspace_cleanup;
+pub mod workspace_file_tree;
 pub mod workspace_health;
 pub mod workspace_ports;
 pub mod workspace_readiness;

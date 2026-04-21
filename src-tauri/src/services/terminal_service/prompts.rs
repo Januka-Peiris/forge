@@ -1,6 +1,9 @@
 use crate::models::TerminalSession;
 
-pub(super) fn terminal_prompt_payload_for_session(session: &TerminalSession, prompt: &str) -> String {
+pub(super) fn terminal_prompt_payload_for_session(
+    session: &TerminalSession,
+    prompt: &str,
+) -> String {
     if is_ollama_terminal_session(session) && prompt.contains('\n') {
         return format!(
             "\"\"\"\n{}\n\"\"\"\r\n",
