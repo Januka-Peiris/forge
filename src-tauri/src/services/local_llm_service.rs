@@ -458,7 +458,7 @@ mod tests {
         assert!(addresses
             .iter()
             .any(|addr| addr.ip().is_loopback() && addr.port() == 11434));
-        assert!(addresses.len() >= 1);
+        assert!(!addresses.is_empty());
     }
 
     #[test]

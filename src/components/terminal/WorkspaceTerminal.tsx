@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Terminal as TerminalIcon } from 'lucide-react';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { AgentProfile, ForgeWorkspaceConfig, TerminalOutputEvent, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
-import type { AgentChatEvent, AgentChatEventEnvelope, AgentChatSession } from '../../types/agent-chat';
+import type { AgentProfile, ForgeWorkspaceConfig, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
+import type { AgentChatEvent, AgentChatSession } from '../../types/agent-chat';
 import type { WorkspaceChangedFile } from '../../types/git-review';
 import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
 import {
@@ -54,6 +53,8 @@ import { WorkspaceTerminalEmptyState } from './WorkspaceTerminalEmptyState';
 import { WorkspaceContextFooter } from './WorkspaceContextFooter';
 import { useWorkspaceTerminalComposerActions } from './useWorkspaceTerminalComposerActions';
 import { useWorkspaceTerminalSessionActions } from './useWorkspaceTerminalSessionActions';
+import { useWorkspaceTerminalPolling } from './useWorkspaceTerminalPolling';
+import { useWorkspaceTerminalEvents } from './useWorkspaceTerminalEvents';
 
 interface WorkspaceTerminalProps {
   workspace: Workspace | null;
@@ -105,7 +106,6 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   const focusedChatIdRef = useSyncedRef(focusedChatId);
   const visibleSessionsRef = useSyncedRef(visibleSessions);
   const chatSessionsRef = useSyncedRef(chatSessions);
-  const metadataPollTickRef = useRef(0);
   /** Serializes agent prompt writes so rapid Enter / Send do not race attach + PTY. */
   const promptSendChainRef = useRef(Promise.resolve());
   const workspaceId = workspace?.id ?? null;
@@ -407,90 +407,28 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     }
   }, [refreshAgentContext, refreshAgentProfiles, refreshChatSessions, refreshForgeConfig, refreshHealth, refreshModelSettings, refreshReadiness, refreshPromptTemplates, refreshSessions, refreshWorkbenchState, resetWorkspaceState, workspaceId]);
 
-  useEffect(() => {
-    if (!workspaceId) return;
-    const timer = window.setInterval(() => {
-      if (document.hidden) return;
-      metadataPollTickRef.current += 1;
-      const hasRunningTerminal = visibleSessionsRef.current.some((session) => session.status === 'running');
-      const hasRunningChat = chatSessionsRef.current.some((session) => session.status === 'running');
-      const hasRunningSession = hasRunningTerminal || hasRunningChat;
+  useWorkspaceTerminalPolling({
+    workspaceId,
+    visibleSessionsRef,
+    chatSessionsRef,
+    refreshSessions,
+    refreshChatSessions,
+    refreshHealth,
+    refreshReadiness,
+    refreshWorkbenchState,
+  });
 
-      // Idle workspaces still reconcile occasionally, but avoid doing every metadata fetch
-      // on every 5s tick when there is no active session to follow.
-      if (!hasRunningSession && metadataPollTickRef.current % 3 !== 0) return;
-
-      const shouldBackfillOutput = hasRunningSession
-        ? metadataPollTickRef.current % 6 === 0
-        : metadataPollTickRef.current % 9 === 0;
-      const shouldRefreshExpensiveState = hasRunningSession
-        ? metadataPollTickRef.current % 3 === 0
-        : metadataPollTickRef.current % 6 === 0;
-
-      void refreshSessions(shouldBackfillOutput);
-      void refreshChatSessions(undefined, 'active');
-      if (shouldRefreshExpensiveState) {
-        void refreshHealth();
-        void refreshReadiness();
-        void refreshWorkbenchState();
-      }
-    }, 5000);
-    return () => window.clearInterval(timer);
-  }, [chatSessionsRef, refreshChatSessions, refreshHealth, refreshReadiness, refreshSessions, refreshWorkbenchState, visibleSessionsRef, workspaceId]);
-
-  useEffect(() => {
-    if (!workspaceId) return;
-    let unlisten: UnlistenFn | undefined;
-    let unlistenApproval: UnlistenFn | undefined;
-    let unlistenAgentChat: UnlistenFn | undefined;
-    let disposed = false;
-
-    void listen<PendingCommand>('forge://command-approval-required', (event) => {
-      if (disposed || event.payload.workspaceId !== workspaceId) return;
-      setPendingCommand(event.payload);
-    }).then((fn) => { unlistenApproval = fn; }).catch(() => undefined);
-
-    void listen<TerminalOutputEvent>('forge://terminal-output', (event) => {
-      if (disposed || event.payload.workspaceId !== workspaceId) return;
-      const chunk = event.payload.chunk;
-      enqueueOutput(chunk.sessionId, [chunk]);
-      bumpNextSeqFromChunk(chunk.sessionId, chunk.seq);
-    }).then((fn) => {
-      if (disposed) fn(); else unlisten = fn;
-    }).catch(() => undefined);
-
-    void listen<AgentChatEventEnvelope>('forge://agent-chat-event', (event) => {
-      if (disposed || event.payload.workspaceId !== workspaceId) return;
-      const { session, event: chatEvent } = event.payload;
-      setChatSessions((current) => {
-        const without = current.filter((item) => item.id !== session.id);
-        return [session, ...without].sort((a, b) => Number(b.createdAt) - Number(a.createdAt));
-      });
-      setChatEvents((current) => {
-        const existing = current[chatEvent.sessionId] ?? [];
-        if (existing.some((item) => item.id === chatEvent.id)) return current;
-        return {
-          ...current,
-          [chatEvent.sessionId]: [...existing, chatEvent].sort((a, b) => a.seq - b.seq),
-        };
-      });
-      if (chatEvent.eventType === 'status' && (chatEvent.status === 'succeeded' || chatEvent.status === 'failed')) {
-        window.setTimeout(() => {
-          void refreshChatSessions(undefined, 'active');
-          void refreshReadiness();
-          void refreshWorkbenchState();
-        }, 600);
-      }
-    }).then((fn) => {
-      if (disposed) fn(); else unlistenAgentChat = fn;
-    }).catch(() => undefined);
-    return () => {
-      disposed = true;
-      if (unlisten) unlisten();
-      if (unlistenApproval) unlistenApproval();
-      if (unlistenAgentChat) unlistenAgentChat();
-    };
-  }, [bumpNextSeqFromChunk, enqueueOutput, refreshChatSessions, refreshReadiness, refreshWorkbenchState, workspaceId]);
+  useWorkspaceTerminalEvents({
+    workspaceId,
+    enqueueOutput,
+    bumpNextSeqFromChunk,
+    setPendingCommand,
+    setChatSessions,
+    setChatEvents,
+    refreshChatSessions,
+    refreshReadiness,
+    refreshWorkbenchState,
+  });
 
   const {
     createTerminal,

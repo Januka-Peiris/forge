@@ -2,7 +2,16 @@ use rusqlite::{params, OptionalExtension};
 use serde::Serialize;
 
 use crate::db::Database;
-use crate::models::{AgentPromptEntry, TerminalOutputChunk, TerminalSession};
+use crate::models::{TerminalOutputChunk, TerminalSession};
+
+mod output;
+mod prompts;
+
+pub use output::{insert_output_chunk, list_output_chunks, next_seq, prune_output_chunks};
+pub use prompts::{
+    count_sent_prompts_for_session, insert_prompt_entry, latest_queued_prompt_for_workspace,
+    list_prompts_for_workspace, mark_prompt_sent, mark_prompt_status_by_session,
+};
 
 #[derive(Debug, Clone)]
 pub struct StartupStaleTerminalGroup {
@@ -38,17 +47,16 @@ pub fn search_output(
                  WHERE ts.workspace_id = ?1 AND LOWER(toc.data) LIKE ?2 \
                  ORDER BY toc.timestamp DESC LIMIT 100",
             )?;
-            let results = stmt
-                .query_map(params![ws_id, like], |row| {
-                    Ok(TerminalSearchResult {
-                        session_id: row.get(0)?,
-                        timestamp: row.get(1)?,
-                        line: row.get(2)?,
-                        workspace_id: row.get(3)?,
-                        workspace_name: row.get(4)?,
-                    })
-                })?
-                .collect::<rusqlite::Result<Vec<_>>>()?;
+            let results = stmt.query_map(params![ws_id, like], |row| {
+                Ok(TerminalSearchResult {
+                    session_id: row.get(0)?,
+                    timestamp: row.get(1)?,
+                    line: row.get(2)?,
+                    workspace_id: row.get(3)?,
+                    workspace_name: row.get(4)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
             Ok(results)
         } else {
             let mut stmt = connection.prepare(
@@ -59,17 +67,16 @@ pub fn search_output(
                  WHERE LOWER(toc.data) LIKE ?1 \
                  ORDER BY toc.timestamp DESC LIMIT 100",
             )?;
-            let results = stmt
-                .query_map(params![like], |row| {
-                    Ok(TerminalSearchResult {
-                        session_id: row.get(0)?,
-                        timestamp: row.get(1)?,
-                        line: row.get(2)?,
-                        workspace_id: row.get(3)?,
-                        workspace_name: row.get(4)?,
-                    })
-                })?
-                .collect::<rusqlite::Result<Vec<_>>>()?;
+            let results = stmt.query_map(params![like], |row| {
+                Ok(TerminalSearchResult {
+                    session_id: row.get(0)?,
+                    timestamp: row.get(1)?,
+                    line: row.get(2)?,
+                    workspace_id: row.get(3)?,
+                    workspace_name: row.get(4)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
             Ok(results)
         }
     })
@@ -295,109 +302,7 @@ pub fn list_running_session_groups(
     })
 }
 
-pub fn insert_output_chunk(db: &Database, chunk: &TerminalOutputChunk) -> Result<(), String> {
-    insert_output_chunks(db, std::slice::from_ref(chunk))
-}
-
-pub fn insert_output_chunks(db: &Database, chunks: &[TerminalOutputChunk]) -> Result<(), String> {
-    if chunks.is_empty() {
-        return Ok(());
-    }
-    db.with_connection_mut(|connection| {
-        let transaction = connection.transaction()?;
-        {
-            let mut stmt = transaction.prepare(
-                r#"
-                INSERT OR IGNORE INTO terminal_output_chunks (
-                    id, session_id, seq, timestamp, stream_type, data
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-                "#,
-            )?;
-            for chunk in chunks {
-                stmt.execute(params![
-                    chunk.id,
-                    chunk.session_id,
-                    chunk.seq as i64,
-                    chunk.timestamp,
-                    chunk.stream_type,
-                    chunk.data,
-                ])?;
-            }
-        }
-        transaction.commit()?;
-        Ok(())
-    })
-}
-
-/// Delete old output chunks for a session, keeping only the most recent `keep` rows.
-pub fn prune_output_chunks(db: &Database, session_id: &str, keep: u32) -> Result<(), String> {
-    db.with_connection_mut(|connection| {
-        connection.execute(
-            r#"
-            DELETE FROM terminal_output_chunks
-            WHERE session_id = ?1
-              AND seq < (
-                SELECT COALESCE(MAX(seq) - ?2 + 1, 0)
-                FROM terminal_output_chunks
-                WHERE session_id = ?1
-              )
-            "#,
-            params![session_id, keep],
-        )?;
-        Ok(())
-    })
-}
-
-pub fn list_output_chunks(
-    db: &Database,
-    session_id: &str,
-    since_seq: u64,
-) -> Result<Vec<TerminalOutputChunk>, String> {
-    const INITIAL_TAIL_LIMIT: i64 = 600;
-    const INCREMENTAL_LIMIT: i64 = 1000;
-
-    db.with_connection(|connection| {
-        let rows = if since_seq == 0 {
-            let mut stmt = connection.prepare(
-                r#"
-                SELECT id, session_id, seq, timestamp, stream_type, data
-                FROM terminal_output_chunks
-                WHERE session_id = ?1
-                ORDER BY seq DESC
-                LIMIT ?2
-                "#,
-            )?;
-            let mut chunks = stmt
-                .query_map(
-                    params![session_id, INITIAL_TAIL_LIMIT],
-                    terminal_output_chunk_from_row,
-                )?
-                .collect::<rusqlite::Result<Vec<_>>>()?;
-            chunks.reverse();
-            chunks
-        } else {
-            let mut stmt = connection.prepare(
-                r#"
-                SELECT id, session_id, seq, timestamp, stream_type, data
-                FROM terminal_output_chunks
-                WHERE session_id = ?1 AND seq >= ?2
-                ORDER BY seq ASC
-                LIMIT ?3
-                "#,
-            )?;
-            let chunks = stmt
-                .query_map(
-                    params![session_id, since_seq as i64, INCREMENTAL_LIMIT],
-                    terminal_output_chunk_from_row,
-                )?
-                .collect::<rusqlite::Result<Vec<_>>>()?;
-            chunks
-        };
-        Ok(rows)
-    })
-}
-
-fn terminal_output_chunk_from_row(
+pub(crate) fn terminal_output_chunk_from_row(
     row: &rusqlite::Row<'_>,
 ) -> rusqlite::Result<TerminalOutputChunk> {
     Ok(TerminalOutputChunk {
@@ -407,17 +312,6 @@ fn terminal_output_chunk_from_row(
         timestamp: row.get("timestamp")?,
         stream_type: row.get("stream_type")?,
         data: row.get("data")?,
-    })
-}
-
-pub fn next_seq(db: &Database, session_id: &str) -> Result<u64, String> {
-    db.with_connection(|connection| {
-        let next: i64 = connection.query_row(
-            "SELECT COALESCE(MAX(seq) + 1, 0) FROM terminal_output_chunks WHERE session_id = ?1",
-            params![session_id],
-            |row| row.get(0),
-        )?;
-        Ok(next.max(0) as u64)
     })
 }
 
@@ -450,146 +344,6 @@ fn session_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<TerminalSession
         is_visible: row.get::<_, Option<i64>>("is_visible")?.unwrap_or(1) != 0,
         last_attached_at: row.get("last_attached_at")?,
         last_captured_seq: row.get::<_, Option<i64>>("last_captured_seq")?.unwrap_or(0),
-    })
-}
-
-pub fn insert_prompt_entry(db: &Database, entry: &AgentPromptEntry) -> Result<(), String> {
-    db.with_connection(|connection| {
-        connection.execute(
-            r#"
-            INSERT INTO terminal_prompt_entries (
-                id, workspace_id, session_id, profile, prompt, status, created_at, sent_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, CURRENT_TIMESTAMP)
-            "#,
-            params![
-                entry.id,
-                entry.workspace_id,
-                entry.session_id,
-                entry.profile,
-                entry.prompt,
-                entry.status,
-                entry.created_at,
-                entry.sent_at,
-            ],
-        )?;
-        Ok(())
-    })
-}
-
-pub fn mark_prompt_sent(
-    db: &Database,
-    prompt_id: &str,
-    session_id: &str,
-    sent_at: &str,
-) -> Result<(), String> {
-    db.with_connection(|connection| {
-        connection.execute(
-            r#"
-            UPDATE terminal_prompt_entries
-            SET status = 'sent',
-                session_id = ?2,
-                sent_at = ?3,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?1
-            "#,
-            params![prompt_id, session_id, sent_at],
-        )?;
-        Ok(())
-    })
-}
-
-pub fn mark_prompt_status_by_session(
-    db: &Database,
-    session_id: &str,
-    status: &str,
-) -> Result<(), String> {
-    db.with_connection(|connection| {
-        connection.execute(
-            r#"
-            UPDATE terminal_prompt_entries
-            SET status = ?2,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE session_id = ?1 AND status IN ('sent', 'running')
-            "#,
-            params![session_id, status],
-        )?;
-        Ok(())
-    })
-}
-
-pub fn list_prompts_for_workspace(
-    db: &Database,
-    workspace_id: &str,
-    limit: Option<u32>,
-) -> Result<Vec<AgentPromptEntry>, String> {
-    db.with_connection(|connection| {
-        let limit = limit.unwrap_or(50) as i64;
-        let mut statement = connection.prepare(
-            r#"
-            SELECT id, workspace_id, session_id, profile, prompt, status, created_at, sent_at
-            FROM terminal_prompt_entries
-            WHERE workspace_id = ?1
-            ORDER BY created_at DESC
-            LIMIT ?2
-            "#,
-        )?;
-        let entries = statement
-            .query_map(params![workspace_id, limit], |row| {
-                Ok(AgentPromptEntry {
-                    id: row.get("id")?,
-                    workspace_id: row.get("workspace_id")?,
-                    session_id: row.get("session_id")?,
-                    profile: row.get("profile")?,
-                    prompt: row.get("prompt")?,
-                    status: row.get("status")?,
-                    created_at: row.get("created_at")?,
-                    sent_at: row.get("sent_at")?,
-                })
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-        Ok(entries)
-    })
-}
-
-pub fn latest_queued_prompt_for_workspace(
-    db: &Database,
-    workspace_id: &str,
-) -> Result<Option<AgentPromptEntry>, String> {
-    db.with_connection(|connection| {
-        connection
-            .query_row(
-                r#"
-                SELECT id, workspace_id, session_id, profile, prompt, status, created_at, sent_at
-                FROM terminal_prompt_entries
-                WHERE workspace_id = ?1 AND status = 'queued'
-                ORDER BY created_at ASC
-                LIMIT 1
-                "#,
-                params![workspace_id],
-                |row| {
-                    Ok(AgentPromptEntry {
-                        id: row.get("id")?,
-                        workspace_id: row.get("workspace_id")?,
-                        session_id: row.get("session_id")?,
-                        profile: row.get("profile")?,
-                        prompt: row.get("prompt")?,
-                        status: row.get("status")?,
-                        created_at: row.get("created_at")?,
-                        sent_at: row.get("sent_at")?,
-                    })
-                },
-            )
-            .optional()
-    })
-}
-
-pub fn count_sent_prompts_for_session(db: &Database, session_id: &str) -> Result<u32, String> {
-    db.with_connection(|conn| {
-        conn.query_row(
-            "SELECT COUNT(*) FROM terminal_prompt_entries WHERE session_id = ?1 AND status = 'sent'",
-            params![session_id],
-            |row| row.get(0),
-        )
     })
 }
 

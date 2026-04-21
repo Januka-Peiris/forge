@@ -1,28 +1,52 @@
-use std::collections::HashSet;
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
-use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::io::Write;
+use std::sync::atomic::AtomicU64;
+use std::sync::{Arc, Mutex};
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 
 use crate::models::{
-    AgentProfile, AgentPromptEntry, AttachWorkspaceTerminalInput, CommandApprovalEvent,
+    AgentPromptEntry, AttachWorkspaceTerminalInput, CommandApprovalEvent,
     CreateWorkspaceTerminalInput, QueueAgentPromptInput, StartTerminalSessionInput,
-    TerminalOutputChunk, TerminalOutputEvent, TerminalOutputResponse, TerminalSession,
-    TerminalSessionState,
+    TerminalOutputResponse, TerminalSession, TerminalSessionState,
 };
 use crate::repositories::settings_repository;
-use crate::repositories::{activity_repository, terminal_repository, workspace_repository};
-use crate::services::cost_parser;
+use crate::repositories::{activity_repository, terminal_repository};
 use crate::services::{
-    agent_context_service, agent_profile_service, checkpoint_service, command_safety_service,
-    environment_service,
+    agent_profile_service, command_safety_service,
 };
 use crate::state::{ActiveTerminal, AppState};
 use tauri::Emitter;
+
+mod activity;
+mod launch;
+mod output;
+mod prompts;
+mod queue;
+mod runtime;
+
+use activity::{
+    command_preview, record_blocked_terminal_launch_activity,
+    record_terminal_lifecycle_activity, record_terminal_start_activity,
+};
+use launch::{
+    default_terminal_title, normalize_terminal_kind, resolve_session_role, workspace_root_path,
+    TerminalCommandSpec, TerminalProfile,
+};
+use output::{
+    append_log_line, append_output, enriched_path as enriched_path_impl,
+    unique_suffix as output_unique_suffix,
+};
+use queue::{
+    batch_dispatch_workspace_agent_prompt as batch_dispatch_workspace_agent_prompt_impl,
+    list_workspace_agent_prompts as list_workspace_agent_prompts_impl,
+    queue_workspace_agent_prompt as queue_workspace_agent_prompt_impl,
+    run_next_workspace_agent_prompt as run_next_workspace_agent_prompt_impl,
+};
+use runtime::{
+    active_for_session, active_for_workspace, detach_active_terminal,
+    reconcile_orphan_running_session, send_interrupt_to_session, spawn_terminal_monitor,
+    spawn_terminal_reader,
+};
 
 fn agent_effective_model(
     state: &AppState,
@@ -548,164 +572,6 @@ pub fn close_workspace_terminal_session_by_id(
         .ok_or_else(|| format!("Terminal session {session_id} was not found"))
 }
 
-fn record_terminal_lifecycle_activity(state: &AppState, session: &TerminalSession, event: &str) {
-    let workspace = match workspace_repository::get_detail(&state.db, &session.workspace_id) {
-        Ok(Some(workspace)) => workspace,
-        _ => return,
-    };
-    let details = format_terminal_lifecycle_activity_details(session);
-    let _ = activity_repository::record(
-        &state.db,
-        &session.workspace_id,
-        &workspace.summary.repo,
-        Some(&workspace.summary.branch),
-        event,
-        "info",
-        Some(&details),
-    );
-}
-
-fn record_terminal_start_activity(
-    state: &AppState,
-    session: &TerminalSession,
-    profile: &AgentProfile,
-    command: &str,
-    args: &[String],
-) {
-    let workspace = match workspace_repository::get_detail(&state.db, &session.workspace_id) {
-        Ok(Some(workspace)) => workspace,
-        _ => return,
-    };
-    let details = format_terminal_start_activity_details(session, profile, command, args);
-    let _ = activity_repository::record(
-        &state.db,
-        &session.workspace_id,
-        &workspace.summary.repo,
-        Some(&workspace.summary.branch),
-        "Terminal session started",
-        "info",
-        Some(&details),
-    );
-}
-
-fn record_blocked_terminal_launch_activity(
-    state: &AppState,
-    workspace_id: &str,
-    profile: &AgentProfile,
-    command_preview: &str,
-) {
-    let workspace = match workspace_repository::get_detail(&state.db, workspace_id) {
-        Ok(Some(workspace)) => workspace,
-        _ => return,
-    };
-    let details = format_blocked_terminal_launch_details(profile, command_preview);
-    let _ = activity_repository::record(
-        &state.db,
-        workspace_id,
-        &workspace.summary.repo,
-        Some(&workspace.summary.branch),
-        "Terminal launch blocked",
-        "warning",
-        Some(&details),
-    );
-}
-
-fn format_blocked_terminal_launch_details(profile: &AgentProfile, command_preview: &str) -> String {
-    let mut details = vec![
-        format!("profile: {} ({})", profile.label, profile.id),
-        format!("command: {command_preview}"),
-    ];
-    if profile.local {
-        details.push("runtime: local".to_string());
-    }
-    if let Some(provider) = profile
-        .provider
-        .as_deref()
-        .filter(|value| !value.is_empty())
-    {
-        details.push(format!("provider: {provider}"));
-    }
-    format!(
-        "{}. Command matched Forge risky-command patterns.",
-        details.join("; ")
-    )
-}
-
-fn format_terminal_start_activity_details(
-    session: &TerminalSession,
-    profile: &AgentProfile,
-    command: &str,
-    args: &[String],
-) -> String {
-    let mut parts = vec![
-        format!("Session {}", session.id),
-        format!("role: {}", session.session_role),
-        format!("kind: {}", session.terminal_kind),
-        format!("profile: {} ({})", profile.label, profile.id),
-        format!("command: {}", command_preview(command, args)),
-    ];
-    if profile.local {
-        parts.push("runtime: local".to_string());
-    }
-    if let Some(provider) = profile
-        .provider
-        .as_deref()
-        .filter(|value| !value.is_empty())
-    {
-        parts.push(format!("provider: {provider}"));
-    }
-    if let Some(model) = profile.model.as_deref().filter(|value| !value.is_empty()) {
-        parts.push(format!("model: {model}"));
-    }
-    if let Some(endpoint) = profile
-        .endpoint
-        .as_deref()
-        .filter(|value| !value.is_empty())
-    {
-        parts.push(format!("endpoint: {endpoint}"));
-    }
-    parts.push(format!("cwd: {}", session.cwd));
-    format!("{}.", parts.join("; "))
-}
-
-fn format_terminal_lifecycle_activity_details(session: &TerminalSession) -> String {
-    let pid = session
-        .pid
-        .map(|pid| pid.to_string())
-        .unwrap_or_else(|| "unknown".to_string());
-    format!(
-        "Session {}; role: {}; kind: {}; title: {}; profile: {}; pid: {}; cwd: {}.",
-        session.id,
-        session.session_role,
-        session.terminal_kind,
-        session.title,
-        session.profile,
-        pid,
-        session.cwd
-    )
-}
-
-fn command_preview(command: &str, args: &[String]) -> String {
-    std::iter::once(command)
-        .chain(args.iter().map(String::as_str))
-        .map(quote_arg_if_needed)
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-fn quote_arg_if_needed(arg: &str) -> String {
-    if arg.is_empty() {
-        return "''".to_string();
-    }
-    if !arg
-        .chars()
-        .any(|ch| ch.is_whitespace() || matches!(ch, '\'' | '"' | '\\'))
-    {
-        return arg.to_string();
-    }
-    format!("'{}'", arg.replace('\'', "'\\''"))
-}
-
 pub fn list_workspace_visible_terminal_sessions(
     state: &AppState,
     workspace_id: &str,
@@ -837,153 +703,21 @@ pub fn queue_workspace_agent_prompt(
     state: &AppState,
     input: QueueAgentPromptInput,
 ) -> Result<AgentPromptEntry, String> {
-    let mut prompt = input.prompt.trim().to_string();
-    if prompt.is_empty() {
-        return Err("Prompt is required".to_string());
-    }
-    if let Ok(context) =
-        agent_context_service::get_workspace_agent_context(state, &input.workspace_id)
-    {
-        if !context.prompt_preamble.trim().is_empty()
-            && !prompt.contains("Forge linked repository context:")
-        {
-            prompt = format!("{}\n\nUser request:\n{}", context.prompt_preamble, prompt);
-        }
-    }
-
-    // Session-open context injection: inject once on the first prompt of a new session
-    let context_enabled =
-        crate::repositories::settings_repository::get_value(&state.db, "context_enabled")
-            .unwrap_or_default()
-            .map(|v| v != "false")
-            .unwrap_or(true);
-
-    if context_enabled {
-        let is_first_prompt = {
-            let active_session = terminal_repository::get_active_session_id_for_workspace(
-                &state.db,
-                &input.workspace_id,
-            )
-            .unwrap_or(None);
-            match active_session {
-                None => true, // no active session yet — this will be the first
-                Some(session_id) => {
-                    terminal_repository::count_sent_prompts_for_session(&state.db, &session_id)
-                        .unwrap_or(1)
-                        == 0
-                }
-            }
-        };
-
-        if is_first_prompt && !prompt.contains("[FORGE CONTEXT]") {
-            if let Some(context_block) =
-                agent_context_service::build_session_open_context(state, &input.workspace_id)
-            {
-                prompt = format!("{}\n\nUser request:\n{}", context_block, prompt);
-            }
-        }
-    }
-
-    let resolved_profile = agent_profile_service::resolve_agent_profile(
-        state,
-        Some(&input.workspace_id),
-        input.profile_id.as_deref(),
-        input.profile.as_deref(),
-    )?;
-    if resolved_profile.agent == "local_llm" || resolved_profile.local {
-        let should_send_envelope = terminal_repository::get_active_session_id_for_workspace(
-            &state.db,
-            &input.workspace_id,
-        )
-        .ok()
-        .flatten()
-        .and_then(|session_id| {
-            terminal_repository::count_sent_prompts_for_session(&state.db, &session_id).ok()
-        })
-        .map(|count| count == 0)
-        .unwrap_or(true);
-        if should_send_envelope {
-            prompt = agent_profile_service::local_llm_prompt_envelope(
-                &resolved_profile,
-                input.task_mode.as_deref(),
-                &prompt,
-            );
-        }
-    } else {
-        let metadata = agent_profile_service::prompt_metadata_preamble_for_workspace(
-            state,
-            Some(&input.workspace_id),
-            &resolved_profile,
-            input.task_mode.as_deref(),
-            input.reasoning.as_deref(),
-        );
-        if !prompt.contains("Forge agent profile:") {
-            prompt = format!("{metadata}\n\nUser request:\n{prompt}");
-        }
-    }
-    let profile = resolved_profile.id.clone();
-    let mut entry = AgentPromptEntry {
-        id: format!("prompt-{}", unique_suffix()),
-        workspace_id: input.workspace_id.clone(),
-        session_id: None,
-        profile,
-        prompt,
-        status: "queued".to_string(),
-        created_at: timestamp(),
-        sent_at: None,
-    };
-    terminal_repository::insert_prompt_entry(&state.db, &entry)?;
-
-    let mode = input.mode.unwrap_or_else(|| "send_now".to_string());
-    if mode == "send_now" {
-        dispatch_prompt_entry(state, &mut entry)?;
-    }
-    Ok(entry)
+    queue_workspace_agent_prompt_impl(state, input)
 }
 
 pub fn batch_dispatch_workspace_agent_prompt(
     state: &AppState,
     input: crate::models::BatchDispatchPromptInput,
 ) -> Result<Vec<AgentPromptEntry>, String> {
-    if input.prompt.trim().is_empty() {
-        return Err("Prompt is required".to_string());
-    }
-    let mut entries = Vec::with_capacity(input.workspace_ids.len());
-    for workspace_id in &input.workspace_ids {
-        let result = queue_workspace_agent_prompt(
-            state,
-            QueueAgentPromptInput {
-                workspace_id: workspace_id.clone(),
-                prompt: input.prompt.clone(),
-                profile: None,
-                profile_id: input.profile_id.clone(),
-                task_mode: input.task_mode.clone(),
-                reasoning: input.reasoning.clone(),
-                mode: Some("send_now".to_string()),
-            },
-        );
-        match result {
-            Ok(entry) => entries.push(entry),
-            Err(err) => log::warn!(
-                target: "forge_lib",
-                "batch_dispatch: failed for workspace {workspace_id}: {err}"
-            ),
-        }
-    }
-    Ok(entries)
+    batch_dispatch_workspace_agent_prompt_impl(state, input)
 }
 
 pub fn run_next_workspace_agent_prompt(
     state: &AppState,
     workspace_id: &str,
 ) -> Result<Option<AgentPromptEntry>, String> {
-    let mut entry =
-        match terminal_repository::latest_queued_prompt_for_workspace(&state.db, workspace_id)? {
-            Some(entry) => entry,
-            None => return Ok(None),
-        };
-    dispatch_prompt_entry(state, &mut entry)?;
-    Ok(Some(entry))
+    run_next_workspace_agent_prompt_impl(state, workspace_id)
 }
 
 pub fn list_workspace_agent_prompts(
@@ -991,7 +725,7 @@ pub fn list_workspace_agent_prompts(
     workspace_id: &str,
     limit: Option<u32>,
 ) -> Result<Vec<AgentPromptEntry>, String> {
-    terminal_repository::list_prompts_for_workspace(&state.db, workspace_id, limit)
+    list_workspace_agent_prompts_impl(state, workspace_id, limit)
 }
 
 pub fn write_workspace_utility_terminal_input(
@@ -1115,637 +849,28 @@ pub fn reconnect_workspace_utility_terminal_session(
     get_workspace_utility_terminal_session_state(state, workspace_id)
 }
 
-fn workspace_root_path(state: &AppState, workspace_id: &str) -> Result<PathBuf, String> {
-    let workspace = workspace_repository::get_detail(&state.db, workspace_id)?
-        .ok_or_else(|| format!("Workspace {workspace_id} was not found"))?;
-    let cwd = workspace
-        .summary
-        .workspace_root_path
-        .clone()
-        .unwrap_or_else(|| workspace.worktree_path.clone());
-    let path = PathBuf::from(cwd);
-    if !path.exists() {
-        return Err(format!(
-            "Workspace root path does not exist: {}",
-            path.display()
-        ));
-    }
-    if !path.is_dir() {
-        return Err(format!(
-            "Workspace root path is not a directory: {}",
-            path.display()
-        ));
-    }
-    if !is_git_worktree(&path) {
-        return Err(format!(
-            "Workspace root path is not a Git worktree: {}",
-            path.display()
-        ));
-    }
-    Ok(path)
-}
-
-fn is_git_worktree(path: &Path) -> bool {
-    std::process::Command::new("git")
-        .arg("rev-parse")
-        .arg("--is-inside-work-tree")
-        .current_dir(path)
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false)
-}
-
-fn active_for_workspace(
-    state: &AppState,
-    workspace_id: &str,
-    session_role: &str,
-) -> Result<Option<Arc<ActiveTerminal>>, String> {
-    let Some(session) =
-        terminal_repository::latest_for_workspace_role(&state.db, workspace_id, session_role)?
-    else {
-        return Ok(None);
-    };
-    active_for_session(state, &session.id)
-}
-
-fn active_for_session(
-    state: &AppState,
-    session_id: &str,
-) -> Result<Option<Arc<ActiveTerminal>>, String> {
-    let registry = state
-        .terminals
-        .lock()
-        .map_err(|_| "Terminal registry lock poisoned".to_string())?;
-    Ok(registry.get(session_id).cloned())
-}
-
-fn detach_active_terminal(state: &AppState, session_id: &str) {
-    let active = state
-        .terminals
-        .lock()
-        .ok()
-        .and_then(|mut registry| registry.remove(session_id));
-    if let Some(active) = active {
-        if let Ok(mut killer) = active.killer.lock() {
-            let _ = killer.kill();
-        }
-    }
-}
-
-fn send_interrupt_to_session(state: &AppState, session: &TerminalSession) -> Result<(), String> {
-    if let Some(active) = active_for_session(state, &session.id)? {
-        let mut writer = active
-            .writer
-            .lock()
-            .map_err(|_| "Terminal writer lock poisoned".to_string())?;
-        writer
-            .write_all(b"\x03")
-            .map_err(|err| format!("Failed to interrupt terminal: {err}"))?;
-        writer
-            .flush()
-            .map_err(|err| format!("Failed to flush interrupt: {err}"))?;
-        return Ok(());
-    }
-
-    Err(format!("Terminal session {} is not attached", session.id))
-}
-
-/// If there is no in-memory PTY but the latest DB row for this role is still `running` (e.g. app
-/// restarted or registry desynced), mark it finished — the PTY process is gone.
-fn reconcile_orphan_running_session(
-    state: &AppState,
-    workspace_id: &str,
-    session_role: &str,
-    status: &str,
-) -> Result<(), String> {
-    let Some(latest) =
-        terminal_repository::latest_for_workspace_role(&state.db, workspace_id, session_role)?
-    else {
-        return Ok(());
-    };
-    if latest.status != "running" {
-        return Ok(());
-    }
-    let ended_at = timestamp();
-    log::info!(
-        target: "forge_lib",
-        "reconcile_orphan_running_session: session_id={} workspace_id={} role={} -> {} (no active PTY)",
-        latest.id,
-        workspace_id,
-        session_role,
-        status,
-    );
-    terminal_repository::mark_finished(&state.db, &latest.id, status, &ended_at, true)?;
-    let seq = Arc::new(AtomicU64::new(
-        terminal_repository::next_seq(&state.db, &latest.id).unwrap_or(0),
-    ));
-    append_output(
-        Some(&state.app_handle),
-        &state.db,
-        workspace_id,
-        &latest.id,
-        &seq,
-        "system",
-        &format!("Terminal session {status} (reconciled; no active PTY)\r\n"),
-    );
-    let _ = terminal_repository::mark_prompt_status_by_session(&state.db, &latest.id, status);
-    Ok(())
-}
-
-fn spawn_terminal_reader(
-    app_handle: tauri::AppHandle,
-    db: crate::db::Database,
-    workspace_id: String,
-    session_id: String,
-    next_seq: Arc<AtomicU64>,
-    last_output_at_secs: Arc<AtomicU64>,
-    mut reader: Box<dyn Read + Send>,
-) {
-    // Bounded channel: if the consumer can't keep up, the reader blocks,
-    // which applies backpressure to the PTY child process. This prevents
-    // unbounded memory growth when output is produced faster than we can
-    // write it to the DB.
-    let (tx, rx) = mpsc::sync_channel::<Result<Vec<u8>, String>>(128);
-    thread::spawn(move || {
-        let mut buffer = [0_u8; 4096];
-        loop {
-            match reader.read(&mut buffer) {
-                Ok(0) => break,
-                Ok(n) => {
-                    if tx.send(Ok(buffer[..n].to_vec())).is_err() {
-                        break;
-                    }
-                }
-                Err(err) => {
-                    let _ = tx.send(Err(format!("\r\n[forge] terminal read failed: {err}\r\n")));
-                    break;
-                }
-            }
-        }
-    });
-
-    thread::spawn(move || {
-        const MAX_BATCH_BYTES: usize = 16 * 1024;
-        const MAX_BATCH_DELAY: Duration = Duration::from_millis(50);
-        const MAX_PENDING_BYTES: usize = 256 * 1024; // 256 KB cap on pending buffer
-        let mut pending = Vec::<u8>::with_capacity(MAX_BATCH_BYTES);
-
-        let flush_pending = |pending: &mut Vec<u8>| {
-            if pending.is_empty() {
-                return;
-            }
-            let data = String::from_utf8_lossy(pending).to_string();
-            pending.clear();
-            append_output(
-                Some(&app_handle),
-                &db,
-                &workspace_id,
-                &session_id,
-                &next_seq,
-                "pty",
-                &data,
-            );
-        };
-
-        loop {
-            match rx.recv_timeout(MAX_BATCH_DELAY) {
-                Ok(Ok(bytes)) => {
-                    // Track the time of last PTY output so health checks can detect stuck agents.
-                    let now_secs = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs();
-                    last_output_at_secs.store(now_secs, Ordering::Relaxed);
-
-                    // Scan for cost/token usage lines emitted by Claude Code or Codex.
-                    let text = String::from_utf8_lossy(&bytes);
-                    if let Some((tokens, cost)) = cost_parser::parse_cost(&text) {
-                        let _ = workspace_repository::update_agent_session_cost(
-                            &db,
-                            &workspace_id,
-                            tokens,
-                            &cost,
-                        );
-                        // Check budget cap
-                        if let Ok(ws) = workspace_repository::get(&db, &workspace_id) {
-                            if let Some(limit) = ws.cost_limit_usd {
-                                if let Ok(cost_float) = cost.trim_start_matches('$').parse::<f64>()
-                                {
-                                    if cost_float >= limit {
-                                        let _ = app_handle.emit(
-                                            "forge://workspace-budget-exceeded",
-                                            serde_json::json!({
-                                                "workspaceId": workspace_id,
-                                                "cost": cost,
-                                                "limit": limit,
-                                            }),
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    pending.extend_from_slice(&bytes);
-                    // If pending exceeds the cap, truncate to the tail to avoid memory bloat.
-                    if pending.len() > MAX_PENDING_BYTES {
-                        let keep_from = pending.len() - MAX_BATCH_BYTES;
-                        pending.drain(..keep_from);
-                    }
-                    while pending.len() >= MAX_BATCH_BYTES {
-                        let tail = pending.split_off(MAX_BATCH_BYTES);
-                        flush_pending(&mut pending);
-                        pending = tail;
-                    }
-                }
-                Ok(Err(message)) => {
-                    flush_pending(&mut pending);
-                    append_output(
-                        Some(&app_handle),
-                        &db,
-                        &workspace_id,
-                        &session_id,
-                        &next_seq,
-                        "system",
-                        &message,
-                    );
-                    break;
-                }
-                Err(mpsc::RecvTimeoutError::Timeout) => flush_pending(&mut pending),
-                Err(mpsc::RecvTimeoutError::Disconnected) => {
-                    flush_pending(&mut pending);
-                    break;
-                }
-            }
-        }
-    });
-}
-
-fn spawn_terminal_monitor(
-    state: AppState,
-    workspace_id: String,
-    _session_role: String,
-    session_id: String,
-    mut child: Box<dyn portable_pty::Child + Send>,
-) {
-    thread::spawn(move || {
-        let wait_result = child.wait();
-        let ended_at = timestamp();
-
-        let was_active = state
-            .terminals
-            .lock()
-            .map(|registry| registry.contains_key(&session_id))
-            .unwrap_or(false);
-
-        let _ = state.terminals.lock().map(|mut registry| {
-            registry.remove(&session_id);
-        });
-
-        match wait_result {
-            Ok(exit_status) => {
-                let status = if was_active && exit_status.success() {
-                    "succeeded"
-                } else if was_active {
-                    "failed"
-                } else {
-                    "stopped"
-                };
-                let _ = terminal_repository::mark_finished(
-                    &state.db,
-                    &session_id,
-                    status,
-                    &ended_at,
-                    false,
-                );
-                append_log_line(
-                    &state,
-                    &workspace_id,
-                    &session_id,
-                    "system",
-                    &format!("\r\n[forge] terminal exited: {exit_status:?}\r\n"),
-                );
-                let _ = terminal_repository::mark_prompt_status_by_session(
-                    &state.db,
-                    &session_id,
-                    status,
-                );
-            }
-            Err(err) => {
-                let status = if was_active { "failed" } else { "stopped" };
-                let _ = terminal_repository::mark_finished(
-                    &state.db,
-                    &session_id,
-                    status,
-                    &ended_at,
-                    false,
-                );
-                append_log_line(
-                    &state,
-                    &workspace_id,
-                    &session_id,
-                    "system",
-                    &format!("\r\n[forge] terminal wait failed: {err}\r\n"),
-                );
-                let _ = terminal_repository::mark_prompt_status_by_session(
-                    &state.db,
-                    &session_id,
-                    status,
-                );
-            }
-        }
-    });
-}
-
-fn resolve_session_role(explicit: Option<&str>, profile: &str) -> String {
-    match explicit.unwrap_or("").trim() {
-        "agent" => "agent".to_string(),
-        "utility" => "utility".to_string(),
-        _ => {
-            if profile == "shell" {
-                "utility".to_string()
-            } else {
-                "agent".to_string()
-            }
-        }
-    }
-}
-
-fn dispatch_prompt_entry(state: &AppState, entry: &mut AgentPromptEntry) -> Result<(), String> {
-    if let Err(err) = checkpoint_service::create_checkpoint_if_dirty(
-        state,
-        &entry.workspace_id,
-        "before agent prompt",
-    ) {
-        log::warn!(
-            target: "forge_lib",
-            "failed to create pre-prompt checkpoint for workspace {}: {err}",
-            entry.workspace_id
-        );
-    }
-
-    let session = if let Some(active) = active_for_workspace(state, &entry.workspace_id, "agent")? {
-        terminal_repository::get_session(&state.db, &active.session_id)?
-            .ok_or_else(|| "Active agent session record was not found".to_string())?
-    } else {
-        start_workspace_terminal_session(
-            state,
-            StartTerminalSessionInput {
-                workspace_id: entry.workspace_id.clone(),
-                profile: entry.profile.clone(),
-                session_role: Some("agent".to_string()),
-                cols: None,
-                rows: None,
-                replace_existing: Some(false),
-            },
-        )?
-    };
-
-    let active = active_for_workspace(state, &entry.workspace_id, "agent")?
-        .ok_or_else(|| "No active agent session found to send prompt".to_string())?;
-    let mut writer = active
-        .writer
-        .lock()
-        .map_err(|_| "Terminal writer lock poisoned".to_string())?;
-    // Agent TUIs (claude, codex) run in raw terminal mode where Enter is \r (0x0D),
-    // not \n (0x0A). Sending \r\n covers both raw-mode TUIs and cooked-mode shells.
-    writer
-        .write_all(terminal_prompt_payload_for_session(&session, &entry.prompt).as_bytes())
-        .map_err(|err| format!("Failed to write prompt to terminal: {err}"))?;
-    writer
-        .flush()
-        .map_err(|err| format!("Failed to flush prompt to terminal: {err}"))?;
-
-    let sent_at = timestamp();
-    terminal_repository::mark_prompt_sent(&state.db, &entry.id, &session.id, &sent_at)?;
-    entry.session_id = Some(session.id.clone());
-    entry.status = "sent".to_string();
-    entry.sent_at = Some(sent_at.clone());
-
-    append_output(
-        Some(&state.app_handle),
-        &state.db,
-        &entry.workspace_id,
-        &session.id,
-        &AtomicU64::new(terminal_repository::next_seq(&state.db, &session.id).unwrap_or(0)),
-        "system",
-        &format!("\r\n[forge] queued prompt sent at {sent_at}\r\n"),
-    );
-    Ok(())
-}
-
-fn terminal_prompt_payload_for_session(session: &TerminalSession, prompt: &str) -> String {
-    if is_ollama_terminal_session(session) && prompt.contains('\n') {
-        return format!(
-            "\"\"\"\n{}\n\"\"\"\r\n",
-            escape_ollama_multiline_prompt(prompt)
-        );
-    }
-    format!("{prompt}\r\n")
-}
-
-fn is_ollama_terminal_session(session: &TerminalSession) -> bool {
-    let command = session.command.to_ascii_lowercase();
-    command.ends_with("/ollama") || command == "ollama" || command.contains("ollama")
-}
-
-fn escape_ollama_multiline_prompt(prompt: &str) -> String {
-    prompt.replace("\"\"\"", "\\\"\\\"\\\"")
-}
-
-fn append_log_line(
-    state: &AppState,
-    workspace_id: &str,
-    session_id: &str,
-    stream_type: &str,
-    data: &str,
-) {
-    let next_seq =
-        AtomicU64::new(terminal_repository::next_seq(&state.db, session_id).unwrap_or(0));
-    append_output(
-        Some(&state.app_handle),
-        &state.db,
-        workspace_id,
-        session_id,
-        &next_seq,
-        stream_type,
-        data,
-    );
-}
-
-fn normalize_terminal_kind(kind: &str, profile: &str) -> String {
-    match kind {
-        "agent" | "shell" | "run" | "utility" => kind.to_string(),
-        _ if profile == "shell" => "shell".to_string(),
-        _ => "agent".to_string(),
-    }
-}
-
-fn default_terminal_title(kind: &str, profile: &str) -> String {
-    match (kind, profile) {
-        ("shell", _) | ("utility", _) => "Shell".to_string(),
-        (_, "claude_code") => "Claude".to_string(),
-        (_, "codex") => "Codex".to_string(),
-        ("run", _) => "Run".to_string(),
-        _ => profile.to_string(),
-    }
-}
-
-const OUTPUT_RETENTION_CHUNKS: u32 = 2000;
-const OUTPUT_PRUNE_INTERVAL: u64 = 500;
-
-fn append_output(
-    app_handle: Option<&tauri::AppHandle>,
-    db: &crate::db::Database,
-    workspace_id: &str,
-    session_id: &str,
-    next_seq: &AtomicU64,
-    stream_type: &str,
-    data: &str,
-) {
-    let seq = next_seq.fetch_add(1, Ordering::SeqCst);
-    let chunk = TerminalOutputChunk {
-        id: format!("term-out-{}-{seq}", unique_suffix()),
-        session_id: session_id.to_string(),
-        seq,
-        timestamp: timestamp(),
-        stream_type: stream_type.to_string(),
-        data: data.to_string(),
-    };
-    let _ = terminal_repository::insert_output_chunk(db, &chunk);
-    // Periodically prune old chunks so the DB doesn't grow without bound.
-    if seq > 0 && seq % OUTPUT_PRUNE_INTERVAL == 0 {
-        let _ = terminal_repository::prune_output_chunks(db, session_id, OUTPUT_RETENTION_CHUNKS);
-    }
-    if let Some(app_handle) = app_handle {
-        let _ = app_handle.emit(
-            "forge://terminal-output",
-            TerminalOutputEvent {
-                workspace_id: workspace_id.to_string(),
-                chunk,
-            },
-        );
-    }
-}
-
 pub fn timestamp() -> String {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs().to_string())
-        .unwrap_or_else(|_| "0".to_string())
-}
-
-fn unique_suffix() -> String {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_nanos())
-        .unwrap_or(0);
-    format!("{nanos}")
+    output::timestamp()
 }
 
 /// Build a PATH that includes common macOS binary locations.
 /// When Tauri launches from Finder the inherited PATH is minimal.
 pub fn enriched_path() -> String {
-    let base = std::env::var("PATH").unwrap_or_default();
-    let home = std::env::var("HOME").unwrap_or_else(|_| String::from("/tmp"));
-    let extras = [
-        format!("{home}/.local/bin"),
-        format!("{home}/.cargo/bin"),
-        format!("{home}/.nvm/current/bin"),
-        String::from("/opt/homebrew/bin"),
-        String::from("/opt/homebrew/sbin"),
-        String::from("/usr/local/bin"),
-        String::from("/usr/bin"),
-        String::from("/bin"),
-        String::from("/usr/sbin"),
-        String::from("/sbin"),
-    ];
-    let mut seen = HashSet::new();
-    let mut parts = Vec::new();
-    for entry in base.split(':').chain(extras.iter().map(|s| s.as_str())) {
-        if !entry.is_empty() && seen.insert(entry.to_string()) {
-            parts.push(entry.to_string());
-        }
-    }
-    parts.join(":")
+    enriched_path_impl()
 }
 
-#[derive(Clone)]
-struct TerminalProfile {
-    name: String,
-    command: String,
-    args: Vec<String>,
-}
-
-#[derive(Clone)]
-struct TerminalCommandSpec {
-    command: String,
-    args: Vec<String>,
-}
-
-impl TerminalCommandSpec {
-    fn from_input(
-        profile: &TerminalProfile,
-        command: Option<&str>,
-        args: Option<Vec<String>>,
-    ) -> Result<Self, String> {
-        if let Some(command) = command.map(str::trim).filter(|command| !command.is_empty()) {
-            return Ok(Self {
-                command: "/bin/zsh".to_string(),
-                args: vec!["-lc".to_string(), command.to_string()],
-            });
-        }
-        Ok(Self {
-            command: resolve_terminal_command(&profile.command),
-            args: args.unwrap_or_else(|| profile.args.clone()),
-        })
-    }
-}
-
-fn resolve_terminal_command(command: &str) -> String {
-    let trimmed = command.trim();
-    if trimmed.is_empty() || trimmed.contains('/') {
-        return command.to_string();
-    }
-    environment_service::find_binary(trimmed)
-        .ok()
-        .flatten()
-        .map(|path| path.display().to_string())
-        .unwrap_or_else(|| command.to_string())
-}
-
-impl TerminalProfile {
-    fn from_agent_profile(
-        profile: &crate::models::AgentProfile,
-        effective_model: Option<&str>,
-    ) -> Self {
-        // Inject --model flag for claude command if a model is configured.
-        let args = if profile.command.contains("claude") {
-            if let Some(model) = effective_model.filter(|m| !m.is_empty()) {
-                let mut args = vec!["--model".to_string(), model.to_string()];
-                args.extend_from_slice(&profile.args);
-                args
-            } else {
-                profile.args.clone()
-            }
-        } else {
-            profile.args.clone()
-        };
-        Self {
-            name: profile.agent.clone(),
-            command: profile.command.clone(),
-            args,
-        }
-    }
+fn unique_suffix() -> String {
+    output_unique_suffix()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::AgentProfile;
 
     #[test]
     fn formats_terminal_lifecycle_activity_details() {
-        let details = format_terminal_lifecycle_activity_details(&TerminalSession {
+        let details = activity::format_terminal_lifecycle_activity_details(&TerminalSession {
             id: "term-123".to_string(),
             workspace_id: "ws-123".to_string(),
             session_role: "agent".to_string(),
@@ -1799,7 +924,7 @@ mod tests {
             last_attached_at: None,
             last_captured_seq: 0,
         };
-        let payload = terminal_prompt_payload_for_session(&session, "line one\nline two");
+        let payload = prompts::terminal_prompt_payload_for_session(&session, "line one\nline two");
         assert_eq!(payload, "\"\"\"\nline one\nline two\n\"\"\"\r\n");
     }
 
@@ -1844,7 +969,7 @@ mod tests {
             templates: vec![],
         };
 
-        let details = format_terminal_start_activity_details(
+        let details = activity::format_terminal_start_activity_details(
             &session,
             &profile,
             "ollama",
@@ -1877,7 +1002,8 @@ mod tests {
             templates: vec![],
         };
 
-        let details = format_blocked_terminal_launch_details(&profile, "rm -rf /tmp/example");
+        let details =
+            activity::format_blocked_terminal_launch_details(&profile, "rm -rf /tmp/example");
         assert!(details.contains("Risky Local"));
         assert!(details.contains("runtime: local"));
         assert!(details.contains("provider: custom"));

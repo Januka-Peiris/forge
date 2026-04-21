@@ -202,7 +202,7 @@ pub fn extract_keywords(prompt: &str) -> Vec<String> {
 }
 
 fn tokenise_path(path: &str) -> HashSet<String> {
-    path.split(|c: char| c == '/' || c == '\\' || c == '.' || c == '-' || c == '_')
+    path.split(['/', '\\', '.', '-', '_'])
         .map(|s| s.to_lowercase())
         .filter(|s| s.len() >= 3)
         .collect()

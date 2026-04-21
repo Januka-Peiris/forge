@@ -122,19 +122,16 @@ fn is_forge_workspace_folder_under_repo(repo_root: &Path, worktree_path: &Path) 
     wt_canon
         .strip_prefix(&repo_canon)
         .ok()
-        .is_some_and(|rel| path_starts_with_forge_ws(rel))
+        .is_some_and(path_starts_with_forge_ws)
 }
 
 fn path_starts_with_forge_ws(rel: &Path) -> bool {
     let mut it = rel.components();
-    match (it.next(), it.next()) {
+    matches!(
+        (it.next(), it.next()),
         (Some(first), Some(second))
-            if first.as_os_str() == "forge" && is_ws_id_folder(second.as_os_str()) =>
-        {
-            true
-        }
-        _ => false,
-    }
+            if first.as_os_str() == "forge" && is_ws_id_folder(second.as_os_str())
+    )
 }
 
 fn is_ws_id_folder(name: &std::ffi::OsStr) -> bool {

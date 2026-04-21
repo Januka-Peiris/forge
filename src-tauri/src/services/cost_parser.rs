@@ -6,7 +6,6 @@
 ///   Tokens: 1,234
 ///
 /// We strip ANSI escape codes first, then scan each line for these patterns.
-
 /// Returns `Some((token_count, "$X.XX"))` if a cost line is found, `None` otherwise.
 pub fn parse_cost(raw: &str) -> Option<(u32, String)> {
     let clean = strip_ansi(raw);

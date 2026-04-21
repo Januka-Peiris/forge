@@ -198,7 +198,7 @@ fn extract_ts_import(line: &str) -> Option<String> {
     if line.contains("require(") {
         if let Some(start) = line.find("require('").or_else(|| line.find("require(\"")) {
             let after = &line[start + 9..];
-            let end = after.find(|c| c == '\'' || c == '"').unwrap_or(0);
+            let end = after.find(['\'', '"']).unwrap_or(0);
             let path = after[..end].trim();
             if !path.is_empty() {
                 return Some(path.to_string());

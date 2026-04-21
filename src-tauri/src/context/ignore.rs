@@ -92,7 +92,7 @@ impl IgnoreSet {
     pub fn should_exclude(&self, path: &str) -> bool {
         let norm = path.replace('\\', "/");
         // Check hard exact matches
-        let filename = norm.split('/').last().unwrap_or("");
+        let filename = norm.split('/').next_back().unwrap_or("");
         if self
             .hard_exact
             .iter()
@@ -121,7 +121,7 @@ impl IgnoreSet {
 
     pub fn is_conditional_exclude(&self, path: &str) -> bool {
         let norm = path.replace('\\', "/");
-        let filename = norm.split('/').last().unwrap_or("");
+        let filename = norm.split('/').next_back().unwrap_or("");
         // Directory prefix
         for prefix in &self.conditional_prefixes {
             if norm.starts_with(prefix.as_str()) || norm.contains(&format!("/{}", prefix)) {
@@ -143,7 +143,7 @@ impl IgnoreSet {
 
     pub fn detect_flags(&self, path: &str) -> crate::context::schema::RepoFlags {
         let norm = path.replace('\\', "/");
-        let filename = norm.split('/').last().unwrap_or("").to_lowercase();
+        let filename = norm.split('/').next_back().unwrap_or("").to_lowercase();
         let is_test = self.is_conditional_exclude(path)
             && (filename.starts_with("test")
                 || filename.contains(".test.")

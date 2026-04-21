@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use crate::models::agent_profile::RawAgentProfile;
 use crate::models::AgentProfile;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ForgeWorkspaceConfig {
     pub exists: bool,
@@ -29,22 +29,6 @@ pub struct ForgeMcpServerConfig {
     pub env: BTreeMap<String, String>,
     pub url: Option<String>,
     pub enabled: bool,
-}
-
-impl Default for ForgeWorkspaceConfig {
-    fn default() -> Self {
-        Self {
-            exists: false,
-            path: None,
-            setup: vec![],
-            run: vec![],
-            teardown: vec![],
-            agent_profiles: vec![],
-            mcp_servers: vec![],
-            mcp_warnings: vec![],
-            warning: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Deserialize)]

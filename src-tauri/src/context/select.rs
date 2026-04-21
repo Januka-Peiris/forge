@@ -82,7 +82,7 @@ pub fn build_candidate_pool(
             .map(|e| {
                 let path_tokens: HashSet<String> = e
                     .path
-                    .split(|c: char| c == '/' || c == '.' || c == '_' || c == '-')
+                    .split(['/', '.', '_', '-'])
                     .map(|s| s.to_lowercase())
                     .filter(|s| s.len() >= 3)
                     .collect();

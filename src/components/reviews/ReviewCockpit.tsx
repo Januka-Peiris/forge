@@ -41,6 +41,11 @@ import { useAgentProfile } from '../../lib/hooks/useAgentProfile';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { ReviewCockpitCommentItem } from './ReviewCockpitCommentItem';
 import { ReviewBadge } from './ReviewBadge';
+import {
+  buildPrCommentGroups,
+  computeDiffTotals,
+  countReviewedFiles,
+} from './reviewCockpitViewModel';
 
 interface ReviewCockpitProps {
   workspace: Workspace | null;
@@ -132,27 +137,12 @@ export function ReviewCockpit({
     cockpit?.files.find((item) => item.file.path === effectiveSelectedPath) ??
     cockpit?.files[0] ??
     null;
-  const reviewedCount =
-    cockpit?.files.filter((item) => item.review?.status === 'reviewed').length ?? 0;
+  const reviewedCount = useMemo(
+    () => countReviewedFiles(cockpit?.files ?? []),
+    [cockpit?.files],
+  );
   const prCommentGroups = useMemo(() => {
-    const comments = cockpit?.prComments ?? [];
-    const general = comments.filter((comment) => !comment.path);
-    const byPath = new Map<string, WorkspacePrComment[]>();
-    for (const comment of comments) {
-      if (!comment.path) continue;
-      const existing = byPath.get(comment.path) ?? [];
-      existing.push(comment);
-      byPath.set(comment.path, existing);
-    }
-    const fileGroups = Array.from(byPath.entries())
-      .map(([path, comments]) => ({ path, comments }))
-      .sort((a, b) => {
-        if (a.path === effectiveSelectedPath) return -1;
-        if (b.path === effectiveSelectedPath) return 1;
-        return a.path.localeCompare(b.path);
-      });
-    const openCount = comments.filter((comment) => comment.state !== 'resolved_local' && !comment.resolvedAt).length;
-    return { general, fileGroups, openCount, total: comments.length };
+    return buildPrCommentGroups(cockpit?.prComments ?? [], effectiveSelectedPath);
   }, [cockpit, effectiveSelectedPath]);
 
   const selectFile = async (path: string) => {
@@ -224,6 +214,10 @@ export function ReviewCockpit({
     }
   };
 
+  const { totalAdds, totalDels } = useMemo(
+    () => computeDiffTotals(cockpit?.files ?? []),
+    [cockpit?.files],
+  );
 
   // ── Empty state ───────────────────────────────────────────────────────────
   if (!workspace) {
@@ -239,9 +233,6 @@ export function ReviewCockpit({
       </div>
     );
   }
-
-  const totalAdds = cockpit?.files.reduce((sum, item) => sum + (item.file.additions ?? 0), 0) ?? 0;
-  const totalDels = cockpit?.files.reduce((sum, item) => sum + (item.file.deletions ?? 0), 0) ?? 0;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-forge-bg">

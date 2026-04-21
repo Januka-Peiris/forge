@@ -128,7 +128,7 @@ fn infer_from_path_and_symbols(path: &str, symbols: &[RepoSymbol]) -> String {
     let parts: Vec<&str> = norm.split('/').collect();
     let filename = parts.last().copied().unwrap_or("");
     let stem = filename.split('.').next().unwrap_or(filename);
-    let dir = parts.iter().rev().skip(1).next().copied().unwrap_or("");
+    let dir = parts.iter().rev().nth(1).copied().unwrap_or("");
 
     // Test file
     if stem.starts_with("test")
@@ -183,7 +183,7 @@ fn dir_to_phrase(dir: &str) -> String {
         return "Root module.".to_string();
     }
     let words: Vec<String> = dir
-        .split(|c: char| c == '_' || c == '-')
+        .split(['_', '-'])
         .map(|w| {
             let mut chars = w.chars();
             match chars.next() {
@@ -196,7 +196,7 @@ fn dir_to_phrase(dir: &str) -> String {
 }
 
 fn stem_to_phrase(stem: &str) -> String {
-    let clean = stem.replace('_', " ").replace('-', " ");
+    let clean = stem.replace(['_', '-'], " ");
     // Title case
     clean
         .split_whitespace()

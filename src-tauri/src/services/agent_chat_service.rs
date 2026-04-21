@@ -17,6 +17,9 @@ use crate::services::{
 };
 use crate::state::AppState;
 
+mod parser;
+use parser::parse_adapter_line;
+
 pub fn create_agent_chat_session(
     state: &AppState,
     input: CreateAgentChatSessionInput,
@@ -106,12 +109,14 @@ pub fn send_agent_chat_message(
     let user_event = append_event(
         state,
         &session,
-        "user_message",
-        Some("user"),
-        None,
-        &prompt,
-        None,
-        Some(user_metadata),
+        EventInput {
+            event_type: "user_message",
+            role: Some("user"),
+            title: None,
+            body: &prompt,
+            status: None,
+            metadata: Some(user_metadata),
+        },
     )?;
     if let Err(err) = checkpoint_service::create_checkpoint_if_dirty(
         state,
@@ -130,12 +135,14 @@ pub fn send_agent_chat_message(
     let _ = append_event(
         state,
         &running_session,
-        "status",
-        None,
-        Some("Running"),
-        "Agent started.",
-        Some("running"),
-        None,
+        EventInput {
+            event_type: "status",
+            role: None,
+            title: Some("Running"),
+            body: "Agent started.",
+            status: Some("running"),
+            metadata: None,
+        },
     );
     start_adapter_process(
         state.clone(),
@@ -189,12 +196,14 @@ pub fn interrupt_agent_chat_session(
     let _ = append_event(
         state,
         &session,
-        "status",
-        None,
-        Some("Interrupted"),
-        "Agent was interrupted.",
-        Some("interrupted"),
-        None,
+        EventInput {
+            event_type: "status",
+            role: None,
+            title: Some("Interrupted"),
+            body: "Agent was interrupted.",
+            status: Some("interrupted"),
+            metadata: None,
+        },
     );
     Ok(session)
 }
@@ -331,12 +340,14 @@ fn read_stdout(state: AppState, session: AgentChatSession, stdout: impl Read) {
             let _ = append_event(
                 &state,
                 &session,
-                &parsed.event_type,
-                parsed.role.as_deref(),
-                parsed.title.as_deref(),
-                &parsed.body,
-                parsed.status.as_deref(),
-                parsed.metadata,
+                EventInput {
+                    event_type: &parsed.event_type,
+                    role: parsed.role.as_deref(),
+                    title: parsed.title.as_deref(),
+                    body: &parsed.body,
+                    status: parsed.status.as_deref(),
+                    metadata: parsed.metadata,
+                },
             );
         }
     }
@@ -351,12 +362,14 @@ fn read_stderr(state: AppState, session: AgentChatSession, stderr: impl Read) {
             let _ = append_event(
                 &state,
                 &session,
-                "diagnostic",
-                None,
-                Some("Diagnostic"),
-                line.trim(),
-                None,
-                None,
+                EventInput {
+                    event_type: "diagnostic",
+                    role: None,
+                    title: Some("Diagnostic"),
+                    body: line.trim(),
+                    status: None,
+                    metadata: None,
+                },
             );
         }
     }
@@ -404,227 +417,67 @@ fn wait_for_process(
         let _ = append_event(
             &state,
             &updated,
-            if status.success() { "result" } else { "error" },
-            None,
-            Some(if status.success() {
-                "Run result"
-            } else {
-                "Run failed"
-            }),
-            if status.success() {
-                "Agent run completed successfully."
-            } else {
-                "Agent run failed. Open diagnostics for details."
+            EventInput {
+                event_type: if status.success() { "result" } else { "error" },
+                role: None,
+                title: Some(if status.success() {
+                    "Run result"
+                } else {
+                    "Run failed"
+                }),
+                body: if status.success() {
+                    "Agent run completed successfully."
+                } else {
+                    "Agent run failed. Open diagnostics for details."
+                },
+                status: Some(final_status),
+                metadata: Some(serde_json::json!({ "exitCode": status.code() })),
             },
-            Some(final_status),
-            Some(serde_json::json!({ "exitCode": status.code() })),
         );
         let _ = append_event(
             &state,
             &updated,
-            "status",
-            None,
-            Some(if status.success() { "Done" } else { "Failed" }),
-            if status.success() {
-                "Agent finished."
-            } else {
-                "Agent exited with an error."
+            EventInput {
+                event_type: "status",
+                role: None,
+                title: Some(if status.success() { "Done" } else { "Failed" }),
+                body: if status.success() {
+                    "Agent finished."
+                } else {
+                    "Agent exited with an error."
+                },
+                status: Some(final_status),
+                metadata: Some(serde_json::json!({ "exitCode": status.code() })),
             },
-            Some(final_status),
-            Some(serde_json::json!({ "exitCode": status.code() })),
         );
     }
 }
 
-#[derive(Debug)]
-struct ParsedAgentEvent {
-    event_type: String,
-    role: Option<String>,
-    title: Option<String>,
-    body: String,
-    status: Option<String>,
+struct EventInput<'a> {
+    event_type: &'a str,
+    role: Option<&'a str>,
+    title: Option<&'a str>,
+    body: &'a str,
+    status: Option<&'a str>,
     metadata: Option<Value>,
-}
-
-fn parse_adapter_line(provider: &str, line: &str) -> Vec<ParsedAgentEvent> {
-    let value = match serde_json::from_str::<Value>(line) {
-        Ok(value) => value,
-        Err(_) => {
-            let text = strip_ansi(line).trim().to_string();
-            if text.is_empty() {
-                return Vec::new();
-            }
-            return vec![ParsedAgentEvent {
-                event_type: "assistant_message".to_string(),
-                role: Some("assistant".to_string()),
-                title: None,
-                body: text,
-                status: None,
-                metadata: None,
-            }];
-        }
-    };
-    match provider {
-        "claude_code" => parse_claude_json_line(&value),
-        "codex" => parse_codex_json_line(&value),
-        _ => Vec::new(),
-    }
-}
-
-fn parse_claude_json_line(value: &Value) -> Vec<ParsedAgentEvent> {
-    let mut out = Vec::new();
-    let event_type = value.get("type").and_then(Value::as_str).unwrap_or("");
-    if event_type == "stream_event" {
-        return parse_claude_stream_event(value.get("event").unwrap_or(value));
-    }
-    if event_type == "result" {
-        // Claude stream-json emits the final assistant text twice:
-        //   1. as an `assistant` message/content block
-        //   2. again on the terminal `result.result` object
-        // The result object is useful in Raw / Diagnostics but should not become
-        // a second chat bubble.
-        return out;
-    }
-    let message = value.get("message").unwrap_or(value);
-    if let Some(content) = message.get("content").and_then(Value::as_array) {
-        for item in content {
-            match item.get("type").and_then(Value::as_str).unwrap_or("") {
-                "text" => {
-                    if let Some(text) = item
-                        .get("text")
-                        .and_then(Value::as_str)
-                        .filter(|s| !s.trim().is_empty())
-                    {
-                        out.push(assistant_text(text));
-                    }
-                }
-                "tool_use" => {
-                    let name = item.get("name").and_then(Value::as_str).unwrap_or("Tool");
-                    out.push(ParsedAgentEvent {
-                        event_type: tool_event_type(name),
-                        role: None,
-                        title: Some(name.to_string()),
-                        body: summarize_json(item.get("input"))
-                            .unwrap_or_else(|| "Tool started.".to_string()),
-                        status: Some("running".to_string()),
-                        metadata: Some(item.clone()),
-                    });
-                }
-                "tool_result" => {
-                    out.push(ParsedAgentEvent {
-                        event_type: "tool_result".to_string(),
-                        role: None,
-                        title: Some("Tool result".to_string()),
-                        body: item
-                            .get("content")
-                            .and_then(Value::as_str)
-                            .unwrap_or("Tool completed.")
-                            .to_string(),
-                        status: Some("done".to_string()),
-                        metadata: Some(item.clone()),
-                    });
-                }
-                _ => {}
-            }
-        }
-    }
-    out
-}
-
-fn parse_claude_stream_event(value: &Value) -> Vec<ParsedAgentEvent> {
-    match value.get("type").and_then(Value::as_str).unwrap_or("") {
-        "content_block_start" => {
-            let block_type = value
-                .get("content_block")
-                .and_then(|block| block.get("type"))
-                .and_then(Value::as_str)
-                .unwrap_or("");
-            if block_type == "thinking" {
-                vec![ParsedAgentEvent {
-                    event_type: "thinking".to_string(),
-                    role: None,
-                    title: Some("Thinking".to_string()),
-                    body: "Claude is thinking…".to_string(),
-                    status: Some("running".to_string()),
-                    metadata: None,
-                }]
-            } else {
-                Vec::new()
-            }
-        }
-        "content_block_delta" => {
-            let delta = value.get("delta").unwrap_or(value);
-            // Claude emits text deltas and then later emits the full `assistant`
-            // message. Persisting both creates duplicate chat bubbles, so keep
-            // raw deltas in diagnostics only and let the final assistant object
-            // become the clean chat message.
-            if delta.get("text").and_then(Value::as_str).is_some() {
-                return Vec::new();
-            }
-            Vec::new()
-        }
-        _ => Vec::new(),
-    }
-}
-
-fn parse_codex_json_line(value: &Value) -> Vec<ParsedAgentEvent> {
-    let mut out = Vec::new();
-    let typ = value
-        .get("type")
-        .or_else(|| value.get("event"))
-        .and_then(Value::as_str)
-        .unwrap_or("");
-    if let Some(text) = value
-        .get("message")
-        .or_else(|| value.get("text"))
-        .or_else(|| value.get("content"))
-        .and_then(Value::as_str)
-        .filter(|s| !s.trim().is_empty())
-    {
-        out.push(assistant_text(text));
-    } else if typ.contains("command") || typ.contains("exec") || typ.contains("tool") {
-        out.push(ParsedAgentEvent {
-            event_type: if typ.contains("command") || typ.contains("exec") {
-                "command"
-            } else {
-                "tool_call"
-            }
-            .to_string(),
-            role: None,
-            title: Some(if typ.is_empty() {
-                "Codex event".to_string()
-            } else {
-                typ.to_string()
-            }),
-            body: summarize_json(Some(value)).unwrap_or_else(|| "Codex event.".to_string()),
-            status: None,
-            metadata: Some(value.clone()),
-        });
-    }
-    out
 }
 
 fn append_event(
     state: &AppState,
     session: &AgentChatSession,
-    event_type: &str,
-    role: Option<&str>,
-    title: Option<&str>,
-    body: &str,
-    status: Option<&str>,
-    metadata: Option<Value>,
+    input: EventInput<'_>,
 ) -> Result<AgentChatEvent, String> {
     let seq = agent_chat_repository::next_event_seq(&state.db, &session.id)?;
     let event = AgentChatEvent {
         id: format!("agent-chat-event-{}", unique_suffix()),
         session_id: session.id.clone(),
         seq,
-        event_type: event_type.to_string(),
-        role: role.map(str::to_string),
-        title: title.map(str::to_string),
-        body: body.to_string(),
-        status: status.map(str::to_string),
-        metadata,
+        event_type: input.event_type.to_string(),
+        role: input.role.map(str::to_string),
+        title: input.title.map(str::to_string),
+        body: input.body.to_string(),
+        status: input.status.map(str::to_string),
+        metadata: input.metadata,
         created_at: timestamp(),
     };
     agent_chat_repository::insert_event(&state.db, &event)?;
@@ -639,76 +492,6 @@ fn append_event(
         },
     );
     Ok(event)
-}
-
-fn assistant_text(text: &str) -> ParsedAgentEvent {
-    ParsedAgentEvent {
-        event_type: "assistant_message".to_string(),
-        role: Some("assistant".to_string()),
-        title: None,
-        body: text.to_string(),
-        status: None,
-        metadata: None,
-    }
-}
-
-fn tool_event_type(name: &str) -> String {
-    let lower = name.to_lowercase();
-    if lower.contains("bash") || lower.contains("shell") || lower.contains("command") {
-        "command".to_string()
-    } else if lower.contains("test") {
-        "test_run".to_string()
-    } else if lower.contains("todo") {
-        "todo".to_string()
-    } else if lower.contains("read")
-        || lower.contains("view")
-        || lower.contains("grep")
-        || lower.contains("glob")
-    {
-        "file_read".to_string()
-    } else if lower.contains("edit")
-        || lower.contains("write")
-        || lower.contains("file")
-        || lower.contains("notebook")
-    {
-        "file_change".to_string()
-    } else {
-        "tool_call".to_string()
-    }
-}
-
-fn summarize_json(value: Option<&Value>) -> Option<String> {
-    let value = value?;
-    if let Some(command) = value.get("command").and_then(Value::as_str) {
-        return Some(command.to_string());
-    }
-    if let Some(path) = value
-        .get("file_path")
-        .or_else(|| value.get("path"))
-        .and_then(Value::as_str)
-    {
-        return Some(path.to_string());
-    }
-    serde_json::to_string_pretty(value)
-        .ok()
-        .map(|raw| raw.chars().take(1200).collect())
-}
-
-fn strip_ansi(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    let mut chars = input.chars().peekable();
-    while let Some(ch) = chars.next() {
-        if ch == '\u{1b}' {
-            for next in chars.by_ref() {
-                if next.is_ascii_alphabetic() {
-                    break;
-                }
-            }
-        } else {
-            out.push(ch);
-        }
-    }
-    out
 }
 
 fn normalize_provider(provider: &str) -> String {

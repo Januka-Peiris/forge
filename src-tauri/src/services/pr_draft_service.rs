@@ -33,9 +33,7 @@ pub fn refresh_workspace_pr_draft(
         .into_iter()
         .next();
 
-    let title = format!("{}", workspace.summary.name.trim())
-        .trim()
-        .to_string();
+    let title = workspace.summary.name.trim().to_string();
     let title = if title.is_empty() {
         format!("Update {}", workspace.summary.repo)
     } else {

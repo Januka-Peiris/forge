@@ -137,8 +137,7 @@ pub fn derive_status(
 
 fn trim_event(value: String) -> String {
     let clean = value
-        .replace('\r', " ")
-        .replace('\n', " ")
+        .replace(['\r', '\n'], " ")
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ");
