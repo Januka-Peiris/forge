@@ -51,11 +51,27 @@ fn agent_effective_model(
     profile: &crate::models::AgentProfile,
 ) -> Option<String> {
     // Profile-level model overrides the global default.
-    profile.model.clone().or_else(|| {
-        settings_repository::get_value(&state.db, "agent_default_model")
-            .ok()
-            .flatten()
-    })
+    if profile.model.is_some() {
+        return profile.model.clone();
+    }
+    let key = match profile.agent.as_str() {
+        "claude_code" => "claude_agent_default_model",
+        "codex" => "codex_agent_default_model",
+        "kimi_code" => "kimi_agent_default_model",
+        _ => "agent_default_model",
+    };
+    settings_repository::get_value(&state.db, key)
+        .ok()
+        .flatten()
+        .or_else(|| {
+            if key == "claude_agent_default_model" {
+                settings_repository::get_value(&state.db, "agent_default_model")
+                    .ok()
+                    .flatten()
+            } else {
+                None
+            }
+        })
 }
 
 pub fn start_workspace_terminal_session(
@@ -300,7 +316,7 @@ pub fn write_workspace_terminal_session_input(
     data: &str,
 ) -> Result<(), String> {
     // Gate dangerous commands on shell/utility sessions.
-    // Agent sessions (claude, codex) manage their own shell — we don't intercept those.
+    // Agent sessions (claude, codex, kimi) manage their own shell — we don't intercept those.
     if let Ok(Some(session)) = terminal_repository::get_session(&state.db, session_id) {
         if matches!(session.terminal_kind.as_str(), "shell" | "utility") {
             let line = data.trim_end_matches(['\r', '\n']);

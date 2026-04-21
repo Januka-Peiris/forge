@@ -1,7 +1,7 @@
 export interface AgentProfile {
   id: string;
   label: string;
-  agent: 'codex' | 'claude_code' | 'shell' | string;
+  agent: 'codex' | 'claude_code' | 'kimi_code' | 'shell' | string;
   command: string;
   args: string[];
   model?: string | null;

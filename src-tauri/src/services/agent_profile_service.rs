@@ -75,6 +75,7 @@ pub fn resolve_agent_profile(
     }
     match requested {
         "codex" => Ok(default_profile("codex-default")),
+        "kimi_code" | "kimi" | "kimi-code" => Ok(default_profile("kimi-default")),
         "claude_code" | "claude" => Ok(default_profile("claude-default")),
         "shell" => Ok(default_profile("shell")),
         other => Err(format!("Unsupported agent profile: {other}")),
@@ -384,6 +385,22 @@ pub fn default_profiles() -> Vec<AgentProfile> {
             templates: vec![],
         },
         AgentProfile {
+            id: "kimi-default".to_string(),
+            label: "Kimi".to_string(),
+            agent: "kimi_code".to_string(),
+            command: "kimi".to_string(),
+            args: vec![],
+            model: None,
+            reasoning: Some("default".to_string()),
+            mode: Some("act".to_string()),
+            provider: None,
+            endpoint: None,
+            local: false,
+            description: Some("General Kimi Code agent work".to_string()),
+            skills: vec![],
+            templates: vec![],
+        },
+        AgentProfile {
             id: "shell".to_string(),
             label: "Shell".to_string(),
             agent: "shell".to_string(),
@@ -412,6 +429,7 @@ fn default_profile(id: &str) -> AgentProfile {
 fn normalize_agent(value: &str) -> String {
     match value {
         "claude" | "claude-code" | "claude_code" => "claude_code".to_string(),
+        "kimi" | "kimi-code" | "kimi_code" => "kimi_code".to_string(),
         "shell" => "shell".to_string(),
         "local" | "local-llm" | "local_llm" | "ollama" | "llama.cpp" | "llama-cpp"
         | "llama_cpp" | "lmstudio" | "lm-studio" | "openai-compatible" | "openai_compatible" => {
@@ -424,6 +442,7 @@ fn normalize_agent(value: &str) -> String {
 fn default_command_for_agent(agent: &str) -> &'static str {
     match agent {
         "claude_code" => "claude",
+        "kimi_code" => "kimi",
         "local_llm" => "ollama",
         "shell" => "/bin/zsh",
         _ => "codex",
@@ -461,6 +480,7 @@ mod tests {
             .map(|profile| profile.id)
             .collect::<Vec<_>>();
         assert!(ids.contains(&"codex-default".to_string()));
+        assert!(ids.contains(&"kimi-default".to_string()));
         assert!(ids.contains(&"codex-high".to_string()));
         assert!(ids.contains(&"claude-plan".to_string()));
         assert!(ids.contains(&"shell".to_string()));

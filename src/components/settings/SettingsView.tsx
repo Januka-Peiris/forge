@@ -24,6 +24,12 @@ const CODEX_AGENT_MODELS = [
   { value: 'o4-mini', label: 'o4-mini' },
 ];
 
+const KIMI_AGENT_MODELS = [
+  { value: 'kimi-for-coding', label: 'Kimi for Coding' },
+  { value: 'kimi-k2.6', label: 'Kimi K2.6' },
+  { value: 'kimi-k2.5', label: 'Kimi K2.5' },
+];
+
 const ORCHESTRATOR_MODELS = [
   { value: 'claude-opus-4-7', label: 'Claude Opus 4.7 (1M context)' },
   { value: 'claude-opus-4-6', label: 'Claude Opus 4.6 (1M context)' },
@@ -67,7 +73,7 @@ function AiModelsCard() {
     <div className="rounded-xl border border-forge-border bg-forge-card p-4">
       <div className="mb-4">
         <h2 className="text-[14px] font-bold text-forge-text">AI Models</h2>
-        <p className="text-[11px] text-forge-muted mt-0.5">Choose default models for Claude, Codex, and orchestrator roles. Changes take effect immediately.</p>
+        <p className="text-[11px] text-forge-muted mt-0.5">Choose default models for Claude, Codex, Kimi, and orchestrator roles. Changes take effect immediately.</p>
       </div>
       <div className="space-y-4">
         <div>
@@ -101,6 +107,24 @@ function AiModelsCard() {
               {!CODEX_AGENT_MODELS.some((m) => m.value === modelSettings.codexAgentModel) && (
                 <SelectItem value={modelSettings.codexAgentModel}>
                   {modelSettings.codexAgentModel}
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <label className="text-[12px] font-semibold text-forge-text block mb-1">Kimi default model</label>
+          <p className="text-[11px] text-forge-muted mb-2">Used when starting or focusing Kimi chats.</p>
+          <Select
+            value={modelSettings.kimiAgentModel}
+            onValueChange={(v) => setModelSettings({ ...modelSettings, kimiAgentModel: v })}
+          >
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {KIMI_AGENT_MODELS.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+              {!KIMI_AGENT_MODELS.some((m) => m.value === modelSettings.kimiAgentModel) && (
+                <SelectItem value={modelSettings.kimiAgentModel}>
+                  {modelSettings.kimiAgentModel}
                 </SelectItem>
               )}
             </SelectContent>

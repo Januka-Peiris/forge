@@ -152,7 +152,7 @@ fn run_orchestrator_pass(state: &AppState) -> Result<(), String> {
 
     let workspace_context = context_lines.join("\n\n");
     let prompt = format!(
-        r#"You are the Forge Orchestrator — the strategic brain coordinating multiple AI coding agents (Claude Sonnet, Codex) running in parallel git worktrees.
+        r#"You are the Forge Orchestrator — the strategic brain coordinating multiple AI coding agents (Claude, Codex, Kimi) running in parallel git worktrees.
 
 Your role:
 - Detect stuck agents and send a short actionable nudge

@@ -1,6 +1,6 @@
 export type AgentRunStatus = 'running' | 'succeeded' | 'failed' | 'stopped' | 'abandoned';
 export type AgentRunStreamType = 'stdout' | 'stderr' | 'system';
-export type AgentRunType = 'codex' | 'claude_code';
+export type AgentRunType = 'codex' | 'claude_code' | 'kimi_code';
 
 export interface WorkspaceRun {
   id: string;

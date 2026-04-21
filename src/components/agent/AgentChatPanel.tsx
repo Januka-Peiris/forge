@@ -292,7 +292,7 @@ function EmptyChat({ provider }: { provider: string }) {
         <MessageSquare className="mx-auto mb-3 h-7 w-7 text-forge-muted" />
         <h3 className="text-sm font-semibold text-forge-text">Start a clean agent chat</h3>
         <p className="mt-1 text-xs leading-relaxed text-forge-muted">
-          Send a prompt to {provider === 'codex' ? 'Codex' : 'Claude'} and Forge will render structured workbench events here instead of raw terminal output.
+          Send a prompt to {provider === 'codex' ? 'Codex' : provider === 'kimi_code' ? 'Kimi' : 'Claude'} and Forge will render structured workbench events here instead of raw terminal output.
         </p>
       </div>
     </div>

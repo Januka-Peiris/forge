@@ -171,6 +171,19 @@ fn command_profile(agent_type: &str, prompt: Option<&str>) -> Result<CommandProf
                 vec!["-p".to_string(), prompt.to_string()]
             },
         }),
+        "kimi_code" => Ok(CommandProfile {
+            command: "kimi".to_string(),
+            args: if prompt.is_empty() {
+                vec!["--version".to_string()]
+            } else {
+                vec![
+                    "--print".to_string(),
+                    "--final-message-only".to_string(),
+                    "--prompt".to_string(),
+                    prompt.to_string(),
+                ]
+            },
+        }),
         other => Err(format!("Unsupported agent type: {other}")),
     }
 }

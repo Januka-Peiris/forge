@@ -93,7 +93,7 @@ Common fields:
 
 - `id`
 - `label`
-- `agent`: `codex`, `claude_code`, `local_llm`, or `shell`
+- `agent`: `codex`, `claude_code`, `kimi_code`, `local_llm`, or `shell`
 - `command`
 - `args`
 - `model`

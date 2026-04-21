@@ -1,4 +1,4 @@
-export type TerminalProfile = 'shell' | 'codex' | 'claude_code' | string;
+export type TerminalProfile = 'shell' | 'codex' | 'claude_code' | 'kimi_code' | string;
 export type TerminalSessionStatus = 'running' | 'succeeded' | 'failed' | 'stopped' | 'interrupted' | string;
 
 export interface TerminalSession {

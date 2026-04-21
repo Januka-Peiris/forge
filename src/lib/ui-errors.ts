@@ -18,8 +18,14 @@ export function formatSessionError(err: unknown): string {
   ) {
     return 'Claude CLI was not found on PATH. Install Claude Code CLI and verify `claude` runs in your shell, then retry.';
   }
+  if (
+    (lower.includes('failed to start kimi') || lower.includes(' kimi ') || lower.includes('start kimi'))
+    && (lower.includes("no such file") || lower.includes("not found") || lower.includes("enoent"))
+  ) {
+    return 'Kimi CLI was not found on PATH. Install Kimi Code CLI and verify `kimi` runs in your shell, then retry.';
+  }
   if (lower.includes('auth') || lower.includes('login') || lower.includes('expired') || lower.includes('unauthorized')) {
-    return 'Agent authentication is required or expired. Re-auth in the CLI (`codex` or `claude`) and start the session again.';
+    return 'Agent authentication is required or expired. Re-auth in the CLI (`codex`, `claude`, or `kimi`) and start the session again.';
   }
   if (lower.includes('workspace root path does not exist') || lower.includes('workspace root path is not a directory')) {
     return 'Workspace path is invalid or missing. Re-scan repositories, verify the worktree still exists, then reopen this workspace.';

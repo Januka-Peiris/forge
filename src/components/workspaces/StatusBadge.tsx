@@ -47,6 +47,7 @@ export function AgentBadge({ agent, iconOnly = false }: { agent: AgentType; icon
   const configs: Record<string, { icon: LucideIcon; variant: BadgeProps['variant'] }> = {
     'Claude Code': { icon: Bot, variant: 'violet' as const },
     'Codex': { icon: Zap, variant: 'success' as const },
+    'Kimi Code': { icon: Zap, variant: 'info' as const },
     'Local LLM': { icon: Bot, variant: 'default' as const },
   };
 

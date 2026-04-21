@@ -1,6 +1,6 @@
 # Forge Desktop
 
-Forge is a local-first desktop conductor for AI coding agents. It helps you create isolated Git workspaces, run Claude/Codex agents, understand what changed, review work, run checks, and move safe changes toward a PR without turning Forge into a cloud platform or full IDE.
+Forge is a local-first desktop conductor for AI coding agents. It helps you create isolated Git workspaces, run Claude/Codex/Kimi agents, understand what changed, review work, run checks, and move safe changes toward a PR without turning Forge into a cloud platform or full IDE.
 
 ## Product Direction
 

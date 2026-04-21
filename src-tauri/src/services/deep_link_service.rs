@@ -231,6 +231,7 @@ fn percent_decode(value: &str) -> Option<String> {
 fn agent_profile(agent: Option<&str>) -> String {
     match agent.unwrap_or("codex").trim().to_lowercase().as_str() {
         "claude" | "claude_code" | "claude-code" | "claude code" => "claude_code".to_string(),
+        "kimi" | "kimi_code" | "kimi-code" | "kimi code" => "kimi_code".to_string(),
         "shell" => "shell".to_string(),
         _ => "codex".to_string(),
     }
@@ -239,6 +240,7 @@ fn agent_profile(agent: Option<&str>) -> String {
 fn agent_label(agent: Option<&str>) -> String {
     match agent_profile(agent).as_str() {
         "claude_code" => "Claude Code".to_string(),
+        "kimi_code" => "Kimi Code".to_string(),
         "shell" => "Shell".to_string(),
         _ => "Codex".to_string(),
     }
@@ -269,5 +271,7 @@ mod tests {
     fn normalizes_agents() {
         assert_eq!(agent_profile(Some("claude-code")), "claude_code");
         assert_eq!(agent_profile(Some("codex")), "codex");
+        assert_eq!(agent_profile(Some("kimi")), "kimi_code");
+        assert_eq!(agent_label(Some("kimi")), "Kimi Code");
     }
 }

@@ -7,6 +7,7 @@ interface WorkspaceTerminalEmptyStateProps {
   localAgentProfiles: AgentProfile[];
   onStartClaude: () => void;
   onStartCodex: () => void;
+  onStartKimi: () => void;
   onStartLocalProfile: (profile: AgentProfile) => void;
   onStartShell: () => void;
 }
@@ -16,6 +17,7 @@ export function WorkspaceTerminalEmptyState({
   localAgentProfiles,
   onStartClaude,
   onStartCodex,
+  onStartKimi,
   onStartLocalProfile,
   onStartShell,
 }: WorkspaceTerminalEmptyStateProps) {
@@ -28,6 +30,7 @@ export function WorkspaceTerminalEmptyState({
         <div className="mt-4 flex flex-wrap justify-center gap-2">
           <button disabled={busy} onClick={onStartClaude} className="rounded-lg bg-forge-green px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Start Claude</button>
           <button disabled={busy} onClick={onStartCodex} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">Start Codex</button>
+          <button disabled={busy} onClick={onStartKimi} className="rounded-lg border border-forge-border bg-white/5 px-3 py-2 text-sm font-semibold text-forge-text disabled:opacity-50">Start Kimi</button>
           
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

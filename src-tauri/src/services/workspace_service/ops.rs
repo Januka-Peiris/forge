@@ -481,6 +481,7 @@ fn detail_agent_name(agent: &str) -> String {
     match agent {
         "Codex" => "codex".to_string(),
         "Claude Code" => "claude_code".to_string(),
+        "Kimi Code" => "kimi_code".to_string(),
         "Local LLM" => "local_llm".to_string(),
         other => other.to_lowercase(),
     }

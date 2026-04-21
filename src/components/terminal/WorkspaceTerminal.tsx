@@ -69,8 +69,10 @@ import { readWorkspaceFile, writeWorkspaceFile } from '../../lib/tauri-api/works
 
 const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-6';
 const DEFAULT_CODEX_MODEL = 'gpt-5.4';
+const DEFAULT_KIMI_MODEL = 'kimi-for-coding';
 const CODEX_REASONING_VALUES = new Set(['low', 'medium', 'high', 'xhigh']);
 const CLAUDE_REASONING_VALUES = new Set(['Default', 'Low', 'Medium', 'High', 'Extra High', 'Max']);
+const KIMI_THINKING_VALUES = new Set(['default', 'on', 'off']);
 
 function isLikelyCodexModel(model: string): boolean {
   const lower = model.toLowerCase();
@@ -148,6 +150,7 @@ export function WorkspaceTerminal({
   const [providerModelDefaults, setProviderModelDefaults] = useState({
     claude: DEFAULT_CLAUDE_MODEL,
     codex: DEFAULT_CODEX_MODEL,
+    kimi: DEFAULT_KIMI_MODEL,
   });
   const [error, setError] = useState<string | null>(null);
   const [pendingCommand, setPendingCommand] = useState<PendingCommand | null>(null);
@@ -438,7 +441,8 @@ export function WorkspaceTerminal({
       const settings = await getAiModelSettings();
       const claudeModel = settings.claudeAgentModel || settings.agentModel || DEFAULT_CLAUDE_MODEL;
       const codexModel = settings.codexAgentModel || DEFAULT_CODEX_MODEL;
-      setProviderModelDefaults({ claude: claudeModel, codex: codexModel });
+      const kimiModel = settings.kimiAgentModel || DEFAULT_KIMI_MODEL;
+      setProviderModelDefaults({ claude: claudeModel, codex: codexModel, kimi: kimiModel });
       setComposerSettings((current) => ({ ...current, selectedModel: claudeModel }));
     } catch (err) {
       forgeWarn('agent-models', 'load error', { err });
@@ -603,9 +607,20 @@ export function WorkspaceTerminal({
         return { ...current, selectedModel: nextModel, selectedReasoning: nextReasoning };
       }
 
+      if (provider === 'kimi_code') {
+        const nextModel = current.selectedModel.startsWith('kimi-')
+          ? current.selectedModel
+          : providerModelDefaults.kimi;
+        const nextReasoning = KIMI_THINKING_VALUES.has(current.selectedReasoning.toLowerCase())
+          ? current.selectedReasoning.toLowerCase()
+          : 'default';
+        if (nextModel === current.selectedModel && nextReasoning === current.selectedReasoning) return current;
+        return { ...current, selectedModel: nextModel, selectedReasoning: nextReasoning };
+      }
+
       return current;
     });
-  }, [focusedChatSession?.provider, providerModelDefaults.claude, providerModelDefaults.codex]);
+  }, [focusedChatSession?.provider, providerModelDefaults.claude, providerModelDefaults.codex, providerModelDefaults.kimi]);
 
   useEffect(() => {
     window.localStorage.setItem(FILE_PREVIEW_WIDTH_KEY, String(filePreviewWidth));
@@ -810,6 +825,7 @@ export function WorkspaceTerminal({
               localAgentProfiles={localAgentProfiles}
               onStartClaude={() => void createChatSession('claude_code', 'Claude Chat')}
               onStartCodex={() => void createChatSession('codex', 'Codex Chat')}
+              onStartKimi={() => void createChatSession('kimi_code', 'Kimi Chat')}
               onStartLocalProfile={(profile) => void createTerminal('agent', profile.agent as TerminalProfile, profile.label, profile.id)}
               onStartShell={() => void createTerminal('shell', 'shell', 'Shell')}
             />

@@ -24,11 +24,19 @@ export function useEnvironmentCheck({ settingsState, setSettingsState }: UseEnvi
       return items;
     } catch (err) {
       forgeWarn('environment', 'check failed', { err });
-      const unknownItems: EnvironmentCheckItem[] = ['git', 'tmux', 'codex', 'claude', 'gh'].map((binary) => ({
-        name: binary === 'codex' ? 'codex CLI' : binary === 'claude' ? 'claude CLI' : binary === 'gh' ? 'GitHub CLI' : binary,
+      const unknownItems: EnvironmentCheckItem[] = ['git', 'tmux', 'codex', 'claude', 'kimi', 'gh'].map((binary) => ({
+        name: binary === 'codex'
+          ? 'codex CLI'
+          : binary === 'claude'
+            ? 'claude CLI'
+            : binary === 'kimi'
+              ? 'Kimi CLI'
+              : binary === 'gh'
+                ? 'GitHub CLI'
+                : binary,
         binary,
         status: 'unknown',
-        fix: `brew install ${binary}`,
+        fix: binary === 'kimi' ? 'uv tool install kimi-cli' : `brew install ${binary}`,
         optional: binary === 'gh',
         path: null,
       }));

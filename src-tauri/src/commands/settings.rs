@@ -36,12 +36,15 @@ pub fn get_ai_model_settings(state: State<'_, AppState>) -> Result<AiModelSettin
     };
     let codex_agent_model = settings_repository::get_value(&state.db, "codex_agent_default_model")?
         .unwrap_or_else(|| "gpt-5.4".to_string());
+    let kimi_agent_model = settings_repository::get_value(&state.db, "kimi_agent_default_model")?
+        .unwrap_or_else(|| "kimi-for-coding".to_string());
     let orchestrator_model = settings_repository::get_value(&state.db, "orchestrator_model")?
         .unwrap_or_else(|| "claude-opus-4-6".to_string());
     Ok(AiModelSettings {
         agent_model: claude_agent_model.clone(),
         claude_agent_model,
         codex_agent_model,
+        kimi_agent_model,
         orchestrator_model,
     })
 }
@@ -64,6 +67,11 @@ pub fn save_ai_model_settings(
         "codex_agent_default_model",
         &input.codex_agent_model,
     )?;
+    settings_repository::set_value(
+        &state.db,
+        "kimi_agent_default_model",
+        &input.kimi_agent_model,
+    )?;
     settings_repository::set_value(&state.db, "orchestrator_model", &input.orchestrator_model)?;
     // Update live orchestrator model in AppState.
     if let Ok(mut guard) = state.orchestrator_model.lock() {
@@ -74,6 +82,7 @@ pub fn save_ai_model_settings(
         agent_model: claude_model.clone(),
         claude_agent_model: claude_model,
         codex_agent_model: input.codex_agent_model,
+        kimi_agent_model: input.kimi_agent_model,
         orchestrator_model: input.orchestrator_model,
     })
 }

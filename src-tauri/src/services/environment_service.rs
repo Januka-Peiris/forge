@@ -37,6 +37,12 @@ const DEPENDENCIES: &[Dependency] = &[
         optional: false,
     },
     Dependency {
+        name: "Kimi CLI",
+        binary: "kimi",
+        fix: "uv tool install kimi-cli",
+        optional: false,
+    },
+    Dependency {
         name: "GitHub CLI",
         binary: "gh",
         fix: "brew install gh",
@@ -197,8 +203,9 @@ mod tests {
     #[test]
     fn environment_check_shape_is_stable() {
         let items = check_environment();
-        assert_eq!(items.len(), 6);
+        assert_eq!(items.len(), 7);
         assert!(items.iter().any(|item| item.binary == "git"));
+        assert!(items.iter().any(|item| item.binary == "kimi"));
         assert!(items
             .iter()
             .any(|item| item.binary == "gh" && item.optional));

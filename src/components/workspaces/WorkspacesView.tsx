@@ -102,7 +102,7 @@ export function WorkspacesView({
               <QuickStartCard 
                 icon={<Bot className="h-5 w-5 text-forge-violet" />}
                 title="Configure Agents"
-                description="Set up Claude, Codex, or local LLMs in Settings."
+                description="Set up Claude, Codex, Kimi, or local LLMs in Settings."
                 onClick={() => {}} 
               />
             </div>
@@ -165,4 +165,3 @@ export function WorkspacesView({
     </div>
   );
 }
-

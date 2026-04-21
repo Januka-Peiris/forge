@@ -65,7 +65,7 @@ interface WorkspaceHeaderProps {
   focusedChatId: string | null;
   agentProfiles: AgentProfile[];
   onOpenInCursor?: () => void;
-  onCreateChatSession: (provider: 'claude_code' | 'codex' | 'local_llm', title?: string) => void;
+  onCreateChatSession: (provider: 'claude_code' | 'codex' | 'kimi_code' | 'local_llm', title?: string) => void;
   onCreateTerminal: (kind: 'agent' | 'shell', profile: TerminalProfile, title?: string, profileId?: string) => void;
   onCopyFocusedOutput: () => void;
   onInterruptFocusedAgent: () => void;
@@ -228,6 +228,9 @@ export function WorkspaceHeader({
               </DropdownMenuItem>
               <DropdownMenuItem disabled={busy} onSelect={() => onCreateChatSession('codex', 'Codex Chat')}>
                 New Codex tab
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={busy} onSelect={() => onCreateChatSession('kimi_code', 'Kimi Chat')}>
+                New Kimi tab
               </DropdownMenuItem>
               <DropdownMenuItem disabled={busy} onSelect={() => onCreateChatSession('local_llm', 'Local LLM Chat')}>
                 New Local LLM tab

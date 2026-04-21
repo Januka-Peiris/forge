@@ -18,7 +18,7 @@ import { formatCommandPreview, parseCommandArgs } from '../../lib/shell-args';
 
 import type { AgentProfile, LocalLlmModel, LocalLlmProfileDiagnostic } from '../../types';
 
-const DEFAULT_PROFILE_IDS = new Set(['claude-default', 'claude-plan', 'codex-default', 'codex-high', 'shell']);
+const DEFAULT_PROFILE_IDS = new Set(['claude-default', 'claude-plan', 'codex-default', 'codex-high', 'kimi-default', 'shell']);
 
 export function AgentProfilesCard() {
   const [effectiveProfiles, setEffectiveProfiles] = useState<AgentProfile[]>([]);

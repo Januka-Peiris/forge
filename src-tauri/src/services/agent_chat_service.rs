@@ -43,7 +43,7 @@ pub fn create_agent_chat_session(
         provider: provider.clone(),
         status: "idle".to_string(),
         title,
-        provider_session_id: if provider == "claude_code" {
+        provider_session_id: if matches!(provider.as_str(), "claude_code" | "kimi_code") {
             Some(pseudo_uuid())
         } else {
             None
@@ -328,6 +328,35 @@ fn command_for_session(
             command.arg(prompt);
             Ok(command)
         }
+        "kimi_code" => {
+            let command_path = resolve_binary("kimi")?;
+            let mut command = Command::new(command_path);
+            command.args([
+                "--print",
+                "--output-format=stream-json",
+                "--work-dir",
+                &session.cwd,
+            ]);
+            if let Some(provider_session_id) = session.provider_session_id.as_deref() {
+                if resume_provider_session {
+                    command.args(["--resume", provider_session_id]);
+                } else {
+                    command.args(["--session", provider_session_id]);
+                }
+            }
+            if let Some(model) = input
+                .model
+                .as_deref()
+                .filter(|model| !model.trim().is_empty())
+            {
+                command.args(["--model", model.trim()]);
+            }
+            if let Some(thinking) = input.reasoning.as_deref().and_then(normalize_kimi_thinking) {
+                command.arg(thinking);
+            }
+            command.args(["--prompt", prompt]);
+            Ok(command)
+        }
         "local_llm" => {
             let profile = agent_profile_service::resolve_agent_profile(
                 state,
@@ -542,6 +571,7 @@ fn normalize_provider(provider: &str) -> String {
     match provider.trim().to_lowercase().as_str() {
         "claude" | "claude-code" | "claude_code" => "claude_code".to_string(),
         "codex" => "codex".to_string(),
+        "kimi" | "kimi-code" | "kimi_code" => "kimi_code".to_string(),
         "local" | "local_llm" | "ollama" => "local_llm".to_string(),
         _ => "claude_code".to_string(),
     }
@@ -550,6 +580,7 @@ fn normalize_provider(provider: &str) -> String {
 fn default_title(provider: &str) -> &'static str {
     match provider {
         "codex" => "Codex Chat",
+        "kimi_code" => "Kimi Chat",
         "local_llm" => "Local LLM Chat",
         _ => "Claude Chat",
     }
@@ -589,6 +620,14 @@ fn normalize_codex_reasoning(input: &str) -> Option<&'static str> {
         "low" => Some("low"),
         "medium" => Some("medium"),
         "high" => Some("high"),
+        _ => None,
+    }
+}
+
+fn normalize_kimi_thinking(input: &str) -> Option<&'static str> {
+    match input.trim().to_lowercase().as_str() {
+        "on" | "true" | "thinking" | "enabled" => Some("--thinking"),
+        "off" | "false" | "no-thinking" | "disabled" => Some("--no-thinking"),
         _ => None,
     }
 }
@@ -696,5 +735,23 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].event_type, "assistant_message");
         assert_eq!(events[0].body, text);
+    }
+
+    #[test]
+    fn parses_kimi_assistant_and_tool_messages() {
+        let events = parse_adapter_line(
+            "kimi_code",
+            r#"{"role":"assistant","content":"I'll run tests.","tool_calls":[{"type":"function","id":"tc_1","function":{"name":"Shell","arguments":"{\"command\":\"cargo test\"}"}}]}"#,
+        );
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].event_type, "assistant_message");
+        assert_eq!(events[1].event_type, "command");
+
+        let tool_result = parse_adapter_line(
+            "kimi_code",
+            r#"{"role":"tool","tool_call_id":"tc_1","content":"ok"}"#,
+        );
+        assert_eq!(tool_result.len(), 1);
+        assert_eq!(tool_result[0].event_type, "tool_result");
     }
 }

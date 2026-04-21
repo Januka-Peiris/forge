@@ -55,9 +55,24 @@ const CODEX_REASONING_OPTIONS = [
   { value: 'xhigh', label: 'Extra High', hint: 'maximum reasoning' },
 ];
 
+const KIMI_MODEL_OPTIONS = [
+  { value: 'kimi-for-coding', label: 'Kimi for Coding' },
+  { value: 'kimi-k2.6', label: 'Kimi K2.6' },
+  { value: 'kimi-k2.5', label: 'Kimi K2.5' },
+];
+
+const KIMI_THINKING_OPTIONS = [
+  { value: 'default', label: 'Default', hint: 'session default' },
+  { value: 'on', label: 'On', hint: 'enable --thinking' },
+  { value: 'off', label: 'Off', hint: 'enable --no-thinking' },
+];
+
 function compactLabel(model: string, provider?: string) {
   if (provider === 'codex') {
     return CODEX_MODEL_OPTIONS.find((o) => o.value === model)?.label ?? model;
+  }
+  if (provider === 'kimi_code') {
+    return KIMI_MODEL_OPTIONS.find((o) => o.value === model)?.label ?? model;
   }
   return CLAUDE_MODEL_OPTIONS.find((o) => o.value === model)?.label
     ?? model.replace(/^claude-/, '').replace(/-/g, ' ').replace(/\b(opus|sonnet|haiku)\b/i, (m) => m[0].toUpperCase() + m.slice(1));
@@ -259,8 +274,17 @@ export function WorkspaceComposer({
   };
 
   const provider = focusedChatSession?.provider ?? 'claude_code';
-  const modelOptions = provider === 'codex' ? CODEX_MODEL_OPTIONS : CLAUDE_MODEL_OPTIONS;
-  const thinkingOptions = provider === 'codex' ? CODEX_REASONING_OPTIONS : CLAUDE_THINKING_OPTIONS;
+  const providerLabel = provider === 'codex' ? 'Codex' : provider === 'kimi_code' ? 'Kimi' : 'Claude';
+  const modelOptions = provider === 'codex'
+    ? CODEX_MODEL_OPTIONS
+    : provider === 'kimi_code'
+      ? KIMI_MODEL_OPTIONS
+      : CLAUDE_MODEL_OPTIONS;
+  const thinkingOptions = provider === 'codex'
+    ? CODEX_REASONING_OPTIONS
+    : provider === 'kimi_code'
+      ? KIMI_THINKING_OPTIONS
+      : CLAUDE_THINKING_OPTIONS;
 
   return (
     <div className="shrink-0 border-t border-forge-border bg-forge-surface" style={{ height: `${composerHeight}px` }}>
@@ -274,7 +298,7 @@ export function WorkspaceComposer({
         <div className="shrink-0 flex items-center gap-2 overflow-x-auto">
           {focusedChatSession && (
             <div className="flex shrink-0 items-center gap-1 rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-muted">
-              {(provider === 'claude_code' || provider === 'codex') && (
+              {(provider === 'claude_code' || provider === 'codex' || provider === 'kimi_code') && (
                 <>
                   <button
                     onClick={onTogglePlanMode}
@@ -288,7 +312,7 @@ export function WorkspaceComposer({
                 </>
               )}
               <Select value={settings.selectedModel} onValueChange={(v) => onSettingsChange({ selectedModel: v })}>
-                <SelectTrigger compact title={`${provider === 'codex' ? 'Codex' : 'Claude'} model`}><SelectValue /></SelectTrigger>
+                <SelectTrigger compact title={`${providerLabel} model`}><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {modelOptions.map((model) => (
                     <SelectItem key={model.value} value={model.value}>{compactLabel(model.value, provider)}</SelectItem>
@@ -305,8 +329,8 @@ export function WorkspaceComposer({
               >
                 <SelectTrigger
                   compact
-                  title={`${provider === 'codex' ? 'Codex' : 'Claude'} thinking / effort`}
-                  className={settings.selectedReasoning === 'Default' || settings.selectedReasoning === 'medium' ? 'text-forge-muted' : settings.selectedReasoning === 'Max' || settings.selectedReasoning === 'Extra High' || settings.selectedReasoning === 'high' ? 'bg-forge-violet/15 text-forge-violet' : 'bg-forge-blue/10 text-forge-blue'}
+                  title={`${providerLabel} thinking / effort`}
+                  className={settings.selectedReasoning === 'Default' || settings.selectedReasoning === 'default' || settings.selectedReasoning === 'medium' ? 'text-forge-muted' : settings.selectedReasoning === 'Max' || settings.selectedReasoning === 'Extra High' || settings.selectedReasoning === 'high' || settings.selectedReasoning === 'on' ? 'bg-forge-violet/15 text-forge-violet' : 'bg-forge-blue/10 text-forge-blue'}
                 >
                   <SelectValue />
                 </SelectTrigger>
@@ -340,7 +364,7 @@ export function WorkspaceComposer({
               </Button>
             </PopoverTrigger>
             <PopoverContent align="start" className="min-w-[240px] max-h-[min(480px,80vh)] overflow-y-auto">
-              <p className="mb-2 text-xs font-bold uppercase tracking-widest text-forge-muted">{provider === 'codex' ? 'Codex' : 'Claude'} Agent Settings</p>
+              <p className="mb-2 text-xs font-bold uppercase tracking-widest text-forge-muted">{providerLabel} Agent Settings</p>
               <div className="space-y-2">
                 {provider === 'claude_code' && (
                   <div>
@@ -364,7 +388,7 @@ export function WorkspaceComposer({
                       )}
                     </SelectContent>
                   </Select>
-                  <p className="mt-1 text-xs text-forge-muted">Passed to {provider === 'codex' ? 'Codex' : 'Claude'} as <span className="font-mono">--model</span>.</p>
+                  <p className="mt-1 text-xs text-forge-muted">Passed to {providerLabel} as <span className="font-mono">--model</span>.</p>
                 </div>
                 <div>
                   <label className="mb-1 block text-xs text-forge-muted">Task mode</label>
@@ -395,7 +419,9 @@ export function WorkspaceComposer({
                       {thinkingOptions.map((l) => <SelectItem key={l.value} value={l.value}>{l.label} · {l.hint}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <p className="mt-1 text-xs text-forge-muted">Maps to {provider === 'codex' ? 'Codex model_reasoning_effort' : 'Claude --effort'}.</p>
+                  <p className="mt-1 text-xs text-forge-muted">
+                    Maps to {provider === 'codex' ? 'Codex model_reasoning_effort' : provider === 'kimi_code' ? 'Kimi --thinking / --no-thinking' : 'Claude --effort'}.
+                  </p>
                 </div>
                 <div>
                   <label className="mb-1 block text-xs text-forge-muted">Send behavior</label>

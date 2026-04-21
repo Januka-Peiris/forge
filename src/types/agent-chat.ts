@@ -1,4 +1,4 @@
-export type AgentChatProvider = 'claude_code' | 'codex' | string;
+export type AgentChatProvider = 'claude_code' | 'codex' | 'kimi_code' | string;
 export type AgentChatStatus = 'idle' | 'running' | 'succeeded' | 'failed' | 'interrupted' | string;
 
 export interface AgentChatSession {

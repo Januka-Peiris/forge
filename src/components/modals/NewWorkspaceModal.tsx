@@ -274,7 +274,7 @@ export function NewWorkspaceModal({ onClose, onCreate, repositories, initialRepo
               <div className="flex items-center gap-1.5"><Bot className="w-3 h-3" />Agent</div>
             </label>
             <div className="grid grid-cols-3 gap-2">
-              {(['Claude Code', 'Codex', 'Local LLM'] as const).map((a) => (
+              {(['Claude Code', 'Codex', 'Kimi Code', 'Local LLM'] as const).map((a) => (
                 <Button
                   key={a}
                   type="button"

@@ -13,6 +13,7 @@ export interface SaveRepoRootsInput {
 export interface AiModelSettings {
   claudeAgentModel: string;
   codexAgentModel: string;
+  kimiAgentModel: string;
   agentModel: string;
   orchestratorModel: string;
 }
@@ -20,6 +21,7 @@ export interface AiModelSettings {
 export interface SaveAiModelSettingsInput {
   claudeAgentModel: string;
   codexAgentModel: string;
+  kimiAgentModel: string;
   agentModel: string;
   orchestratorModel: string;
 }
