@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
@@ -6,7 +5,6 @@ import {
   ChevronRight,
   Bot,
   CheckCircle2,
-  ExternalLink,
   FileCode,
   GitPullRequest,
   MessageSquare,
@@ -41,6 +39,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { UnifiedDiffView } from './UnifiedDiffView';
 import { useAgentProfile } from '../../lib/hooks/useAgentProfile';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { ReviewCockpitCommentItem } from './ReviewCockpitCommentItem';
+import { ReviewBadge } from './ReviewBadge';
 
 interface ReviewCockpitProps {
   workspace: Workspace | null;
@@ -223,70 +223,6 @@ export function ReviewCockpit({
       setBusy(false);
     }
   };
-
-
-  const renderComment = (comment: WorkspacePrComment) => (
-    <div
-      id={`review-comment-${comment.commentId}`}
-      key={comment.commentId}
-      className={`p-3 ${targetCommentId === comment.commentId ? 'bg-forge-blue/10' : ''}`}
-    >
-      <div className="mb-1.5 flex items-start justify-between gap-2">
-        <span className="flex items-center gap-1 text-ui-label font-semibold text-forge-text">
-          <MessageSquare className="h-3 w-3 shrink-0 text-forge-muted" />
-          {comment.author}
-        </span>
-        {(comment.path || comment.line || comment.state === 'resolved_local') && (
-          <span className="shrink-0 rounded bg-forge-surface-overlay px-1.5 py-0.5 font-mono text-ui-tiny text-forge-muted">
-            {comment.state === 'resolved_local' ? 'resolved local' : comment.line ? `:${comment.line}` : 'general'}
-          </span>
-        )}
-      </div>
-
-      <p className="max-h-28 overflow-auto whitespace-pre-wrap text-ui-label leading-relaxed text-forge-text/80">
-        {comment.body}
-      </p>
-
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        {comment.path && comment.path !== effectiveSelectedPath && (
-          <button
-            disabled={busy}
-            onClick={() => void selectFile(comment.path!)}
-            className="flex items-center gap-1 rounded-md border border-forge-border bg-forge-surface-overlay px-2 py-1 text-ui-caption font-semibold text-forge-muted hover:bg-forge-surface-overlay-high disabled:opacity-50"
-          >
-            <FileCode className="h-3 w-3" /> Open file
-          </button>
-        )}
-        <button
-          disabled={busy}
-          onClick={() => void sendPrompt('address_comment', comment)}
-          className="flex items-center gap-1 rounded-md border border-forge-green/25 bg-forge-green/10 px-2 py-1 text-ui-caption font-semibold text-forge-green hover:bg-forge-green/15 disabled:opacity-50"
-        >
-          <Send className="h-3 w-3" /> Send
-        </button>
-        <button
-          disabled={busy || comment.state === 'resolved_local'}
-          onClick={() => void resolveComment(comment.commentId)}
-          className="flex items-center gap-1 rounded-md border border-forge-border bg-forge-surface-overlay px-2 py-1 text-ui-caption font-semibold text-forge-muted hover:bg-forge-surface-overlay-high disabled:opacity-50"
-        >
-          {comment.state === 'resolved_local' ? (
-            <CheckCircle2 className="h-3 w-3 text-forge-green" />
-          ) : null}
-          {comment.state === 'resolved_local' ? 'Resolved' : 'Resolve'}
-        </button>
-        {comment.url && (
-          <a
-            href={comment.url}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-1 rounded-md px-2 py-1 text-ui-caption font-semibold text-forge-blue hover:bg-forge-blue/10"
-          >
-            <ExternalLink className="h-3 w-3" />
-          </a>
-        )}
-      </div>
-    </div>
-  );
 
 
   // ── Empty state ───────────────────────────────────────────────────────────
@@ -612,7 +548,7 @@ export function ReviewCockpit({
               </div>
               {/* Risk + readiness badges */}
               <div className="flex flex-wrap gap-1.5">
-                <Badge
+                <ReviewBadge
                   tone={
                     cockpit?.reviewSummary?.riskLevel === 'high'
                       ? 'red'
@@ -622,8 +558,8 @@ export function ReviewCockpit({
                   }
                 >
                   {cockpit?.reviewSummary?.riskLevel ?? 'no'} risk
-                </Badge>
-                <Badge
+                </ReviewBadge>
+                <ReviewBadge
                   tone={
                     cockpit?.mergeReadiness?.readinessLevel === 'blocked'
                       ? 'red'
@@ -633,7 +569,7 @@ export function ReviewCockpit({
                   }
                 >
                   {cockpit?.mergeReadiness?.readinessLevel ?? 'unknown'} readiness
-                </Badge>
+                </ReviewBadge>
               </div>
               {/* Summary text */}
               {cockpit?.reviewSummary?.summary && (
@@ -732,7 +668,18 @@ export function ReviewCockpit({
                         <span className="shrink-0 rounded bg-forge-surface-overlay px-1.5 py-0.5 font-mono">{group.comments.length}</span>
                       </button>
                       <div className="divide-y divide-forge-border/40">
-                        {group.comments.map(renderComment)}
+                        {group.comments.map((comment) => (
+                          <ReviewCockpitCommentItem
+                            key={comment.commentId}
+                            comment={comment}
+                            busy={busy}
+                            targetCommentId={targetCommentId}
+                            effectiveSelectedPath={effectiveSelectedPath}
+                            onSelectFile={(path) => void selectFile(path)}
+                            onSendPrompt={(action, payload) => void sendPrompt(action, payload)}
+                            onResolveComment={(commentId) => void resolveComment(commentId)}
+                          />
+                        ))}
                       </div>
                     </div>
                   ))}
@@ -743,7 +690,18 @@ export function ReviewCockpit({
                         <span className="rounded bg-forge-surface-overlay px-1.5 py-0.5 font-mono">{prCommentGroups.general.length}</span>
                       </div>
                       <div className="divide-y divide-forge-border/40">
-                        {prCommentGroups.general.map(renderComment)}
+                        {prCommentGroups.general.map((comment) => (
+                          <ReviewCockpitCommentItem
+                            key={comment.commentId}
+                            comment={comment}
+                            busy={busy}
+                            targetCommentId={targetCommentId}
+                            effectiveSelectedPath={effectiveSelectedPath}
+                            onSelectFile={(path) => void selectFile(path)}
+                            onSendPrompt={(action, payload) => void sendPrompt(action, payload)}
+                            onResolveComment={(commentId) => void resolveComment(commentId)}
+                          />
+                        ))}
                       </div>
                     </div>
                   )}
@@ -754,26 +712,5 @@ export function ReviewCockpit({
         </div>
       </div>
     </div>
-  );
-}
-
-function Badge({
-  tone,
-  children,
-}: {
-  tone: 'neutral' | 'green' | 'yellow' | 'red' | 'blue';
-  children: ReactNode;
-}) {
-  const classes = {
-    neutral: 'border-forge-border bg-forge-surface-overlay text-forge-muted',
-    green: 'border-forge-green/25 bg-forge-green/10 text-forge-green',
-    yellow: 'border-forge-yellow/25 bg-forge-yellow/10 text-forge-yellow',
-    red: 'border-forge-red/25 bg-forge-red/10 text-forge-red',
-    blue: 'border-forge-blue/25 bg-forge-blue/10 text-forge-blue',
-  }[tone];
-  return (
-    <span className={`rounded-full border px-2 py-0.5 text-ui-caption font-semibold ${classes}`}>
-      {children}
-    </span>
   );
 }
