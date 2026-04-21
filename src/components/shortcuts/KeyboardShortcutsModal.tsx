@@ -11,6 +11,7 @@ const SHORTCUTS = [
   ['[ / ]', 'Previous / next workspace'],
   ['Cmd/Ctrl Shift D', 'Toggle detail panel'],
   ['Cmd/Ctrl Shift R', 'Open Review Cockpit'],
+  ['Shift Tab', 'Toggle Plan / Act mode'],
   ['Enter', 'Send composer prompt'],
   ['Shift Enter', 'New line in composer'],
   ['Esc', 'Blur composer or close this help'],

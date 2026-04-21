@@ -26,6 +26,10 @@ function focusWorkspaceComposer(): void {
   window.dispatchEvent(new CustomEvent('forge:focus-composer'));
 }
 
+function toggleWorkspacePlanMode(): void {
+  window.dispatchEvent(new CustomEvent('forge:toggle-plan-mode'));
+}
+
 export function useAppKeyboardShortcuts({
   commandPaletteOpen,
   displayedWorkspaces,
@@ -85,6 +89,15 @@ export function useAppKeyboardShortcuts({
         if (!selectedWorkspaceId) return;
         event.preventDefault();
         onOpenReviews();
+        return;
+      }
+
+      if (event.key === 'Tab' && event.shiftKey && !meta && !event.altKey) {
+        if (editableTarget) return;
+        if (!selectedWorkspaceId) return;
+        event.preventDefault();
+        onSetWorkspacesView();
+        window.setTimeout(toggleWorkspacePlanMode, 0);
         return;
       }
 

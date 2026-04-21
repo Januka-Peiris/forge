@@ -149,6 +149,21 @@ fn parse_codex_json_line(value: &Value) -> Vec<ParsedAgentEvent> {
         .or_else(|| value.get("event"))
         .and_then(Value::as_str)
         .unwrap_or("");
+
+    if let Some(item) = value.get("item") {
+        let item_type = item.get("type").and_then(Value::as_str).unwrap_or("");
+        if item_type == "agent_message" {
+            if let Some(text) = item
+                .get("text")
+                .and_then(Value::as_str)
+                .filter(|s| !s.trim().is_empty())
+            {
+                out.push(assistant_text(text));
+            }
+            return out;
+        }
+    }
+
     if let Some(text) = value
         .get("message")
         .or_else(|| value.get("text"))

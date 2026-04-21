@@ -9,11 +9,19 @@ import type { AppSettings } from '../../types';
 import { AgentProfilesCard } from './AgentProfilesCard';
 import { RepositoriesCard } from './RepositoriesCard';
 
-const AGENT_MODELS = [
+const CLAUDE_AGENT_MODELS = [
   { value: 'claude-opus-4-7', label: 'Claude Opus 4.7 (1M context)' },
   { value: 'claude-opus-4-6', label: 'Claude Opus 4.6 (1M context)' },
   { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (fast + capable)' },
   { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 (fast + cheap)' },
+];
+
+const CODEX_AGENT_MODELS = [
+  { value: 'gpt-5.4', label: 'GPT-5.4 (Flagship)' },
+  { value: 'gpt-5.4-mini', label: 'GPT-5.4 mini' },
+  { value: 'gpt-5.3-codex', label: 'GPT-5.3 Codex' },
+  { value: 'gpt-5.3-codex-spark', label: 'GPT-5.3 Spark' },
+  { value: 'o4-mini', label: 'o4-mini' },
 ];
 
 const ORCHESTRATOR_MODELS = [
@@ -59,16 +67,42 @@ function AiModelsCard() {
     <div className="rounded-xl border border-forge-border bg-forge-card p-4">
       <div className="mb-4">
         <h2 className="text-[14px] font-bold text-forge-text">AI Models</h2>
-        <p className="text-[11px] text-forge-muted mt-0.5">Choose which Claude model powers each role. Changes take effect immediately.</p>
+        <p className="text-[11px] text-forge-muted mt-0.5">Choose default models for Claude, Codex, and orchestrator roles. Changes take effect immediately.</p>
       </div>
       <div className="space-y-4">
         <div>
-          <label className="text-[12px] font-semibold text-forge-text block mb-1">Coding Agent model</label>
-          <p className="text-[11px] text-forge-muted mb-2">Used for all workspace terminal sessions (the agent that writes code).</p>
-          <Select value={modelSettings.agentModel} onValueChange={(v) => setModelSettings({ ...modelSettings, agentModel: v })}>
+          <label className="text-[12px] font-semibold text-forge-text block mb-1">Claude default model</label>
+          <p className="text-[11px] text-forge-muted mb-2">Used when starting or focusing Claude chats.</p>
+          <Select
+            value={modelSettings.claudeAgentModel || modelSettings.agentModel}
+            onValueChange={(v) => setModelSettings({ ...modelSettings, claudeAgentModel: v, agentModel: v })}
+          >
             <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
-              {AGENT_MODELS.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+              {CLAUDE_AGENT_MODELS.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+              {!CLAUDE_AGENT_MODELS.some((m) => m.value === (modelSettings.claudeAgentModel || modelSettings.agentModel)) && (
+                <SelectItem value={modelSettings.claudeAgentModel || modelSettings.agentModel}>
+                  {modelSettings.claudeAgentModel || modelSettings.agentModel}
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <label className="text-[12px] font-semibold text-forge-text block mb-1">Codex default model</label>
+          <p className="text-[11px] text-forge-muted mb-2">Used when starting or focusing Codex chats.</p>
+          <Select
+            value={modelSettings.codexAgentModel}
+            onValueChange={(v) => setModelSettings({ ...modelSettings, codexAgentModel: v })}
+          >
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {CODEX_AGENT_MODELS.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+              {!CODEX_AGENT_MODELS.some((m) => m.value === modelSettings.codexAgentModel) && (
+                <SelectItem value={modelSettings.codexAgentModel}>
+                  {modelSettings.codexAgentModel}
+                </SelectItem>
+              )}
             </SelectContent>
           </Select>
         </div>

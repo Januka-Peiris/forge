@@ -64,13 +64,13 @@ export function AgentChatPanel({
           <div className="flex items-center gap-3">
             {tab === 'chat' && (
               <div className="flex items-center gap-2">
-                <span title="Conversation-first view: hides compact tool, file, and command timeline events." className={`text-[10px] font-bold uppercase tracking-tight ${chatMode === 'clean' ? 'text-forge-green' : 'text-forge-muted'}`}>Chat</span>
+                <span title="Conversation-first view: hides compact tool, file, and command timeline events." className={`text-[10px] font-bold uppercase tracking-tight ${chatMode === 'clean' ? 'text-forge-text/85' : 'text-forge-muted'}`}>Chat</span>
                 <Switch 
                   title="Toggle between Chat and Activity views"
                   checked={chatMode === 'full'} 
                   onCheckedChange={(full) => setChatMode(full ? 'full' : 'clean')} 
                 />
-                <span title="Activity view: includes compact tool, file, command, and test timeline events." className={`text-[10px] font-bold uppercase tracking-tight ${chatMode === 'full' ? 'text-forge-green' : 'text-forge-muted'}`}>Activity</span>
+                <span title="Activity view: includes compact tool, file, command, and test timeline events." className={`text-[10px] font-bold uppercase tracking-tight ${chatMode === 'full' ? 'text-forge-text/85' : 'text-forge-muted'}`}>Activity</span>
               </div>
             )}
           </div>
@@ -311,7 +311,7 @@ function AgentEventCard({
   if (event.eventType === 'user_message') {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[78%] rounded bg-forge-green px-3 py-2 text-sm leading-relaxed text-white">
+        <div className="max-w-[78%] rounded bg-forge-green/55 px-3 py-2 text-sm leading-relaxed text-white">
           {event.body}
         </div>
       </div>
@@ -410,7 +410,7 @@ function RunningCard() {
   return (
     <div className="flex justify-start">
       <div className="flex items-center gap-2 rounded border border-forge-border bg-forge-surface/50 px-2 py-1 text-xs text-forge-muted">
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-forge-green" />
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-forge-green/55" />
         Agent is working…
       </div>
     </div>
@@ -512,7 +512,7 @@ function TimelineEventRow({ event }: { event: AgentChatEvent }) {
             <span className="min-w-0 flex-1 truncate font-mono">{detail}</span>
           </>
         )}
-        {running && <span className="ml-auto h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-forge-green" />}
+        {running && <span className="ml-auto h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-forge-green/55" />}
       </button>
       {open && hasBody && (
         <pre className="mt-0.5 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded border border-forge-border/40 bg-forge-bg/60 p-2 font-mono text-[11px] leading-relaxed text-forge-text/80">

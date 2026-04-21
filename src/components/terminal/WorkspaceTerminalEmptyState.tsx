@@ -7,7 +7,6 @@ interface WorkspaceTerminalEmptyStateProps {
   localAgentProfiles: AgentProfile[];
   onStartClaude: () => void;
   onStartCodex: () => void;
-  onStartLocalLLM: () => void;
   onStartLocalProfile: (profile: AgentProfile) => void;
   onStartShell: () => void;
 }
@@ -17,7 +16,6 @@ export function WorkspaceTerminalEmptyState({
   localAgentProfiles,
   onStartClaude,
   onStartCodex,
-  onStartLocalLLM,
   onStartLocalProfile,
   onStartShell,
 }: WorkspaceTerminalEmptyStateProps) {
@@ -44,6 +42,9 @@ export function WorkspaceTerminalEmptyState({
                   Start {profile.label}
                 </DropdownMenuItem>
               ))}
+              <DropdownMenuItem disabled={busy} onSelect={onStartShell}>
+                New Shell
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

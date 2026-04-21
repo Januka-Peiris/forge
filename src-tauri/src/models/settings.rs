@@ -21,6 +21,10 @@ pub struct SaveRepoRootsInput {
 pub struct AiModelSettings {
     /// Model used by Claude Code coding agents (e.g. "claude-sonnet-4-6").
     pub agent_model: String,
+    /// Alias for `agent_model`, exposed for explicit provider-aware clients.
+    pub claude_agent_model: String,
+    /// Model used by Codex coding agents (e.g. "gpt-5.4").
+    pub codex_agent_model: String,
     /// Model used by the Opus orchestrator brain (e.g. "claude-opus-4-6").
     pub orchestrator_model: String,
 }
@@ -29,5 +33,7 @@ pub struct AiModelSettings {
 #[serde(rename_all = "camelCase")]
 pub struct SaveAiModelSettingsInput {
     pub agent_model: String,
+    pub claude_agent_model: String,
+    pub codex_agent_model: String,
     pub orchestrator_model: String,
 }

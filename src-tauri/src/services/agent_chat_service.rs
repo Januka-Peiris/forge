@@ -329,7 +329,7 @@ fn command_for_session(
         }
         "local_llm" => {
             let profile = agent_profile_service::resolve_agent_profile(
-                &state,
+                state,
                 Some(&session.workspace_id),
                 input.profile_id.as_deref(),
                 None,
@@ -382,7 +382,7 @@ fn read_stderr(state: AppState, session: AgentChatSession, stderr: impl Read) {
     for line in reader.lines().map_while(Result::ok) {
         let raw = format!("[stderr] {line}\n");
         let _ = agent_chat_repository::append_raw_output(&state.db, &session.id, &raw);
-        if !line.trim().is_empty() {
+        if !line.trim().is_empty() && should_surface_diagnostic_line(&session.provider, &line) {
             let _ = append_event(
                 &state,
                 &session,
@@ -397,6 +397,25 @@ fn read_stderr(state: AppState, session: AgentChatSession, stderr: impl Read) {
             );
         }
     }
+}
+
+fn should_surface_diagnostic_line(provider: &str, line: &str) -> bool {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    if provider != "codex" {
+        return true;
+    }
+
+    // Codex may emit MCP auth noise to stderr when optional MCP servers are configured
+    // but not authenticated. Keep this in Raw output while avoiding chat clutter.
+    let lower = trimmed.to_lowercase();
+    !(lower.contains("reading additional input from stdin")
+        || lower.contains("rmcp::transport::worker: worker quit with fatal")
+        || lower.contains("transport channel closed")
+        || lower.contains("authrequired(authrequirederror")
+        || lower.contains("no access token was provided in this request"))
 }
 
 fn wait_for_process(

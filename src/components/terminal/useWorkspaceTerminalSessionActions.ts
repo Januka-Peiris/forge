@@ -19,6 +19,7 @@ import {
 import {
   closeAgentChatSession,
   createAgentChatSession,
+  interruptAgentChatSession,
 } from '../../lib/tauri-api/agent-chat';
 import type { AgentChatEvent, AgentChatSession } from '../../types/agent-chat';
 import type { OutputMap } from './workspace-terminal-constants';
@@ -226,12 +227,18 @@ export function useWorkspaceTerminalSessionActions({
   };
 
   const interruptFocusedAgent = async () => {
-    if (!focusedSession) return;
+    const focusedChatId = focusedChatIdRef.current;
+    if (!focusedSession && !focusedChatId) return;
     setBusy(true);
     setError(null);
     try {
-      await interruptWorkspaceTerminalSessionById(focusedSession.id);
-      await refreshSessions(false);
+      if (focusedChatId) {
+        await interruptAgentChatSession(focusedChatId);
+        await refreshChatSessions(focusedChatId);
+      } else if (focusedSession) {
+        await interruptWorkspaceTerminalSessionById(focusedSession.id);
+        await refreshSessions(false);
+      }
       await refreshHealth();
       await refreshReadiness();
     } catch (err) {

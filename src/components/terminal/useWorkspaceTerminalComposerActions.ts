@@ -26,6 +26,7 @@ interface UseWorkspaceTerminalComposerActionsParams {
   setReviewCockpit: (cockpit: WorkspaceReviewCockpit | null) => void;
   setAcceptedPlans: Dispatch<SetStateAction<Record<string, string>>>;
   setComposerSettings: Dispatch<SetStateAction<ComposerSettings>>;
+  setQueuedPrompts: Dispatch<SetStateAction<Record<string, string[]>>>;
   setBusy: (busy: boolean) => void;
   setError: (error: string | null) => void;
   setActionError: (err: unknown) => void;
@@ -49,6 +50,7 @@ export function useWorkspaceTerminalComposerActions({
   setReviewCockpit,
   setAcceptedPlans,
   setComposerSettings,
+  setQueuedPrompts,
   setBusy,
   setError,
   setActionError,
@@ -57,7 +59,10 @@ export function useWorkspaceTerminalComposerActions({
   const togglePlanMode = () => {
     setComposerSettings((current) => {
       const next = current.selectedTaskMode === 'Plan' ? 'Act' : 'Plan';
-      return { ...current, selectedTaskMode: next, selectedClaudeAgent: next === 'Plan' ? 'Plan' : 'general-purpose' };
+      if (focusedChatSession?.provider === 'claude_code') {
+        return { ...current, selectedTaskMode: next, selectedClaudeAgent: next === 'Plan' ? 'Plan' : 'general-purpose' };
+      }
+      return { ...current, selectedTaskMode: next };
     });
   };
 
@@ -167,21 +172,33 @@ export function useWorkspaceTerminalComposerActions({
     }
   };
 
-  const sendPrompt = (text: string) => {
+  const sendPrompt = (text: string, opts?: { forceImmediate?: boolean }) => {
     if (!workspaceId || !text.trim()) return;
     const { sendBehavior, selectedTaskMode, selectedReasoning, selectedClaudeAgent, selectedModel } = composerSettings;
+    const effectiveBehavior = opts?.forceImmediate ? 'send_now' : sendBehavior;
 
     const work = async () => {
       setBusy(true);
       setError(null);
       try {
         if (focusedChatSession) {
+          if (focusedChatSession.status === 'running' && effectiveBehavior === 'queue_send') {
+            setQueuedPrompts((current) => ({
+              ...current,
+              [focusedChatSession.id]: [...(current[focusedChatSession.id] ?? []), text.trim()],
+            }));
+            return;
+          }
+          if (focusedChatSession.status === 'running' && effectiveBehavior === 'send_now') {
+            setError('Agent is still running. Use Interrupt + send or Queue if running.');
+            return;
+          }
           let prompt = text;
           const acceptedPlan = acceptedPlans[focusedChatSession.id];
           if (acceptedPlan && selectedTaskMode !== 'Plan' && !prompt.includes('Accepted implementation plan:')) {
             prompt = `Accepted implementation plan:\n${acceptedPlan}\n\nNow continue with this user request:\n${prompt}`;
           }
-          if (sendBehavior === 'interrupt_send' && focusedChatSession.status === 'running') {
+          if (effectiveBehavior === 'interrupt_send' && focusedChatSession.status === 'running') {
             await interruptAgentChatSession(focusedChatSession.id).catch(() => undefined);
           }
           await sendAgentChatMessage({
@@ -196,7 +213,7 @@ export function useWorkspaceTerminalComposerActions({
           await refreshChatSessions(focusedChatSession.id);
           return;
         }
-        if (sendBehavior === 'interrupt_send' && focusedSession) {
+        if (effectiveBehavior === 'interrupt_send' && focusedSession) {
           await interruptWorkspaceTerminalSessionById(focusedSession.id).catch(() => undefined);
         }
         const terminalProfileId = focusedSession?.terminalKind === 'agent' ? focusedSession.profile : selectedProfileId;

@@ -68,13 +68,15 @@ export interface ComposerSettings {
   selectedModel: string;
   selectedTaskMode: string;
   selectedReasoning: string;
-  sendBehavior: 'send_now' | 'interrupt_send';
+  sendBehavior: 'send_now' | 'interrupt_send' | 'queue_send';
 }
 
 interface WorkspaceComposerProps {
   workspaceId: string;
   focusedChatSession: AgentChatSession | null;
   busy: boolean;
+  canInterrupt: boolean;
+  queuedCount: number;
   promptTemplateWarning: string | null;
   promptTemplates: PromptTemplate[];
   agentContext: WorkspaceAgentContext | null;
@@ -83,12 +85,15 @@ interface WorkspaceComposerProps {
   onSend: (text: string) => void;
   onTogglePlanMode: () => void;
   onApplyWorkflowPreset: (preset: 'plan-act' | 'plan-codex-review' | 'implement-review-pr', defaultPrompt: string) => void;
+  onInterrupt: () => void;
 }
 
 export function WorkspaceComposer({
   workspaceId,
   focusedChatSession,
   busy,
+  canInterrupt,
+  queuedCount,
   promptTemplateWarning,
   promptTemplates,
   agentContext,
@@ -97,6 +102,7 @@ export function WorkspaceComposer({
   onSend,
   onTogglePlanMode,
   onApplyWorkflowPreset,
+  onInterrupt,
 }: WorkspaceComposerProps) {
   const [promptInput, setPromptInput] = useState('');
   const [composerHeight, setComposerHeight] = useState<number>(() => {
@@ -118,6 +124,12 @@ export function WorkspaceComposer({
     window.addEventListener('forge:focus-composer', onFocusComposer);
     return () => window.removeEventListener('forge:focus-composer', onFocusComposer);
   }, []);
+
+  useEffect(() => {
+    const handleTogglePlanMode = () => onTogglePlanMode();
+    window.addEventListener('forge:toggle-plan-mode', handleTogglePlanMode);
+    return () => window.removeEventListener('forge:toggle-plan-mode', handleTogglePlanMode);
+  }, [onTogglePlanMode]);
 
   const promptMeter = useMemo(() => {
     if (!promptInput.trim()) return null;
@@ -262,7 +274,7 @@ export function WorkspaceComposer({
         <div className="shrink-0 flex items-center gap-2 overflow-x-auto">
           {focusedChatSession && (
             <div className="flex shrink-0 items-center gap-1 rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-muted">
-              {provider === 'claude_code' && (
+              {(provider === 'claude_code' || provider === 'codex') && (
                 <>
                   <button
                     onClick={onTogglePlanMode}
@@ -392,6 +404,7 @@ export function WorkspaceComposer({
                     <SelectContent>
                       <SelectItem value="send_now">Send now</SelectItem>
                       <SelectItem value="interrupt_send">Interrupt + send</SelectItem>
+                      <SelectItem value="queue_send">Queue if running</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="mt-1.5 text-xs leading-snug text-forge-muted">
@@ -523,14 +536,29 @@ export function WorkspaceComposer({
             }}
           />
           <div className="flex flex-col gap-1.5">
+            {canInterrupt && (
+              <button
+                type="button"
+                onClick={onInterrupt}
+                className="rounded border border-forge-yellow/30 bg-forge-yellow/10 px-3 py-2 text-xs font-semibold text-forge-yellow hover:bg-forge-yellow/20"
+                title="Interrupt the running agent turn"
+              >
+                Interrupt
+              </button>
+            )}
             <button
               disabled={busy || !promptInput.trim()}
               onClick={handleSend}
-              className="rounded border border-forge-green/30 bg-forge-green/10 px-3 py-2 text-sm font-semibold text-forge-green hover:bg-forge-green/20 disabled:opacity-50"
+              className="rounded border border-forge-green/30 bg-forge-green/5 px-3 py-2 text-sm font-semibold text-forge-green/80 hover:bg-forge-green/10 disabled:opacity-50"
               title={settings.sendBehavior === 'interrupt_send' ? 'Interrupt then send (same as Enter)' : 'Send now (same as Enter)'}
             >
               <Zap className="inline h-3.5 w-3.5" /> Send
             </button>
+            {queuedCount > 0 && (
+              <div className="rounded border border-forge-border/60 bg-black/20 px-2 py-1 text-center text-[11px] text-forge-muted">
+                {queuedCount} queued
+              </div>
+            )}
           </div>
         </div>
       </div>

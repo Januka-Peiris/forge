@@ -11,11 +11,15 @@ export interface SaveRepoRootsInput {
 }
 
 export interface AiModelSettings {
+  claudeAgentModel: string;
+  codexAgentModel: string;
   agentModel: string;
   orchestratorModel: string;
 }
 
 export interface SaveAiModelSettingsInput {
+  claudeAgentModel: string;
+  codexAgentModel: string;
   agentModel: string;
   orchestratorModel: string;
 }

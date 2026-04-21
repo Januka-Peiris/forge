@@ -56,6 +56,16 @@ import { useWorkspaceTerminalSessionActions } from './useWorkspaceTerminalSessio
 import { useWorkspaceTerminalPolling } from './useWorkspaceTerminalPolling';
 import { useWorkspaceTerminalEvents } from './useWorkspaceTerminalEvents';
 
+const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-6';
+const DEFAULT_CODEX_MODEL = 'gpt-5.4';
+const CODEX_REASONING_VALUES = new Set(['low', 'medium', 'high', 'xhigh']);
+const CLAUDE_REASONING_VALUES = new Set(['Default', 'Low', 'Medium', 'High', 'Extra High', 'Max']);
+
+function isLikelyCodexModel(model: string): boolean {
+  const lower = model.toLowerCase();
+  return lower.startsWith('gpt-') || lower.startsWith('o3') || lower.startsWith('o4') || lower.includes('codex');
+}
+
 interface WorkspaceTerminalProps {
   workspace: Workspace | null;
   onOpenInCursor?: () => void;
@@ -85,10 +95,15 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   const [selectedProfileId, setSelectedProfileId] = useAgentProfile();
   const [composerSettings, setComposerSettings] = useState<ComposerSettings>({
     selectedClaudeAgent: 'general-purpose',
-    selectedModel: 'claude-sonnet-4-6',
+    selectedModel: DEFAULT_CLAUDE_MODEL,
     selectedTaskMode: 'Act',
     selectedReasoning: 'Default',
     sendBehavior: 'send_now',
+  });
+  const [queuedPrompts, setQueuedPrompts] = useState<Record<string, string[]>>({});
+  const [providerModelDefaults, setProviderModelDefaults] = useState({
+    claude: DEFAULT_CLAUDE_MODEL,
+    codex: DEFAULT_CODEX_MODEL,
   });
   const [error, setError] = useState<string | null>(null);
   const [pendingCommand, setPendingCommand] = useState<PendingCommand | null>(null);
@@ -357,7 +372,10 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
   const refreshModelSettings = useCallback(async () => {
     try {
       const settings = await getAiModelSettings();
-      setComposerSettings((current) => ({ ...current, selectedModel: settings.agentModel }));
+      const claudeModel = settings.claudeAgentModel || settings.agentModel || DEFAULT_CLAUDE_MODEL;
+      const codexModel = settings.codexAgentModel || DEFAULT_CODEX_MODEL;
+      setProviderModelDefaults({ claude: claudeModel, codex: codexModel });
+      setComposerSettings((current) => ({ ...current, selectedModel: claudeModel }));
     } catch (err) {
       forgeWarn('agent-models', 'load error', { err });
     }
@@ -382,6 +400,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     setChangedFiles([]);
     setReviewCockpit(null);
     setAcceptedPlans({});
+    setQueuedPrompts({});
     setFocusedId(null);
     setError(null);
     setComposerSettings((current) => ({ ...current, selectedClaudeAgent: 'general-purpose' }));
@@ -406,6 +425,37 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
       return () => window.clearTimeout(timer);
     }
   }, [refreshAgentContext, refreshAgentProfiles, refreshChatSessions, refreshForgeConfig, refreshHealth, refreshModelSettings, refreshReadiness, refreshPromptTemplates, refreshSessions, refreshWorkbenchState, resetWorkspaceState, workspaceId]);
+
+  useEffect(() => {
+    const provider = focusedChatSession?.provider;
+    if (!provider) return;
+
+    setComposerSettings((current) => {
+      if (provider === 'codex') {
+        const nextModel = isLikelyCodexModel(current.selectedModel)
+          ? current.selectedModel
+          : providerModelDefaults.codex;
+        const nextReasoning = CODEX_REASONING_VALUES.has(current.selectedReasoning.toLowerCase())
+          ? current.selectedReasoning.toLowerCase()
+          : 'medium';
+        if (nextModel === current.selectedModel && nextReasoning === current.selectedReasoning) return current;
+        return { ...current, selectedModel: nextModel, selectedReasoning: nextReasoning };
+      }
+
+      if (provider === 'claude_code') {
+        const nextModel = current.selectedModel.startsWith('claude-')
+          ? current.selectedModel
+          : providerModelDefaults.claude;
+        const nextReasoning = CLAUDE_REASONING_VALUES.has(current.selectedReasoning)
+          ? current.selectedReasoning
+          : 'Default';
+        if (nextModel === current.selectedModel && nextReasoning === current.selectedReasoning) return current;
+        return { ...current, selectedModel: nextModel, selectedReasoning: nextReasoning };
+      }
+
+      return current;
+    });
+  }, [focusedChatSession?.provider, providerModelDefaults.claude, providerModelDefaults.codex]);
 
   useWorkspaceTerminalPolling({
     workspaceId,
@@ -492,11 +542,21 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
     setReviewCockpit,
     setAcceptedPlans,
     setComposerSettings,
+    setQueuedPrompts,
     setBusy,
     setError,
     setActionError,
     promptSendChainRef,
   });
+
+  useEffect(() => {
+    if (!focusedChatSession || focusedChatSession.status === 'running') return;
+    const queue = queuedPrompts[focusedChatSession.id];
+    if (!queue || queue.length === 0) return;
+    const [nextPrompt, ...remaining] = queue;
+    setQueuedPrompts((current) => ({ ...current, [focusedChatSession.id]: remaining }));
+    sendPrompt(nextPrompt, { forceImmediate: true });
+  }, [focusedChatSession, queuedPrompts, sendPrompt]);
 
   if (!workspace) {
     return (
@@ -555,21 +615,6 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
           setFocusedChatId(sessionId);
           focusedIdRef.current = null;
           setFocusedId(null);
-          
-          const session = chatSessions.find(s => s.id === sessionId);
-          if (session?.provider === 'codex') {
-            setComposerSettings(current => ({
-              ...current,
-              selectedModel: 'gpt-5.4',
-              selectedReasoning: 'medium'
-            }));
-          } else if (session?.provider === 'claude_code') {
-            setComposerSettings(current => ({
-              ...current,
-              selectedModel: 'claude-sonnet-4-6',
-              selectedReasoning: 'Default'
-            }));
-          }
 
           if (!chatEvents[sessionId]) void listAgentChatEvents(sessionId).then((events) => setChatEvents((current) => ({ ...current, [sessionId]: events })));
         }}
@@ -585,7 +630,6 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
               localAgentProfiles={localAgentProfiles}
               onStartClaude={() => void createChatSession('claude_code', 'Claude Chat')}
               onStartCodex={() => void createChatSession('codex', 'Codex Chat')}
-              onStartLocalLLM={() => void createChatSession('local_llm', 'Local LLM Chat')}
               onStartLocalProfile={(profile) => void createTerminal('agent', profile.agent as TerminalProfile, profile.label, profile.id)}
               onStartShell={() => void createTerminal('shell', 'shell', 'Shell')}
             />
@@ -632,6 +676,8 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
           workspaceId={workspace.id}
           focusedChatSession={focusedChatSession}
           busy={busy}
+          canInterrupt={focusedChatSession?.status === 'running' || false}
+          queuedCount={focusedChatSession ? (queuedPrompts[focusedChatSession.id]?.length ?? 0) : 0}
           promptTemplateWarning={promptTemplateWarning}
           promptTemplates={promptTemplates}
           agentContext={agentContext}
@@ -640,6 +686,7 @@ export function WorkspaceTerminal({ workspace, onOpenInCursor }: WorkspaceTermin
           onSend={sendPrompt}
           onTogglePlanMode={togglePlanMode}
           onApplyWorkflowPreset={applyWorkflowPreset}
+          onInterrupt={() => void interruptFocusedAgent()}
         />
       )}
     </div>
