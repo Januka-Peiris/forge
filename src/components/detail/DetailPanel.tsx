@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   GitBranch,
   ExternalLink,
@@ -15,21 +15,16 @@ import type {
   LinkedWorktreeRef,
   Workspace,
 } from '../../types';
-import { listWorkspaceActivity } from '../../lib/tauri-api/activity';
 import { setWorkspaceCostLimit } from '../../lib/tauri-api/workspaces';
 import {
-  getWorkspaceForgeConfig,
   runWorkspaceSetup,
   startWorkspaceRunCommand,
   stopWorkspaceRunCommands,
 } from '../../lib/tauri-api/workspace-scripts';
-import { getWorkspaceReadiness } from '../../lib/tauri-api/workspace-readiness';
-import { listWorkspacePorts } from '../../lib/tauri-api/workspace-ports';
-import { getWorkspacePrDraft, getWorkspacePrStatus, refreshWorkspacePrDraft } from '../../lib/tauri-api/pr-draft';
+import { refreshWorkspacePrDraft } from '../../lib/tauri-api/pr-draft';
 import { cleanupWorkspace } from '../../lib/tauri-api/workspace-cleanup';
-import { getWorkspaceChangedFiles } from '../../lib/tauri-api/git-review';
-import { getWorkspaceHealth, recoverWorkspaceSessions } from '../../lib/tauri-api/workspace-health';
-import { getWorkspaceReviewCockpit, refreshWorkspacePrComments } from '../../lib/tauri-api/review-cockpit';
+import { recoverWorkspaceSessions } from '../../lib/tauri-api/workspace-health';
+import { refreshWorkspacePrComments } from '../../lib/tauri-api/review-cockpit';
 import {
   createWorkspaceCheckpoint,
   createBranchFromWorkspaceCheckpoint,
@@ -39,19 +34,15 @@ import {
   listWorkspaceCheckpoints,
   restoreWorkspaceCheckpoint,
 } from '../../lib/tauri-api/checkpoints';
-import type { ForgeWorkspaceConfig } from '../../types/workspace-scripts';
-import type { WorkspaceReadiness } from '../../types/workspace-readiness';
-import type { WorkspacePrDraft, WorkspacePrStatus } from '../../types/pr-draft';
 import type { WorkspaceCheckpoint, WorkspaceCheckpointRestorePlan } from '../../types/checkpoint';
-import type { WorkspaceChangedFile } from '../../types/git-review';
-import type { WorkspaceHealth, WorkspaceSessionRecoveryResult } from '../../types/workspace-health';
-import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
+import type { WorkspaceSessionRecoveryResult } from '../../types/workspace-health';
 import { Button } from '../ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
 import { deriveWorkspaceCockpit } from '../../lib/workspace-cockpit';
 import { formatPrDraftMarkdown } from './DetailPanelUtils';
 import { DetailPanelConfigTab } from './DetailPanelConfigTab';
 import { DetailPanelStatusTab } from './DetailPanelStatusTab';
+import { useDetailPanelCockpitState } from './useDetailPanelCockpitState';
 
 interface DetailPanelProps {
   workspace: Workspace | null;
@@ -70,25 +61,6 @@ interface DetailPanelProps {
   onDetachLinkedWorktree?: (worktreeId: string) => void;
   onOpenLinkedWorktreeInCursor?: (path: string) => void;
   onCreateChildWorkspace?: () => void;
-}
-
-function loadCockpitSummaryData(workspaceId: string) {
-  return Promise.allSettled([
-    getWorkspaceForgeConfig(workspaceId),
-    getWorkspaceReadiness(workspaceId),
-    getWorkspaceHealth(workspaceId),
-    getWorkspaceChangedFiles(workspaceId),
-  ]);
-}
-
-function loadCockpitHeavyData(workspaceId: string) {
-  return Promise.allSettled([
-    listWorkspacePorts(workspaceId),
-    getWorkspacePrStatus(workspaceId),
-    getWorkspacePrDraft(workspaceId),
-    getWorkspaceReviewCockpit(workspaceId, null),
-    listWorkspaceCheckpoints(workspaceId),
-  ]);
 }
 
 export function DetailPanel({
@@ -117,123 +89,40 @@ export function DetailPanel({
   const [shippingMessage, setShippingMessage] = useState<string | null>(null);
   const [cleanupBusy, setCleanupBusy] = useState(false);
   const [recoveryBusy, setRecoveryBusy] = useState(false);
-  const [timelineItems, setTimelineItems] = useState<ForgeActivityItem[]>([]);
   const [timelineExpanded, setTimelineExpanded] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
-  const [timelineLoading, setTimelineLoading] = useState(false);
   const [linkedSearch, setLinkedSearch] = useState('');
   const [budgetInput, setBudgetInput] = useState('');
-  const [forgeConfig, setForgeConfig] = useState<ForgeWorkspaceConfig | null>(null);
-  const [workspaceReadiness, setWorkspaceReadiness] = useState<WorkspaceReadiness | null>(null);
-  const [workspacePrStatus, setWorkspacePrStatus] = useState<WorkspacePrStatus | null>(null);
-  const [workspacePrDraft, setWorkspacePrDraft] = useState<WorkspacePrDraft | null>(null);
-  const [workspaceHealth, setWorkspaceHealth] = useState<WorkspaceHealth | null>(null);
-  const [reviewCockpit, setReviewCockpit] = useState<WorkspaceReviewCockpit | null>(null);
   const [recoveryResult, setRecoveryResult] = useState<WorkspaceSessionRecoveryResult | null>(null);
-  const [workspacePortCount, setWorkspacePortCount] = useState<number | null>(null);
-  const [workspaceChangedFiles, setWorkspaceChangedFiles] = useState<WorkspaceChangedFile[]>([]);
   const [scriptActionBusy, setScriptActionBusy] = useState<string | null>(null);
   const [scriptActionMessage, setScriptActionMessage] = useState<string | null>(null);
-  const [checkpoints, setCheckpoints] = useState<WorkspaceCheckpoint[]>([]);
   const [selectedCheckpointRef, setSelectedCheckpointRef] = useState<string | null>(null);
   const [checkpointDiff, setCheckpointDiff] = useState<string | null>(null);
   const [checkpointRestorePlan, setCheckpointRestorePlan] = useState<WorkspaceCheckpointRestorePlan | null>(null);
   const [checkpointBusy, setCheckpointBusy] = useState(false);
   const [checkpointMessage, setCheckpointMessage] = useState<string | null>(null);
-  const [cockpitLoading, setCockpitLoading] = useState(false);
   const [prDraftRefreshing, setPrDraftRefreshing] = useState(false);
   const [reviewCommentsRefreshing, setReviewCommentsRefreshing] = useState(false);
   const [reviewMessage, setReviewMessage] = useState<string | null>(null);
   const workspaceId = workspace?.id;
-
-  const resetCockpitState = useCallback(() => {
-    setForgeConfig(null);
-    setWorkspaceReadiness(null);
-    setWorkspacePrStatus(null);
-    setWorkspacePrDraft(null);
-    setWorkspaceHealth(null);
-    setReviewCockpit(null);
-    setRecoveryResult(null);
-    setWorkspacePortCount(null);
-    setWorkspaceChangedFiles([]);
-    setScriptActionBusy(null);
-    setScriptActionMessage(null);
-    setCheckpoints([]);
-    setSelectedCheckpointRef(null);
-    setCheckpointDiff(null);
-    setCheckpointRestorePlan(null);
-  }, []);
-
-  const applySummaryResults = useCallback((
-    [configResult, readinessResult, healthResult, changedFilesResult]: Awaited<ReturnType<typeof loadCockpitSummaryData>>,
-  ) => {
-    setForgeConfig(configResult.status === 'fulfilled' ? configResult.value : null);
-    setWorkspaceReadiness(readinessResult.status === 'fulfilled' ? readinessResult.value : null);
-    setWorkspaceHealth(healthResult.status === 'fulfilled' ? healthResult.value : null);
-    setWorkspaceChangedFiles(changedFilesResult.status === 'fulfilled' ? changedFilesResult.value : []);
-  }, []);
-
-  const applyHeavyResults = useCallback((
-    [portsResult, prStatusResult, prDraftResult, reviewCockpitResult, checkpointsResult]: Awaited<ReturnType<typeof loadCockpitHeavyData>>,
-  ) => {
-    setWorkspacePortCount(portsResult.status === 'fulfilled' ? portsResult.value.length : null);
-    setWorkspacePrStatus(prStatusResult.status === 'fulfilled' ? prStatusResult.value : null);
-    setWorkspacePrDraft(prDraftResult.status === 'fulfilled' ? prDraftResult.value : null);
-    setReviewCockpit(reviewCockpitResult.status === 'fulfilled' ? reviewCockpitResult.value : null);
-    setCheckpoints(checkpointsResult.status === 'fulfilled' ? checkpointsResult.value : []);
-  }, []);
-
-  const refreshCockpitData = useCallback(async () => {
-    if (!workspaceId) return;
-    const [summaryResults, heavyResults] = await Promise.all([
-      loadCockpitSummaryData(workspaceId),
-      loadCockpitHeavyData(workspaceId),
-    ]);
-    applySummaryResults(summaryResults);
-    applyHeavyResults(heavyResults);
-  }, [applyHeavyResults, applySummaryResults, workspaceId]);
-
-  useEffect(() => {
-    if (!workspaceId || !activityOpen) return;
-    let cancelled = false;
-    setTimelineLoading(true);
-    listWorkspaceActivity(workspaceId, 50)
-      .then((items) => { if (!cancelled) setTimelineItems(items); })
-      .catch(() => undefined)
-      .finally(() => { if (!cancelled) setTimelineLoading(false); });
-    return () => { cancelled = true; };
-  }, [activityOpen, workspaceId]);
-
-  useEffect(() => {
-    if (!workspaceId) {
-      resetCockpitState();
-      return;
-    }
-    let cancelled = false;
-    let heavyTimer: number | undefined;
-    setCockpitLoading(true);
-
-    loadCockpitSummaryData(workspaceId)
-      .then((summaryResults) => {
-        if (cancelled) return;
-        applySummaryResults(summaryResults);
-        setCockpitLoading(false);
-        heavyTimer = window.setTimeout(() => {
-          if (cancelled || document.hidden) return;
-          void loadCockpitHeavyData(workspaceId).then((heavyResults) => {
-            if (!cancelled) applyHeavyResults(heavyResults);
-          });
-        }, 100);
-      })
-      .catch(() => {
-        if (!cancelled) setCockpitLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-      if (heavyTimer !== undefined) window.clearTimeout(heavyTimer);
-    };
-  }, [applyHeavyResults, applySummaryResults, resetCockpitState, workspaceId]);
+  const {
+    forgeConfig,
+    workspaceReadiness,
+    workspacePrStatus,
+    workspacePrDraft,
+    workspaceHealth,
+    reviewCockpit,
+    workspacePortCount,
+    workspaceChangedFiles,
+    checkpoints,
+    cockpitLoading,
+    timelineItems,
+    timelineLoading,
+    refreshCockpitData,
+    setWorkspacePrDraft,
+    setReviewCockpit,
+    setCheckpoints,
+  } = useDetailPanelCockpitState(workspaceId, activityOpen);
 
   const createManualCheckpoint = async () => {
     if (!workspaceId) return;
