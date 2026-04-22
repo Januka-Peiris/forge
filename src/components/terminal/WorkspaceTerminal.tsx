@@ -1,15 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
-import { Save, Terminal as TerminalIcon, X } from 'lucide-react';
-import Prism from 'prismjs';
-import Editor from 'react-simple-code-editor';
-import 'prismjs/components/prism-bash';
-import 'prismjs/components/prism-css';
-import 'prismjs/components/prism-json';
-import 'prismjs/components/prism-jsx';
-import 'prismjs/components/prism-markdown';
-import 'prismjs/components/prism-rust';
-import 'prismjs/components/prism-tsx';
-import 'prismjs/components/prism-typescript';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Terminal as TerminalIcon } from 'lucide-react';
 import type { AgentProfile, ForgeWorkspaceConfig, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
 import type { AgentChatEvent, AgentChatSession } from '../../types/agent-chat';
 import type { WorkspaceCoordinatorStatus } from '../../types/coordinator';
@@ -71,6 +61,7 @@ import { useWorkspaceTerminalComposerActions } from './useWorkspaceTerminalCompo
 import { useWorkspaceTerminalSessionActions } from './useWorkspaceTerminalSessionActions';
 import { useWorkspaceTerminalPolling } from './useWorkspaceTerminalPolling';
 import { useWorkspaceTerminalEvents } from './useWorkspaceTerminalEvents';
+import { WorkspaceTerminalEditorPanel, type EditorTab } from './WorkspaceTerminalEditorPanel';
 import { readWorkspaceFile, writeWorkspaceFile } from '../../lib/tauri-api/workspace-file-tree';
 
 const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-6';
@@ -85,29 +76,7 @@ function isLikelyCodexModel(model: string): boolean {
   return lower.startsWith('gpt-') || lower.startsWith('o3') || lower.startsWith('o4') || lower.includes('codex');
 }
 
-interface EditorTab {
-  path: string;
-  content: string;
-  savedContent: string;
-  loading: boolean;
-  error: string | null;
-}
-
 const FILE_PREVIEW_WIDTH_KEY = 'forge:file-preview-width';
-
-function detectPrismLanguage(path: string): string {
-  const ext = path.split('.').pop()?.toLowerCase() ?? '';
-  if (ext === 'ts' || ext === 'mts' || ext === 'cts') return 'typescript';
-  if (ext === 'tsx') return 'tsx';
-  if (ext === 'js' || ext === 'mjs' || ext === 'cjs') return 'javascript';
-  if (ext === 'jsx') return 'jsx';
-  if (ext === 'json') return 'json';
-  if (ext === 'css' || ext === 'scss') return 'css';
-  if (ext === 'md') return 'markdown';
-  if (ext === 'rs') return 'rust';
-  if (ext === 'sh' || ext === 'bash' || ext === 'zsh') return 'bash';
-  return 'clike';
-}
 
 interface WorkspaceTerminalProps {
   workspace: Workspace | null;
@@ -253,19 +222,6 @@ export function WorkspaceTerminal({
     const visibleIds = new Set(visibleSessions.map((s) => s.id));
     return allSessions.filter((s) => !s.closedAt && !visibleIds.has(s.id));
   }, [allSessions, visibleSessions]);
-  const activeEditor = useMemo(
-    () => (activeEditorPath ? openEditors.find((editor) => editor.path === activeEditorPath) ?? null : null),
-    [activeEditorPath, openEditors],
-  );
-  const activeEditorLanguage = useMemo(
-    () => (activeEditor ? detectPrismLanguage(activeEditor.path) : 'clike'),
-    [activeEditor],
-  );
-  const highlightEditorCode = useCallback((code: string) => {
-    const grammar = Prism.languages[activeEditorLanguage] ?? Prism.languages.clike;
-    return Prism.highlight(code, grammar, activeEditorLanguage);
-  }, [activeEditorLanguage]);
-
   const refreshSessions = useCallback(async (fetchOutput = false, preferredFocusId?: string | null) => {
     if (!workspaceId) return;
     setError(null);
@@ -468,22 +424,6 @@ export function WorkspaceTerminal({
     }
   }, []);
 
-  const startFilePreviewResize = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const startX = event.clientX;
-    const startWidth = filePreviewWidth;
-    const onMove = (moveEvent: globalThis.MouseEvent) => {
-      const delta = moveEvent.clientX - startX;
-      setFilePreviewWidth(Math.min(640, Math.max(280, startWidth - delta)));
-    };
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  }, [filePreviewWidth]);
-
   const openEditorFile = useCallback(async (path: string) => {
     if (!workspaceId) return;
     const normalizedPath = path.trim();
@@ -550,6 +490,23 @@ export function WorkspaceTerminal({
       });
     }
   }, [openEditors, workspaceId]);
+
+  const closeEditorFile = useCallback((path: string) => {
+    setOpenEditors((current) => {
+      const nextEditors = current.filter((item) => item.path !== path);
+      setActiveEditorPath((currentActive) => {
+        if (currentActive !== path) return currentActive;
+        return nextEditors[0]?.path ?? null;
+      });
+      return nextEditors;
+    });
+  }, []);
+
+  const updateEditorContent = useCallback((path: string, content: string) => {
+    setOpenEditors((current) => current.map((editor) => (
+      editor.path === path ? { ...editor, content, error: null } : editor
+    )));
+  }, []);
 
   const resetWorkspaceState = useCallback(() => {
     resetOutputState();
@@ -988,96 +945,17 @@ export function WorkspaceTerminal({
           )}
         </div>
 
-        {openEditors.length > 0 && (
-          <>
-            <div
-              role="separator"
-              aria-label="Resize file preview panel"
-              onMouseDown={startFilePreviewResize}
-              onDoubleClick={() => setFilePreviewWidth(420)}
-              className="w-1 shrink-0 cursor-col-resize rounded bg-transparent hover:bg-forge-border/70 active:bg-forge-green/60"
-              title="Double-click to reset width"
-            />
-            <div className="flex min-h-0 shrink-0 flex-col rounded-xl border border-forge-border bg-forge-card/70" style={{ width: `${filePreviewWidth}px` }}>
-              <div className="flex items-center gap-1 overflow-x-auto border-b border-forge-border px-2 py-2">
-                {openEditors.map((editor) => {
-                  const dirty = editor.content !== editor.savedContent;
-                  const active = activeEditorPath === editor.path;
-                  return (
-                    <div key={editor.path} className={`flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs ${active ? 'border-forge-green/30 bg-forge-green/10 text-forge-green' : 'border-forge-border bg-forge-card/70 text-forge-muted'}`}>
-                      <button
-                        type="button"
-                        onClick={() => setActiveEditorPath(editor.path)}
-                        className="truncate text-left hover:text-forge-text"
-                        title={editor.path}
-                      >
-                        {dirty ? '● ' : ''}{editor.path.split('/').pop() ?? editor.path}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenEditors((current) => {
-                            const nextEditors = current.filter((item) => item.path !== editor.path);
-                            setActiveEditorPath((currentActive) => {
-                              if (currentActive !== editor.path) return currentActive;
-                              return nextEditors[0]?.path ?? null;
-                            });
-                            return nextEditors;
-                          });
-                        }}
-                        className="rounded p-0.5 hover:bg-forge-surface-overlay"
-                        title="Close file"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {!activeEditor ? (
-                <div className="flex flex-1 items-center justify-center text-sm text-forge-muted">Select a file from the Files tab.</div>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between border-b border-forge-border px-3 py-2">
-                    <p className="truncate font-mono text-xs text-forge-text" title={activeEditor.path}>{activeEditor.path}</p>
-                    <button
-                      type="button"
-                      onClick={() => void saveEditorFile(activeEditor.path)}
-                      disabled={activeEditor.loading || !!activeEditor.error || savingEditorPaths.has(activeEditor.path)}
-                      className="inline-flex items-center gap-1 rounded-md border border-forge-green/30 bg-forge-green/10 px-2 py-1 text-xs font-semibold text-forge-green disabled:opacity-50"
-                    >
-                      <Save className="h-3 w-3" />
-                      {savingEditorPaths.has(activeEditor.path) ? 'Saving…' : 'Save'}
-                    </button>
-                  </div>
-
-                  {activeEditor.loading ? (
-                    <div className="flex flex-1 items-center justify-center text-sm text-forge-muted">Loading file…</div>
-                  ) : activeEditor.error ? (
-                    <div className="p-3 text-sm text-forge-red">{activeEditor.error}</div>
-                  ) : (
-                    <div className="min-h-0 flex-1 overflow-auto bg-black/35 p-3 text-xs">
-                      <Editor
-                        value={activeEditor.content}
-                        onValueChange={(nextContent) => {
-                          setOpenEditors((current) => current.map((editor) => (
-                            editor.path === activeEditor.path ? { ...editor, content: nextContent, error: null } : editor
-                          )));
-                        }}
-                        highlight={highlightEditorCode}
-                        padding={0}
-                        textareaClassName="outline-none font-mono"
-                        preClassName="font-mono m-0"
-                        className="min-h-full font-mono text-xs text-forge-text"
-                      />
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </>
-        )}
+        <WorkspaceTerminalEditorPanel
+          openEditors={openEditors}
+          activeEditorPath={activeEditorPath}
+          filePreviewWidth={filePreviewWidth}
+          savingEditorPaths={savingEditorPaths}
+          onFilePreviewWidthChange={setFilePreviewWidth}
+          onActiveEditorPathChange={setActiveEditorPath}
+          onCloseEditor={closeEditorFile}
+          onEditorContentChange={updateEditorContent}
+          onSaveEditor={(path) => void saveEditorFile(path)}
+        />
       </div>
 
       <WorkspaceContextFooter workspaceId={workspace.id} />
