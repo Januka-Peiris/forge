@@ -13,6 +13,7 @@ import type { WorkspaceChangedFile } from '../../types/git-review';
 import type { WorkspaceHealth, WorkspaceSessionRecoveryResult } from '../../types/workspace-health';
 import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
 import type { WorkspaceSchedulerJob, WorkspaceTaskSnapshot } from '../../types/task-lifecycle';
+import type { WorkspaceHookInspector } from '../../types/workspace-hooks';
 
 interface DetailPanelStatusTabProps {
   workspace: Workspace;
@@ -40,6 +41,7 @@ interface DetailPanelStatusTabProps {
   workspacePortCount: number | null;
   scriptActionMessage: string | null;
   workspaceChangedFiles: WorkspaceChangedFile[];
+  workspaceHookInspector: WorkspaceHookInspector | null;
   reviewMessage: string | null;
   isArchived: boolean;
   recoveryResult: WorkspaceSessionRecoveryResult | null;
@@ -108,6 +110,7 @@ export function DetailPanelStatusTab({
   workspacePortCount,
   scriptActionMessage,
   workspaceChangedFiles,
+  workspaceHookInspector,
   reviewMessage,
   isArchived,
   recoveryResult,
@@ -280,6 +283,22 @@ export function DetailPanelStatusTab({
             onArchive={onArchive}
             onDelete={onDelete}
           />
+
+          {workspaceHookInspector && workspaceHookInspector.recentEvents.length > 0 && (
+            <div className="px-4 pb-4">
+              <div className="rounded-xl border border-forge-border bg-forge-card/70 p-3">
+                <p className="text-xs font-semibold uppercase tracking-widest text-forge-muted">Recent hook / guardrail activity</p>
+                <div className="mt-2 space-y-1">
+                  {workspaceHookInspector.recentEvents.slice(0, 4).map((event) => (
+                    <div key={event.id} className="rounded border border-forge-border/50 bg-black/10 px-2 py-1.5 text-xs">
+                      <p className="text-forge-text/85">{event.label ?? event.event}</p>
+                      <p className="text-[11px] text-forge-muted">{event.status} · {event.detail ?? 'No additional details'}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           <SafeIterationSection
             checkpointBusy={checkpointBusy}

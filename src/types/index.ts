@@ -62,6 +62,7 @@ export type { CleanupWorkspaceInput, CleanupWorkspaceResult } from './workspace-
 export type { WorkspacePort } from './workspace-ports';
 export type { ListWorkspaceFileTreeInput, WorkspaceFileTreeNode, WorkspaceFileTreeNodeKind } from './workspace-file-tree';
 export type { ForgeWorkspaceConfig, WorkspaceScriptTerminalSession } from './workspace-scripts';
+export type { WorkspaceHookCommand, WorkspaceHookEvent, WorkspaceHookInspector } from './workspace-hooks';
 export type { TaskEvent, TaskRun, WorkspaceSchedulerJob, WorkspaceTaskSnapshot } from './task-lifecycle';
 export type {
   AgentPromptEntry,

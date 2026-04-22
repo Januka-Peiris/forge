@@ -81,6 +81,7 @@ export function DetailPanel({
     reviewCockpit,
     workspacePortCount,
     workspaceChangedFiles,
+    workspaceHookInspector,
     checkpoints,
     workspaceTaskSnapshot,
     workspaceSchedulerJobs,
@@ -336,6 +337,7 @@ export function DetailPanel({
               workspacePortCount={workspacePortCount}
               scriptActionMessage={scriptActionMessage}
               workspaceChangedFiles={workspaceChangedFiles}
+              workspaceHookInspector={workspaceHookInspector}
               reviewMessage={reviewMessage}
               isArchived={isArchived}
               recoveryResult={recoveryResult}
@@ -390,6 +392,7 @@ export function DetailPanel({
                 void setWorkspaceCostLimit(workspace.id, Number.isNaN(value) || value <= 0 ? null : value).catch(() => undefined);
               }}
               forgeConfig={forgeConfig}
+              workspaceHookInspector={workspaceHookInspector}
               linkedSearch={linkedSearch}
               onLinkedSearchChange={setLinkedSearch}
               selectedLinkedWorktreeId={selectedLinkedWorktreeId}

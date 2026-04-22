@@ -9,6 +9,7 @@ pub mod coordinator;
 pub mod deep_link;
 pub mod environment;
 pub mod git_review;
+pub mod hook_inspector;
 pub mod local_llm;
 pub mod merge_readiness;
 pub mod orchestrator;
@@ -56,6 +57,7 @@ pub use coordinator::{
 pub use deep_link::{OpenDeepLinkInput, OpenDeepLinkResult};
 pub use environment::EnvironmentCheckItem;
 pub use git_review::{WorkspaceChangedFile, WorkspaceFileDiff};
+pub use hook_inspector::{WorkspaceHookCommand, WorkspaceHookEvent, WorkspaceHookInspector};
 pub use local_llm::{LocalLlmModel, LocalLlmProfileDiagnostic, LocalLlmProfileDiagnosticCheck};
 pub use merge_readiness::{PreFlightCheck, WorkspaceMergeReadiness};
 pub use orchestrator::{OrchestratorAction, OrchestratorStatus};

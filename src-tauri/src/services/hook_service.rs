@@ -2,7 +2,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::Value;
 
-use crate::repositories::{activity_repository, workspace_repository};
+use crate::models::{WorkspaceHookCommand, WorkspaceHookEvent, WorkspaceHookInspector};
+use crate::repositories::{activity_repository, settings_repository, workspace_repository};
 use crate::services::{command_safety_service, workspace_script_service};
 use crate::state::AppState;
 
@@ -145,4 +146,126 @@ pub fn run_workspace_hooks(
     }
 
     Ok(())
+}
+
+pub fn get_workspace_hook_inspector(
+    state: &AppState,
+    workspace_id: &str,
+) -> Result<WorkspaceHookInspector, String> {
+    let config = workspace_script_service::get_workspace_forge_config(state, workspace_id)?;
+    let risky_scripts_enabled = settings_repository::get_value(
+        &state.db,
+        "allow_risky_workspace_scripts",
+    )?
+    .map(|value| value == "true")
+    .unwrap_or(false);
+
+    let commands = collect_hook_commands(&config.hooks)
+        .into_iter()
+        .map(|(id, hook_kind, phase, label, command)| WorkspaceHookCommand {
+            id,
+            hook_kind,
+            phase,
+            label,
+            safety: command_safety_service::check_command_safety(&command),
+            will_block_when_risky: !risky_scripts_enabled
+                && command_safety_service::is_risky_command(&command),
+            command,
+        })
+        .collect::<Vec<_>>();
+
+    let recent_events = activity_repository::list_for_workspace(&state.db, workspace_id, 80)?
+        .into_iter()
+        .filter_map(map_activity_to_hook_event)
+        .take(12)
+        .collect::<Vec<_>>();
+
+    Ok(WorkspaceHookInspector {
+        workspace_id: workspace_id.to_string(),
+        config_path: config.path,
+        risky_scripts_enabled,
+        commands,
+        recent_events,
+    })
+}
+
+fn collect_hook_commands(
+    hooks: &crate::models::ForgeWorkspaceHooks,
+) -> Vec<(String, String, String, String, String)> {
+    let groups = [
+        ("run", "pre", hooks.pre_run.clone()),
+        ("run", "post", hooks.post_run.clone()),
+        ("tool", "pre", hooks.pre_tool.clone()),
+        ("tool", "post", hooks.post_tool.clone()),
+        ("ship", "pre", hooks.pre_ship.clone()),
+        ("ship", "post", hooks.post_ship.clone()),
+    ];
+
+    let mut commands = Vec::new();
+    for (hook_kind, phase, entries) in groups {
+        for (index, command) in entries.into_iter().enumerate() {
+            let ordinal = index + 1;
+            let label = format!("{hook_kind}:{phase}:{ordinal}");
+            commands.push((
+                format!("hook-{hook_kind}-{phase}-{ordinal}"),
+                hook_kind.to_string(),
+                phase.to_string(),
+                label,
+                command,
+            ));
+        }
+    }
+    commands
+}
+
+fn map_activity_to_hook_event(activity: crate::models::ActivityItem) -> Option<WorkspaceHookEvent> {
+    let (category, event, status) = match activity.event.as_str() {
+        "Workspace hook finished" => ("hook", "hook_finished", infer_hook_status(activity.details.as_deref())),
+        "Workspace hook failed" => ("hook", "hook_failed", "failed".to_string()),
+        "Workspace hook blocked" => ("guardrail", "hook_blocked", "blocked".to_string()),
+        "Workspace script blocked" => ("guardrail", "workspace_script_blocked", "blocked".to_string()),
+        "Terminal launch blocked" => ("guardrail", "terminal_launch_blocked", "blocked".to_string()),
+        _ => return None,
+    };
+
+    Some(WorkspaceHookEvent {
+        id: activity.id,
+        category: category.to_string(),
+        label: extract_hook_label(activity.details.as_deref()),
+        event: event.to_string(),
+        status,
+        level: activity.level,
+        detail: activity.details,
+        timestamp: activity.timestamp,
+    })
+}
+
+fn extract_hook_label(details: Option<&str>) -> Option<String> {
+    let details = details?;
+    if let Some(start) = details.find("hook=") {
+        let rest = &details[start + 5..];
+        let label = rest.split_whitespace().next().unwrap_or("").trim();
+        if !label.is_empty() {
+            return Some(label.to_string());
+        }
+    }
+    if let Some(start) = details.find("Blocked hook ") {
+        let rest = &details[start + "Blocked hook ".len()..];
+        let label = rest.split('.').next().unwrap_or("").trim();
+        if !label.is_empty() {
+            return Some(label.to_string());
+        }
+    }
+    None
+}
+
+fn infer_hook_status(details: Option<&str>) -> String {
+    let details = details.unwrap_or_default();
+    if details.contains(" exit=0 ") || details.ends_with(" exit=0") {
+        "succeeded".to_string()
+    } else if details.contains("exit=") {
+        "failed".to_string()
+    } else {
+        "finished".to_string()
+    }
 }

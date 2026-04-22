@@ -1,5 +1,6 @@
 import type { TerminalSession } from '../../types/terminal';
 import type { ForgeWorkspaceConfig } from '../../types/workspace-scripts';
+import type { WorkspaceHookInspector } from '../../types/workspace-hooks';
 import { invokeCommand } from './client';
 
 export function getWorkspaceForgeConfig(workspaceId: string): Promise<ForgeWorkspaceConfig> {
@@ -20,4 +21,8 @@ export function restartWorkspaceRunCommand(workspaceId: string, commandIndex: nu
 
 export function stopWorkspaceRunCommands(workspaceId: string): Promise<TerminalSession[]> {
   return invokeCommand<TerminalSession[]>('stop_workspace_run_commands', { workspaceId });
+}
+
+export function getWorkspaceHookInspector(workspaceId: string): Promise<WorkspaceHookInspector> {
+  return invokeCommand<WorkspaceHookInspector>('get_workspace_hook_inspector', { workspaceId });
 }

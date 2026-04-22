@@ -202,6 +202,7 @@ pub fn run() {
             workspace_scripts::start_workspace_run_command,
             workspace_scripts::restart_workspace_run_command,
             workspace_scripts::stop_workspace_run_commands,
+            workspace_scripts::get_workspace_hook_inspector,
             agent_memory::list_agent_memories,
             agent_memory::set_agent_memory,
             agent_memory::delete_agent_memory,

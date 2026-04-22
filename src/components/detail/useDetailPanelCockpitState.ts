@@ -8,8 +8,9 @@ import type { WorkspaceHealth } from '../../types/workspace-health';
 import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
 import type { WorkspaceCheckpoint } from '../../types/checkpoint';
 import type { WorkspaceSchedulerJob, WorkspaceTaskSnapshot } from '../../types/task-lifecycle';
+import type { WorkspaceHookInspector } from '../../types/workspace-hooks';
 import { listWorkspaceActivity } from '../../lib/tauri-api/activity';
-import { getWorkspaceForgeConfig } from '../../lib/tauri-api/workspace-scripts';
+import { getWorkspaceForgeConfig, getWorkspaceHookInspector } from '../../lib/tauri-api/workspace-scripts';
 import { getWorkspaceReadiness } from '../../lib/tauri-api/workspace-readiness';
 import { listWorkspacePorts } from '../../lib/tauri-api/workspace-ports';
 import { getWorkspacePrDraft, getWorkspacePrStatus } from '../../lib/tauri-api/pr-draft';
@@ -22,6 +23,7 @@ import { getWorkspaceTaskSnapshot, listWorkspaceSchedulerJobs } from '../../lib/
 function loadCockpitSummaryData(workspaceId: string) {
   return Promise.allSettled([
     getWorkspaceForgeConfig(workspaceId),
+    getWorkspaceHookInspector(workspaceId),
     getWorkspaceReadiness(workspaceId),
     getWorkspaceHealth(workspaceId),
     getWorkspaceChangedFiles(workspaceId),
@@ -49,6 +51,7 @@ export function useDetailPanelCockpitState(workspaceId: string | undefined, acti
   const [reviewCockpit, setReviewCockpit] = useState<WorkspaceReviewCockpit | null>(null);
   const [workspacePortCount, setWorkspacePortCount] = useState<number | null>(null);
   const [workspaceChangedFiles, setWorkspaceChangedFiles] = useState<WorkspaceChangedFile[]>([]);
+  const [workspaceHookInspector, setWorkspaceHookInspector] = useState<WorkspaceHookInspector | null>(null);
   const [checkpoints, setCheckpoints] = useState<WorkspaceCheckpoint[]>([]);
   const [workspaceTaskSnapshot, setWorkspaceTaskSnapshot] = useState<WorkspaceTaskSnapshot | null>(null);
   const [workspaceSchedulerJobs, setWorkspaceSchedulerJobs] = useState<WorkspaceSchedulerJob[]>([]);
@@ -65,15 +68,17 @@ export function useDetailPanelCockpitState(workspaceId: string | undefined, acti
     setReviewCockpit(null);
     setWorkspacePortCount(null);
     setWorkspaceChangedFiles([]);
+    setWorkspaceHookInspector(null);
     setCheckpoints([]);
     setWorkspaceTaskSnapshot(null);
     setWorkspaceSchedulerJobs([]);
   }, []);
 
   const applySummaryResults = useCallback((
-    [configResult, readinessResult, healthResult, changedFilesResult]: Awaited<ReturnType<typeof loadCockpitSummaryData>>,
+    [configResult, hookInspectorResult, readinessResult, healthResult, changedFilesResult]: Awaited<ReturnType<typeof loadCockpitSummaryData>>,
   ) => {
     setForgeConfig(configResult.status === 'fulfilled' ? configResult.value : null);
+    setWorkspaceHookInspector(hookInspectorResult.status === 'fulfilled' ? hookInspectorResult.value : null);
     setWorkspaceReadiness(readinessResult.status === 'fulfilled' ? readinessResult.value : null);
     setWorkspaceHealth(healthResult.status === 'fulfilled' ? healthResult.value : null);
     setWorkspaceChangedFiles(changedFilesResult.status === 'fulfilled' ? changedFilesResult.value : []);
@@ -152,6 +157,7 @@ export function useDetailPanelCockpitState(workspaceId: string | undefined, acti
     reviewCockpit,
     workspacePortCount,
     workspaceChangedFiles,
+    workspaceHookInspector,
     checkpoints,
     workspaceTaskSnapshot,
     workspaceSchedulerJobs,
