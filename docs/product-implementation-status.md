@@ -15,12 +15,17 @@ Forge is being shaped as a **local-first agent conductor**: simple by default, i
 ## Latest Research Findings (as of 2026-04-22)
 
 - Latest synthesized findings: [`docs/research-findings-2026-04-22.md`](./research-findings-2026-04-22.md)
-- Milestone A implementation started on **2026-04-22**: hook/event pipeline, notification routing, session recovery deepening.
-- Current tracked adoption slices from that review:
+- Milestone A+B implementation completed on **2026-04-22**:
   - coordinator/profile rationalization (explicit profiles only, OpenAI profile support)
-  - hook/event pipeline exploration
+  - hook/event pipeline
   - notification routing upgrades
   - deeper session recovery semantics
+  - unified task model
+  - memory v2
+  - scheduler evolution
+- Remaining research-tracked items are deferred-by-design:
+  - companion/voice novelty
+  - full marketplace/plugin parity
 
 ## Completed Product Slices
 
@@ -167,6 +172,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 ## Remaining Useful Next Slices
 
 - Manual UX pass in the running app to tune spacing, default collapsed states, and copy.
+- Finish notification settings polish (helper text, guardrails, and persistence UX tuning).
 - Optional future local LLM presets/adapters for LM Studio, llama.cpp, vLLM, or direct OpenAI-compatible HTTP.
 - Optional deeper GitHub work: true review-thread resolution and CI log fetching.
 - Optional MCP runtime launch support if Forge later chooses to manage MCP processes directly.

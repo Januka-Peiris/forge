@@ -41,6 +41,12 @@ const ORCHESTRATOR_MODELS = [
   { value: 'o4-mini', label: 'o4-mini (OpenAI, reasoning, fast)' },
 ];
 
+const NOTIFICATION_MIN_LEVELS = [
+  { value: 'info', label: 'Info (all important notifications)' },
+  { value: 'warn', label: 'Warn (warnings + errors)' },
+  { value: 'error', label: 'Error only' },
+];
+
 function AiModelsCard() {
   const [modelSettings, setModelSettings] = useState<AiModelSettings | null>(null);
   const [saving, setSaving] = useState(false);
@@ -268,6 +274,96 @@ function TrustAndSafetyCard() {
   );
 }
 
+function NotificationSettingsCard() {
+  const [minLevel, setMinLevel] = useState<'info' | 'warn' | 'error'>('info');
+  const [dedupeSecondsInput, setDedupeSecondsInput] = useState('30');
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    void getSetting('notifications_min_level')
+      .then((value) => {
+        if (value === 'info' || value === 'warn' || value === 'error') {
+          setMinLevel(value);
+        }
+      })
+      .catch(() => undefined);
+    void getSetting('notifications_dedupe_seconds')
+      .then((value) => {
+        const parsed = Number(value ?? '');
+        if (Number.isFinite(parsed) && parsed > 0) {
+          setDedupeSecondsInput(String(Math.floor(parsed)));
+        }
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const saveMinLevel = (next: 'info' | 'warn' | 'error') => {
+    setMinLevel(next);
+    setMessage(null);
+    void setSetting('notifications_min_level', next)
+      .then(() => setMessage('Notification minimum level saved.'))
+      .catch((err) => setMessage(err instanceof Error ? err.message : String(err)));
+  };
+
+  const saveDedupeSeconds = () => {
+    const parsed = Number(dedupeSecondsInput.trim());
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setMessage('Dedupe seconds must be a positive number.');
+      return;
+    }
+    const next = String(Math.floor(parsed));
+    setDedupeSecondsInput(next);
+    setMessage(null);
+    void setSetting('notifications_dedupe_seconds', next)
+      .then(() => setMessage('Notification dedupe window saved.'))
+      .catch((err) => setMessage(err instanceof Error ? err.message : String(err)));
+  };
+
+  return (
+    <div className="rounded-xl border border-forge-border bg-forge-card p-4">
+      <div className="mb-4">
+        <h2 className="text-[14px] font-bold text-forge-text">Notifications</h2>
+        <p className="text-[11px] text-forge-muted mt-0.5">Control notification severity and dedupe/folding behavior.</p>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <label className="text-[12px] font-semibold text-forge-text block mb-1">Minimum notification level</label>
+          <p className="text-[11px] text-forge-muted mb-2">Notifications below this level are ignored.</p>
+          <Select value={minLevel} onValueChange={(value) => saveMinLevel(value as 'info' | 'warn' | 'error')}>
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {NOTIFICATION_MIN_LEVELS.map((level) => (
+                <SelectItem key={level.value} value={level.value}>{level.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <label className="text-[12px] font-semibold text-forge-text block mb-1">Dedupe window (seconds)</label>
+          <p className="text-[11px] text-forge-muted mb-2">Repeated notifications in this window are folded into one item.</p>
+          <div className="flex items-center gap-2">
+            <input
+              value={dedupeSecondsInput}
+              onChange={(event) => setDedupeSecondsInput(event.target.value)}
+              onBlur={saveDedupeSeconds}
+              className="h-9 w-28 rounded-md border border-forge-border bg-forge-bg px-2 text-[12px] text-forge-text focus:border-forge-blue/40 focus:outline-none"
+              inputMode="numeric"
+              aria-label="Notification dedupe seconds"
+            />
+            <Button type="button" size="sm" onClick={saveDedupeSeconds}>
+              Save
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {message && <p className="mt-3 text-[12px] text-forge-muted">{message}</p>}
+    </div>
+  );
+}
+
 export function SettingsView({
   settings,
   onSettingsChange,
@@ -286,6 +382,7 @@ export function SettingsView({
 
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
         <AiModelsCard />
+        <NotificationSettingsCard />
         <AgentProfilesCard />
         <RepoContextCard />
         <TrustAndSafetyCard />

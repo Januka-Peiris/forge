@@ -23,9 +23,12 @@ export function CoordinatorTimeline({ status, agentProfiles, onRefresh, onReplay
   const [replayedAtByActionId, setReplayedAtByActionId] = useState<Record<string, string>>({});
   const [editingActionId, setEditingActionId] = useState<string | null>(null);
   const [promptOverrides, setPromptOverrides] = useState<Record<string, string>>({});
-  const workers = status?.workers ?? [];
-  const recentActions = status?.recentActions ?? [];
-  const activeWorkers = workers.filter((worker) => worker.status === 'running');
+  const workers = useMemo(() => status?.workers ?? [], [status]);
+  const recentActions = useMemo(() => status?.recentActions ?? [], [status]);
+  const activeWorkers = useMemo(
+    () => workers.filter((worker) => worker.status === 'running'),
+    [workers],
+  );
 
   const filteredActions = useMemo(() => {
     const byKind = (actionKind: string) => {
