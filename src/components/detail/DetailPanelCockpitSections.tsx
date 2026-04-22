@@ -30,6 +30,15 @@ function formatTaskTimestamp(value: string | null | undefined): string {
   return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 }
 
+function formatSchedulerInterval(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds % 3600 === 0) return `${seconds / 3600}h`;
+  if (seconds % 60 === 0) return `${seconds / 60}m`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${minutes}m ${remainder}s`;
+}
+
 function taskStatusTone(status: string): string {
   const normalized = status.toLowerCase();
   if (normalized === 'running' || normalized === 'pending') return 'border-forge-blue/20 bg-forge-blue/10 text-forge-blue';
@@ -484,10 +493,14 @@ export function LifecyclePanel({
   recoveryResult,
   cleanupBusy,
   recoveryBusy,
+  schedulerActionBusy,
+  schedulerMessage,
   message,
   onCleanup,
   onRecover,
   onApplyRecoveryAction,
+  onSetSchedulerJobEnabled,
+  onRunSchedulerJobSoon,
   onArchive,
   onDelete,
 }: {
@@ -499,10 +512,14 @@ export function LifecyclePanel({
   recoveryResult: WorkspaceSessionRecoveryResult | null;
   cleanupBusy: boolean;
   recoveryBusy: boolean;
+  schedulerActionBusy: string | null;
+  schedulerMessage: string | null;
   message: string | null;
   onCleanup: () => void;
   onRecover: () => void;
   onApplyRecoveryAction: (sessionId: string, action: 'resume_tracking' | 'mark_interrupted' | 'close_session') => void;
+  onSetSchedulerJobEnabled: (jobId: string, enabled: boolean) => void;
+  onRunSchedulerJobSoon: (jobId: string) => void;
   onArchive?: () => void;
   onDelete?: () => void;
 }) {
@@ -547,18 +564,47 @@ export function LifecyclePanel({
           <div className="mt-2 rounded border border-forge-border/60 bg-black/10 p-2">
             <p className="text-xs font-semibold text-forge-text/85">Scheduler jobs</p>
             <div className="mt-1 space-y-1">
-              {workspaceSchedulerJobs.slice(0, 3).map((job) => (
-                <div key={job.id} className="flex items-center justify-between gap-2 text-xs">
-                  <div className="min-w-0">
-                    <p className="truncate text-forge-text/85">{humanizeTaskLabel(job.kind)}</p>
-                    <p className="text-[11px] text-forge-muted">
-                      {job.enabled ? 'enabled' : 'paused'} · jitter {job.jitterPct}% · next {formatTaskTimestamp(String(job.nextRunAt * 1000))}
-                    </p>
+              {workspaceSchedulerJobs.slice(0, 4).map((job) => {
+                const isToggleBusy = schedulerActionBusy === `enabled:${job.id}`;
+                const isRunBusy = schedulerActionBusy === `run:${job.id}`;
+                return (
+                  <div key={job.id} className="rounded border border-forge-border/50 bg-black/15 px-2 py-1.5 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-forge-text/85">{humanizeTaskLabel(job.kind)}</p>
+                        <p className="text-[11px] text-forge-muted">
+                          {job.enabled ? 'enabled' : 'paused'} · jitter {job.jitterPct}% · next {formatTaskTimestamp(String(job.nextRunAt * 1000))}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-forge-muted">{formatSchedulerInterval(job.intervalSeconds)}</span>
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <Button
+                        variant="secondary"
+                        size="xs"
+                        disabled={Boolean(schedulerActionBusy)}
+                        onClick={() => onSetSchedulerJobEnabled(job.id, !job.enabled)}
+                      >
+                        {isToggleBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                        {job.enabled ? 'Pause' : 'Resume'}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="xs"
+                        disabled={Boolean(schedulerActionBusy) || !job.enabled}
+                        onClick={() => onRunSchedulerJobSoon(job.id)}
+                      >
+                        {isRunBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                        Run soon
+                      </Button>
+                      <span className="text-[11px] text-forge-muted">Existing durable job · no direct DB edits needed</span>
+                    </div>
                   </div>
-                  <span className="shrink-0 text-forge-muted">{job.intervalSeconds}s</span>
-                </div>
-              ))}
+                );
+              })}
+              {workspaceSchedulerJobs.length > 4 && <p className="text-xs text-forge-muted">+{workspaceSchedulerJobs.length - 4} more scheduler job(s)</p>}
             </div>
+            {schedulerMessage && <p className="mt-2 text-xs text-forge-muted">{schedulerMessage}</p>}
           </div>
         )}
         {workspaceHealth?.warnings.length ? (

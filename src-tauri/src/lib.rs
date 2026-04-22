@@ -209,6 +209,8 @@ pub fn run() {
             orchestrator_commands::set_orchestrator_enabled,
             orchestrator_commands::set_orchestrator_model,
             orchestrator_commands::list_workspace_scheduler_jobs,
+            orchestrator_commands::set_workspace_scheduler_job_enabled,
+            orchestrator_commands::schedule_workspace_scheduler_job_now,
             workspaces::set_workspace_cost_limit,
             terminal::search_terminal_output,
             workspace_templates::list_workspace_templates,

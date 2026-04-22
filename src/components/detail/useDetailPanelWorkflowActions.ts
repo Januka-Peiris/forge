@@ -4,6 +4,7 @@ import { refreshWorkspacePrDraft } from '../../lib/tauri-api/pr-draft';
 import { cleanupWorkspace } from '../../lib/tauri-api/workspace-cleanup';
 import { applyWorkspaceSessionRecoveryAction, recoverWorkspaceSessions } from '../../lib/tauri-api/workspace-health';
 import { refreshWorkspacePrComments } from '../../lib/tauri-api/review-cockpit';
+import { scheduleWorkspaceSchedulerJobNow, setWorkspaceSchedulerJobEnabled } from '../../lib/tauri-api/workspace-tasks';
 import { pullWorkspaceBranch } from '../../lib/tauri-api/workspaces';
 import type { WorkspaceSessionRecoveryResult } from '../../types/workspace-health';
 import type { WorkspacePrDraft } from '../../types/pr-draft';
@@ -44,6 +45,8 @@ export function useDetailPanelWorkflowActions({
   const [prDraftRefreshing, setPrDraftRefreshing] = useState(false);
   const [reviewCommentsRefreshing, setReviewCommentsRefreshing] = useState(false);
   const [reviewMessage, setReviewMessage] = useState<string | null>(null);
+  const [schedulerActionBusy, setSchedulerActionBusy] = useState<string | null>(null);
+  const [schedulerMessage, setSchedulerMessage] = useState<string | null>(null);
 
   const runSetupFromCockpit = async () => {
     if (!workspaceId) return;
@@ -255,6 +258,38 @@ export function useDetailPanelWorkflowActions({
     }
   };
 
+  const setSchedulerJobEnabledFromCockpit = async (jobId: string, enabled: boolean) => {
+    if (!workspaceId) return;
+    setSchedulerActionBusy(`enabled:${jobId}`);
+    setSchedulerMessage(null);
+    try {
+      await setWorkspaceSchedulerJobEnabled(workspaceId, jobId, enabled);
+      setSchedulerMessage(enabled ? 'Scheduler job resumed.' : 'Scheduler job paused.');
+      await refreshCockpitData();
+      onRefreshWorkspaceState?.();
+    } catch (err) {
+      setSchedulerMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSchedulerActionBusy(null);
+    }
+  };
+
+  const runSchedulerJobSoonFromCockpit = async (jobId: string) => {
+    if (!workspaceId) return;
+    setSchedulerActionBusy(`run:${jobId}`);
+    setSchedulerMessage(null);
+    try {
+      await scheduleWorkspaceSchedulerJobNow(workspaceId, jobId);
+      setSchedulerMessage('Scheduler job queued to run on the next scheduler tick.');
+      await refreshCockpitData();
+      onRefreshWorkspaceState?.();
+    } catch (err) {
+      setSchedulerMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSchedulerActionBusy(null);
+    }
+  };
+
   return {
     prCreating,
     prError,
@@ -267,6 +302,8 @@ export function useDetailPanelWorkflowActions({
     prDraftRefreshing,
     reviewCommentsRefreshing,
     reviewMessage,
+    schedulerActionBusy,
+    schedulerMessage,
     runSetupFromCockpit,
     runCheckFromCockpit,
     stopChecksFromCockpit,
@@ -279,5 +316,7 @@ export function useDetailPanelWorkflowActions({
     archiveFromCockpit,
     recoverSessionsFromCockpit,
     applyRecoveryActionFromCockpit,
+    setSchedulerJobEnabledFromCockpit,
+    runSchedulerJobSoonFromCockpit,
   };
 }

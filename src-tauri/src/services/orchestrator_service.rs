@@ -377,6 +377,74 @@ pub fn list_workspace_scheduler_jobs(
     })
 }
 
+pub fn set_workspace_scheduler_job_enabled(
+    state: &AppState,
+    workspace_id: &str,
+    job_id: &str,
+    enabled: bool,
+) -> Result<(), String> {
+    let updated = state.db.with_connection_mut(|connection| {
+        connection.execute(
+            r#"
+            UPDATE workspace_scheduler_jobs
+            SET enabled = ?3, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?1 AND workspace_id = ?2
+            "#,
+            rusqlite::params![job_id, workspace_id, if enabled { 1 } else { 0 }],
+        )
+    })?;
+    if updated == 0 {
+        return Err("Scheduler job not found for workspace".to_string());
+    }
+
+    let _ = activity_repository::record(
+        &state.db,
+        workspace_id,
+        "",
+        None,
+        "Scheduler job updated",
+        "info",
+        Some(if enabled {
+            "Scheduler job resumed."
+        } else {
+            "Scheduler job paused."
+        }),
+    );
+    Ok(())
+}
+
+pub fn schedule_workspace_scheduler_job_now(
+    state: &AppState,
+    workspace_id: &str,
+    job_id: &str,
+) -> Result<(), String> {
+    let now = now_secs() as i64;
+    let updated = state.db.with_connection_mut(|connection| {
+        connection.execute(
+            r#"
+            UPDATE workspace_scheduler_jobs
+            SET next_run_at = ?3, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?1 AND workspace_id = ?2
+            "#,
+            rusqlite::params![job_id, workspace_id, now],
+        )
+    })?;
+    if updated == 0 {
+        return Err("Scheduler job not found for workspace".to_string());
+    }
+
+    let _ = activity_repository::record(
+        &state.db,
+        workspace_id,
+        "",
+        None,
+        "Scheduler job nudged",
+        "info",
+        Some("Scheduler job marked to run on the next tick."),
+    );
+    Ok(())
+}
+
 fn ensure_default_scheduler_jobs(state: &AppState) -> Result<(), String> {
     let workspaces = workspace_repository::list(&state.db)?;
     let active = workspaces

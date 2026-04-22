@@ -75,3 +75,22 @@ pub fn list_workspace_scheduler_jobs(
 ) -> Result<Vec<WorkspaceSchedulerJob>, String> {
     orchestrator_service::list_workspace_scheduler_jobs(&state, &workspace_id)
 }
+
+#[tauri::command]
+pub fn set_workspace_scheduler_job_enabled(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    job_id: String,
+    enabled: bool,
+) -> Result<(), String> {
+    orchestrator_service::set_workspace_scheduler_job_enabled(&state, &workspace_id, &job_id, enabled)
+}
+
+#[tauri::command]
+pub fn schedule_workspace_scheduler_job_now(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    job_id: String,
+) -> Result<(), String> {
+    orchestrator_service::schedule_workspace_scheduler_job_now(&state, &workspace_id, &job_id)
+}

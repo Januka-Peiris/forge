@@ -104,6 +104,8 @@ export function DetailPanel({
     prDraftRefreshing,
     reviewCommentsRefreshing,
     reviewMessage,
+    schedulerActionBusy,
+    schedulerMessage,
     runSetupFromCockpit,
     runCheckFromCockpit,
     stopChecksFromCockpit,
@@ -116,6 +118,8 @@ export function DetailPanel({
     archiveFromCockpit,
     recoverSessionsFromCockpit,
     applyRecoveryActionFromCockpit,
+    setSchedulerJobEnabledFromCockpit,
+    runSchedulerJobSoonFromCockpit,
   } = useDetailPanelWorkflowActions({
     workspaceId,
     isArchived,
@@ -327,6 +331,7 @@ export function DetailPanel({
               cleanupBusy={cleanupBusy}
               recoveryBusy={recoveryBusy}
               reviewCommentsRefreshing={reviewCommentsRefreshing}
+              schedulerActionBusy={schedulerActionBusy}
               workspaceReadiness={workspaceReadiness}
               workspacePortCount={workspacePortCount}
               scriptActionMessage={scriptActionMessage}
@@ -335,6 +340,7 @@ export function DetailPanel({
               isArchived={isArchived}
               recoveryResult={recoveryResult}
               shippingMessage={shippingMessage}
+              schedulerMessage={schedulerMessage}
               checkpointBusy={checkpointBusy}
               checkpointMessage={checkpointMessage}
               selectedCheckpointRef={selectedCheckpointRef}
@@ -354,6 +360,8 @@ export function DetailPanel({
               onCopyDraft={() => void copyPrDraftFromCockpit()}
               onRecover={() => void recoverSessionsFromCockpit()}
               onApplyRecoveryAction={(sessionId, action) => void applyRecoveryActionFromCockpit(sessionId, action)}
+              onSetSchedulerJobEnabled={(jobId, enabled) => void setSchedulerJobEnabledFromCockpit(jobId, enabled)}
+              onRunSchedulerJobSoon={(jobId) => void runSchedulerJobSoonFromCockpit(jobId)}
               onCreatePr={() => void createPrFromCockpit()}
               onCleanup={() => void cleanupFromCockpit()}
               onRunSetup={() => void runSetupFromCockpit()}

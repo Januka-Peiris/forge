@@ -35,6 +35,7 @@ interface DetailPanelStatusTabProps {
   cleanupBusy: boolean;
   recoveryBusy: boolean;
   reviewCommentsRefreshing: boolean;
+  schedulerActionBusy: string | null;
   workspaceReadiness: WorkspaceReadiness | null;
   workspacePortCount: number | null;
   scriptActionMessage: string | null;
@@ -43,6 +44,7 @@ interface DetailPanelStatusTabProps {
   isArchived: boolean;
   recoveryResult: WorkspaceSessionRecoveryResult | null;
   shippingMessage: string | null;
+  schedulerMessage: string | null;
   checkpointBusy: boolean;
   checkpointMessage: string | null;
   selectedCheckpointRef: string | null;
@@ -62,6 +64,8 @@ interface DetailPanelStatusTabProps {
   onCopyDraft: () => void;
   onRecover: () => void;
   onApplyRecoveryAction: (sessionId: string, action: 'resume_tracking' | 'mark_interrupted' | 'close_session') => void;
+  onSetSchedulerJobEnabled: (jobId: string, enabled: boolean) => void;
+  onRunSchedulerJobSoon: (jobId: string) => void;
   onCreatePr: () => void;
   onCleanup: () => void;
   onRunSetup: () => void;
@@ -99,6 +103,7 @@ export function DetailPanelStatusTab({
   cleanupBusy,
   recoveryBusy,
   reviewCommentsRefreshing,
+  schedulerActionBusy,
   workspaceReadiness,
   workspacePortCount,
   scriptActionMessage,
@@ -107,6 +112,7 @@ export function DetailPanelStatusTab({
   isArchived,
   recoveryResult,
   shippingMessage,
+  schedulerMessage,
   checkpointBusy,
   checkpointMessage,
   selectedCheckpointRef,
@@ -126,6 +132,8 @@ export function DetailPanelStatusTab({
   onCopyDraft,
   onRecover,
   onApplyRecoveryAction,
+  onSetSchedulerJobEnabled,
+  onRunSchedulerJobSoon,
   onCreatePr,
   onCleanup,
   onRunSetup,
@@ -261,10 +269,14 @@ export function DetailPanelStatusTab({
             recoveryResult={recoveryResult}
             cleanupBusy={cleanupBusy}
             recoveryBusy={recoveryBusy}
+            schedulerActionBusy={schedulerActionBusy}
+            schedulerMessage={schedulerMessage}
             message={shippingMessage}
             onCleanup={onCleanup}
             onRecover={onRecover}
             onApplyRecoveryAction={onApplyRecoveryAction}
+            onSetSchedulerJobEnabled={onSetSchedulerJobEnabled}
+            onRunSchedulerJobSoon={onRunSchedulerJobSoon}
             onArchive={onArchive}
             onDelete={onDelete}
           />
