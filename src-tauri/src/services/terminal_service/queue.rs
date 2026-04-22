@@ -82,17 +82,19 @@ pub(super) fn queue_workspace_agent_prompt(
             for memory in relevant_memories {
                 let _ = agent_memory_repository::upsert(
                     &state.db,
-                    memory.workspace_id.as_deref(),
-                    Some(memory.scope.as_str()),
-                    &memory.key,
-                    &memory.value,
-                    Some(memory.origin.as_str()),
-                    Some(memory.status.as_str()),
-                    Some(memory.confidence),
-                    memory.source_task_run_id.as_deref(),
-                    memory.source_label.as_deref(),
-                    memory.source_detail.as_deref(),
-                    Some(&now),
+                    agent_memory_repository::AgentMemoryUpsert {
+                        workspace_id: memory.workspace_id.as_deref(),
+                        scope: Some(memory.scope.as_str()),
+                        key: &memory.key,
+                        value: &memory.value,
+                        origin: Some(memory.origin.as_str()),
+                        status: Some(memory.status.as_str()),
+                        confidence: Some(memory.confidence),
+                        source_task_run_id: memory.source_task_run_id.as_deref(),
+                        source_label: memory.source_label.as_deref(),
+                        source_detail: memory.source_detail.as_deref(),
+                        last_used_at: Some(&now),
+                    },
                 );
             }
         }

@@ -396,26 +396,30 @@ pub fn step_workspace_coordinator(
         .map(|value| value.chars().take(4000).collect::<String>());
     coordinator_repository::insert_action(
         &state.db,
-        &run.id,
-        &input.workspace_id,
-        "planner",
-        None,
-        None,
-        Some(&planner_message),
-        raw_snippet.as_deref(),
+        coordinator_repository::CoordinatorActionInsert {
+            run_id: &run.id,
+            workspace_id: &input.workspace_id,
+            action_kind: "planner",
+            worker_id: None,
+            prompt: None,
+            message: Some(&planner_message),
+            raw_json: raw_snippet.as_deref(),
+        },
     )?;
     let actions = match validate_actions(&workers, actions) {
         Ok(actions) => actions,
         Err(validation_error) => {
             coordinator_repository::insert_action(
                 &state.db,
-                &run.id,
-                &input.workspace_id,
-                "validation_error",
-                None,
-                None,
-                Some(&validation_error),
-                None,
+                coordinator_repository::CoordinatorActionInsert {
+                    run_id: &run.id,
+                    workspace_id: &input.workspace_id,
+                    action_kind: "validation_error",
+                    worker_id: None,
+                    prompt: None,
+                    message: Some(&validation_error),
+                    raw_json: None,
+                },
             )?;
             coordinator_repository::mark_run_result(
                 &state.db,
@@ -477,13 +481,15 @@ pub fn step_workspace_coordinator(
                 workers.push(worker);
                 coordinator_repository::insert_action(
                     &state.db,
-                    &run.id,
-                    &input.workspace_id,
-                    "spawn_worker",
-                    Some(&worker_id),
-                    Some(&prompt),
-                    None,
-                    None,
+                    coordinator_repository::CoordinatorActionInsert {
+                        run_id: &run.id,
+                        workspace_id: &input.workspace_id,
+                        action_kind: "spawn_worker",
+                        worker_id: Some(&worker_id),
+                        prompt: Some(&prompt),
+                        message: None,
+                        raw_json: None,
+                    },
                 )?;
             }
             "message_worker" => {
@@ -515,13 +521,15 @@ pub fn step_workspace_coordinator(
                 coordinator_repository::upsert_worker(&state.db, &worker)?;
                 coordinator_repository::insert_action(
                     &state.db,
-                    &run.id,
-                    &input.workspace_id,
-                    "message_worker",
-                    Some(&worker.id),
-                    Some(&prompt),
-                    None,
-                    None,
+                    coordinator_repository::CoordinatorActionInsert {
+                        run_id: &run.id,
+                        workspace_id: &input.workspace_id,
+                        action_kind: "message_worker",
+                        worker_id: Some(&worker.id),
+                        prompt: Some(&prompt),
+                        message: None,
+                        raw_json: None,
+                    },
                 )?;
             }
             "stop_worker" => {
@@ -537,13 +545,15 @@ pub fn step_workspace_coordinator(
                 coordinator_repository::upsert_worker(&state.db, &worker)?;
                 coordinator_repository::insert_action(
                     &state.db,
-                    &run.id,
-                    &input.workspace_id,
-                    "stop_worker",
-                    Some(&worker.id),
-                    None,
-                    None,
-                    None,
+                    coordinator_repository::CoordinatorActionInsert {
+                        run_id: &run.id,
+                        workspace_id: &input.workspace_id,
+                        action_kind: "stop_worker",
+                        worker_id: Some(&worker.id),
+                        prompt: None,
+                        message: None,
+                        raw_json: None,
+                    },
                 )?;
             }
             "notify_user" => {
@@ -557,13 +567,15 @@ pub fn step_workspace_coordinator(
                     );
                     coordinator_repository::insert_action(
                         &state.db,
-                        &run.id,
-                        &input.workspace_id,
-                        "notify_user",
-                        None,
-                        None,
-                        Some(message),
-                        None,
+                        coordinator_repository::CoordinatorActionInsert {
+                            run_id: &run.id,
+                            workspace_id: &input.workspace_id,
+                            action_kind: "notify_user",
+                            worker_id: None,
+                            prompt: None,
+                            message: Some(message),
+                            raw_json: None,
+                        },
                     )?;
                 }
             }
@@ -584,13 +596,15 @@ pub fn step_workspace_coordinator(
                 );
                 coordinator_repository::insert_action(
                     &state.db,
-                    &run.id,
-                    &input.workspace_id,
-                    "complete",
-                    action.worker_id.as_deref(),
-                    action.prompt.as_deref(),
-                    action.message.as_deref(),
-                    None,
+                    coordinator_repository::CoordinatorActionInsert {
+                        run_id: &run.id,
+                        workspace_id: &input.workspace_id,
+                        action_kind: "complete",
+                        worker_id: action.worker_id.as_deref(),
+                        prompt: action.prompt.as_deref(),
+                        message: action.message.as_deref(),
+                        raw_json: None,
+                    },
                 )?;
             }
             _ => {}
@@ -643,16 +657,18 @@ fn reconcile_worker_runtime_status(
             );
             coordinator_repository::insert_action(
                 &state.db,
-                &active_run.id,
-                &worker.workspace_id,
-                "worker_update",
-                Some(&worker.id),
-                None,
-                Some(&format!(
-                    "worker={} status={} session={}",
-                    worker.id, runtime_update.next_status, session.id
-                )),
-                None,
+                coordinator_repository::CoordinatorActionInsert {
+                    run_id: &active_run.id,
+                    workspace_id: &worker.workspace_id,
+                    action_kind: "worker_update",
+                    worker_id: Some(&worker.id),
+                    prompt: None,
+                    message: Some(&format!(
+                        "worker={} status={} session={}",
+                        worker.id, runtime_update.next_status, session.id
+                    )),
+                    raw_json: None,
+                },
             )?;
             next.notified_status = Some(runtime_update.next_status);
         }

@@ -3,6 +3,31 @@ use rusqlite::{params, OptionalExtension};
 use crate::db::Database;
 use crate::models::AgentMemory;
 
+pub struct AgentMemoryUpsert<'a> {
+    pub workspace_id: Option<&'a str>,
+    pub scope: Option<&'a str>,
+    pub key: &'a str,
+    pub value: &'a str,
+    pub origin: Option<&'a str>,
+    pub status: Option<&'a str>,
+    pub confidence: Option<f64>,
+    pub source_task_run_id: Option<&'a str>,
+    pub source_label: Option<&'a str>,
+    pub source_detail: Option<&'a str>,
+    pub last_used_at: Option<&'a str>,
+}
+
+pub struct AgentMemoryCandidateUpsert<'a> {
+    pub workspace_id: Option<&'a str>,
+    pub scope: Option<&'a str>,
+    pub key: &'a str,
+    pub value: &'a str,
+    pub confidence: f64,
+    pub source_label: Option<&'a str>,
+    pub source_detail: Option<&'a str>,
+    pub source_task_run_id: Option<&'a str>,
+}
+
 fn memory_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentMemory> {
     Ok(AgentMemory {
         id: row.get("id")?,
@@ -57,37 +82,24 @@ pub fn list_all(db: &Database) -> Result<Vec<AgentMemory>, String> {
 }
 
 /// Upsert a memory entry.
-pub fn upsert(
-    db: &Database,
-    workspace_id: Option<&str>,
-    scope: Option<&str>,
-    key: &str,
-    value: &str,
-    origin: Option<&str>,
-    status: Option<&str>,
-    confidence: Option<f64>,
-    source_task_run_id: Option<&str>,
-    source_label: Option<&str>,
-    source_detail: Option<&str>,
-    last_used_at: Option<&str>,
-) -> Result<AgentMemory, String> {
+pub fn upsert(db: &Database, input: AgentMemoryUpsert<'_>) -> Result<AgentMemory, String> {
     use std::time::{SystemTime, UNIX_EPOCH};
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    let id = match workspace_id {
-        Some(ws) => format!("mem-{ws}-{key}"),
-        None => format!("mem-global-{key}"),
+    let id = match input.workspace_id {
+        Some(ws) => format!("mem-{ws}-{}", input.key),
+        None => format!("mem-global-{}", input.key),
     };
-    let scope_value = scope.unwrap_or(if workspace_id.is_some() {
+    let scope_value = input.scope.unwrap_or(if input.workspace_id.is_some() {
         "workspace"
     } else {
         "global"
     });
-    let origin_value = origin.unwrap_or("manual");
-    let status_value = status.unwrap_or("active");
-    let confidence_value = confidence.unwrap_or(1.0);
+    let origin_value = input.origin.unwrap_or("manual");
+    let status_value = input.status.unwrap_or("active");
+    let confidence_value = input.confidence.unwrap_or(1.0);
     db.with_connection_mut(|connection| {
         connection.execute(
             r#"INSERT INTO agent_memory (id, workspace_id, scope, key, value, origin, status, confidence, source_task_run_id, source_label, source_detail, last_used_at, created_at, updated_at)
@@ -105,34 +117,34 @@ pub fn upsert(
                    updated_at = CURRENT_TIMESTAMP"#,
             params![
                 id,
-                workspace_id,
+                input.workspace_id,
                 scope_value,
-                key,
-                value,
+                input.key,
+                input.value,
                 origin_value,
                 status_value,
                 confidence_value,
-                source_task_run_id,
-                source_label,
-                source_detail,
-                last_used_at
+                input.source_task_run_id,
+                input.source_label,
+                input.source_detail,
+                input.last_used_at
             ],
         )?;
         Ok(())
     })?;
     Ok(AgentMemory {
         id,
-        workspace_id: workspace_id.map(str::to_string),
+        workspace_id: input.workspace_id.map(str::to_string),
         scope: scope_value.to_string(),
-        key: key.to_string(),
-        value: value.to_string(),
+        key: input.key.to_string(),
+        value: input.value.to_string(),
         origin: origin_value.to_string(),
         status: status_value.to_string(),
         confidence: confidence_value,
-        source_task_run_id: source_task_run_id.map(str::to_string),
-        source_label: source_label.map(str::to_string),
-        source_detail: source_detail.map(str::to_string),
-        last_used_at: last_used_at.map(str::to_string),
+        source_task_run_id: input.source_task_run_id.map(str::to_string),
+        source_label: input.source_label.map(str::to_string),
+        source_detail: input.source_detail.map(str::to_string),
+        last_used_at: input.last_used_at.map(str::to_string),
         created_at: ts.to_string(),
         updated_at: ts.to_string(),
     })
@@ -208,34 +220,26 @@ pub fn get_by_key(
 
 pub fn upsert_candidate(
     db: &Database,
-    workspace_id: Option<&str>,
-    scope: Option<&str>,
-    key: &str,
-    value: &str,
-    confidence: f64,
-    source_label: Option<&str>,
-    source_detail: Option<&str>,
-    source_task_run_id: Option<&str>,
+    input: AgentMemoryCandidateUpsert<'_>,
 ) -> Result<Option<AgentMemory>, String> {
-    if let Some(existing) = get_by_key(db, workspace_id, key)? {
+    if let Some(existing) = get_by_key(db, input.workspace_id, input.key)? {
         if existing.status == "dismissed" || existing.origin == "manual" || existing.status == "active" {
             return Ok(None);
         }
     }
-    upsert(
-        db,
-        workspace_id,
-        scope,
-        key,
-        value,
-        Some("auto"),
-        Some("candidate"),
-        Some(confidence),
-        source_task_run_id,
-        source_label,
-        source_detail,
-        None,
-    )
+    upsert(db, AgentMemoryUpsert {
+        workspace_id: input.workspace_id,
+        scope: input.scope,
+        key: input.key,
+        value: input.value,
+        origin: Some("auto"),
+        status: Some("candidate"),
+        confidence: Some(input.confidence),
+        source_task_run_id: input.source_task_run_id,
+        source_label: input.source_label,
+        source_detail: input.source_detail,
+        last_used_at: None,
+    })
     .map(Some)
 }
 
@@ -279,17 +283,19 @@ mod tests {
 
         let _ = upsert(
             &db,
-            Some(workspace),
-            Some("workspace"),
-            "env-pattern",
-            "Use pnpm install before tests",
-            Some("auto"),
-            Some("active"),
-            Some(0.7),
-            Some("task-1"),
-            Some("Test note"),
-            Some("Useful install/test ordering."),
-            Some("200"),
+            AgentMemoryUpsert {
+                workspace_id: Some(workspace),
+                scope: Some("workspace"),
+                key: "env-pattern",
+                value: "Use pnpm install before tests",
+                origin: Some("auto"),
+                status: Some("active"),
+                confidence: Some(0.7),
+                source_task_run_id: Some("task-1"),
+                source_label: Some("Test note"),
+                source_detail: Some("Useful install/test ordering."),
+                last_used_at: Some("200"),
+            },
         )
         .expect("upsert");
 

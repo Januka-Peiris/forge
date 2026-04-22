@@ -24,17 +24,19 @@ pub fn set_agent_memory(
 ) -> Result<AgentMemory, String> {
     agent_memory_repository::upsert(
         &state.db,
-        input.workspace_id.as_deref(),
-        input.scope.as_deref(),
-        &input.key,
-        &input.value,
-        input.origin.as_deref(),
-        input.status.as_deref(),
-        input.confidence,
-        input.source_task_run_id.as_deref(),
-        input.source_label.as_deref(),
-        input.source_detail.as_deref(),
-        input.last_used_at.as_deref(),
+        agent_memory_repository::AgentMemoryUpsert {
+            workspace_id: input.workspace_id.as_deref(),
+            scope: input.scope.as_deref(),
+            key: &input.key,
+            value: &input.value,
+            origin: input.origin.as_deref(),
+            status: input.status.as_deref(),
+            confidence: input.confidence,
+            source_task_run_id: input.source_task_run_id.as_deref(),
+            source_label: input.source_label.as_deref(),
+            source_detail: input.source_detail.as_deref(),
+            last_used_at: input.last_used_at.as_deref(),
+        },
     )
 }
 

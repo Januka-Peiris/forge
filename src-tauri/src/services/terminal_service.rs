@@ -241,17 +241,19 @@ pub fn create_workspace_terminal(
                 .to_string();
             let _ = agent_memory_repository::upsert(
                 &state.db,
-                Some(&session.workspace_id),
-                Some("workspace"),
-                &memory_key,
-                &memory_value,
-                Some("auto"),
-                Some("active"),
-                Some(0.6),
-                Some(&task_run_id),
-                Some("Run command"),
-                Some("Captured from a workspace run/check terminal start."),
-                Some(&timestamp()),
+                agent_memory_repository::AgentMemoryUpsert {
+                    workspace_id: Some(&session.workspace_id),
+                    scope: Some("workspace"),
+                    key: &memory_key,
+                    value: &memory_value,
+                    origin: Some("auto"),
+                    status: Some("active"),
+                    confidence: Some(0.6),
+                    source_task_run_id: Some(&task_run_id),
+                    source_label: Some("Run command"),
+                    source_detail: Some("Captured from a workspace run/check terminal start."),
+                    last_used_at: Some(&timestamp()),
+                },
             );
         }
     }

@@ -246,7 +246,7 @@ fn ensure_within_root(root: &Path, candidate: &Path, input: &str) -> Result<(), 
 }
 
 fn list_nodes_in_dir(
-    root: &Path,
+    _root: &Path,
     dir: &Path,
     rel_prefix: Option<&str>,
     depth: usize,
@@ -287,7 +287,7 @@ fn list_nodes_in_dir(
             let dir_path = entry.path();
             let children = if depth > 1 {
                 Some(list_nodes_in_dir(
-                    root,
+                    _root,
                     &dir_path,
                     Some(&rel_path),
                     depth.saturating_sub(1),

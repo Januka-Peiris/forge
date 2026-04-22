@@ -24,14 +24,16 @@ fn sync_workspace_candidates(state: &AppState, workspace_id: &str) -> Result<(),
     if !workspace.current_task.trim().is_empty() {
         let _ = agent_memory_repository::upsert_candidate(
             &state.db,
-            Some(workspace_id),
-            Some("workspace"),
-            "workspace-goal",
-            workspace.current_task.trim(),
-            0.72,
-            Some("Accepted workspace task"),
-            Some("Derived from the workspace's current task / plan prompt."),
-            None,
+            agent_memory_repository::AgentMemoryCandidateUpsert {
+                workspace_id: Some(workspace_id),
+                scope: Some("workspace"),
+                key: "workspace-goal",
+                value: workspace.current_task.trim(),
+                confidence: 0.72,
+                source_label: Some("Accepted workspace task"),
+                source_detail: Some("Derived from the workspace's current task / plan prompt."),
+                source_task_run_id: None,
+            },
         )?;
     }
 
@@ -41,14 +43,16 @@ fn sync_workspace_candidates(state: &AppState, workspace_id: &str) -> Result<(),
         if !summary.is_empty() {
             let _ = agent_memory_repository::upsert_candidate(
                 &state.db,
-                Some(workspace_id),
-                Some("workspace"),
-                "workspace-rules",
-                &summary,
-                0.68,
-                Some(".forge/config.json"),
-                Some("Derived from durable workspace setup/run/hook configuration."),
-                None,
+                agent_memory_repository::AgentMemoryCandidateUpsert {
+                    workspace_id: Some(workspace_id),
+                    scope: Some("workspace"),
+                    key: "workspace-rules",
+                    value: &summary,
+                    confidence: 0.68,
+                    source_label: Some(".forge/config.json"),
+                    source_detail: Some("Derived from durable workspace setup/run/hook configuration."),
+                    source_task_run_id: None,
+                },
             )?;
         }
     }
@@ -75,14 +79,16 @@ fn sync_workspace_candidates(state: &AppState, workspace_id: &str) -> Result<(),
         let detail = format!("Observed in {count} run/check sessions for this workspace.");
         let _ = agent_memory_repository::upsert_candidate(
             &state.db,
-            Some(workspace_id),
-            Some("workspace"),
-            &key,
-            &value,
-            0.64,
-            Some("Repeated run pattern"),
-            Some(detail.as_str()),
-            None,
+            agent_memory_repository::AgentMemoryCandidateUpsert {
+                workspace_id: Some(workspace_id),
+                scope: Some("workspace"),
+                key: &key,
+                value: &value,
+                confidence: 0.64,
+                source_label: Some("Repeated run pattern"),
+                source_detail: Some(detail.as_str()),
+                source_task_run_id: None,
+            },
         )?;
     }
 

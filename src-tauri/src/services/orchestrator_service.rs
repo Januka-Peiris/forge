@@ -334,7 +334,7 @@ Rules:
             "orchestrator_pass_finished",
             serde_json::json!({ "actionCount": actions.len() }),
         );
-        let _ = task_lifecycle_service::mark_task_run_completed(&state, &task_run_id, "completed");
+        let _ = task_lifecycle_service::mark_task_run_completed(state, &task_run_id, "completed");
     }
 
     if let Ok(mut last_run) = state.orchestrator_last_run.lock() {

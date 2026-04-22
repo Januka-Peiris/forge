@@ -7,6 +7,16 @@ use crate::models::{
     CoordinatorActionLog, CoordinatorRun, CoordinatorWorker, WorkspaceCoordinatorStatus,
 };
 
+pub struct CoordinatorActionInsert<'a> {
+    pub run_id: &'a str,
+    pub workspace_id: &'a str,
+    pub action_kind: &'a str,
+    pub worker_id: Option<&'a str>,
+    pub prompt: Option<&'a str>,
+    pub message: Option<&'a str>,
+    pub raw_json: Option<&'a str>,
+}
+
 fn run_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CoordinatorRun> {
     Ok(CoordinatorRun {
         id: row.get("id")?,
@@ -194,27 +204,18 @@ pub fn upsert_worker(db: &Database, worker: &CoordinatorWorker) -> Result<(), St
     })
 }
 
-pub fn insert_action(
-    db: &Database,
-    run_id: &str,
-    workspace_id: &str,
-    action_kind: &str,
-    worker_id: Option<&str>,
-    prompt: Option<&str>,
-    message: Option<&str>,
-    raw_json: Option<&str>,
-) -> Result<(), String> {
+pub fn insert_action(db: &Database, input: CoordinatorActionInsert<'_>) -> Result<(), String> {
     insert_action_with_metadata(
         db,
-        run_id,
-        workspace_id,
-        action_kind,
+        input.run_id,
+        input.workspace_id,
+        input.action_kind,
         None,
         None,
-        worker_id,
-        prompt,
-        message,
-        raw_json,
+        input.worker_id,
+        input.prompt,
+        input.message,
+        input.raw_json,
     )
 }
 
