@@ -87,8 +87,11 @@ pub(super) fn queue_workspace_agent_prompt(
                     &memory.key,
                     &memory.value,
                     Some(memory.origin.as_str()),
+                    Some(memory.status.as_str()),
                     Some(memory.confidence),
                     memory.source_task_run_id.as_deref(),
+                    memory.source_label.as_deref(),
+                    memory.source_detail.as_deref(),
                     Some(&now),
                 );
             }

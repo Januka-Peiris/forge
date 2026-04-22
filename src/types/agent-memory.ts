@@ -5,8 +5,11 @@ export interface AgentMemory {
   key: string;
   value: string;
   origin: 'manual' | 'auto' | string;
+  status: 'active' | 'candidate' | 'dismissed' | string;
   confidence: number;
   sourceTaskRunId?: string | null;
+  sourceLabel?: string | null;
+  sourceDetail?: string | null;
   lastUsedAt?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -18,7 +21,10 @@ export interface SetAgentMemoryInput {
   key: string;
   value: string;
   origin?: 'manual' | 'auto' | string;
+  status?: 'active' | 'candidate' | 'dismissed' | string;
   confidence?: number;
   sourceTaskRunId?: string | null;
+  sourceLabel?: string | null;
+  sourceDetail?: string | null;
   lastUsedAt?: string | null;
 }

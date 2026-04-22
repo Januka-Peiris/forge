@@ -246,8 +246,11 @@ pub fn create_workspace_terminal(
                 &memory_key,
                 &memory_value,
                 Some("auto"),
+                Some("active"),
                 Some(0.6),
                 Some(&task_run_id),
+                Some("Run command"),
+                Some("Captured from a workspace run/check terminal start."),
                 Some(&timestamp()),
             );
         }

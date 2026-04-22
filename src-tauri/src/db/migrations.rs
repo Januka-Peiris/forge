@@ -668,7 +668,15 @@ pub fn run(connection: &Connection) -> Result<(), String> {
         "confidence",
         "REAL NOT NULL DEFAULT 1.0",
     )?;
+    add_column_if_missing(
+        connection,
+        "agent_memory",
+        "status",
+        "TEXT NOT NULL DEFAULT 'active'",
+    )?;
     add_column_if_missing(connection, "agent_memory", "source_task_run_id", "TEXT")?;
+    add_column_if_missing(connection, "agent_memory", "source_label", "TEXT")?;
+    add_column_if_missing(connection, "agent_memory", "source_detail", "TEXT")?;
     add_column_if_missing(connection, "agent_memory", "last_used_at", "TEXT")?;
 
     // Workspace templates table
