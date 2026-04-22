@@ -11,6 +11,10 @@ export default {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
+        panel: 'var(--radius-panel)',
+        btn: 'var(--radius-button)',
+        input: 'var(--radius-input)',
+        chat: 'var(--radius-chat)',
       },
       fontSize: {
         'ui-tiny': '9px',
@@ -61,9 +65,9 @@ export default {
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
         forge: {
-          bg: '#050505',
-          surface: '#0d0d0d',
-          card: '#141414',
+          bg: '#0f1317',
+          surface: '#171c21',
+          card: '#1d242b',
           'surface-overlay': 'rgba(255, 255, 255, 0.03)',
           'surface-overlay-high': 'rgba(255, 255, 255, 0.08)',
           border: '#1a1a1a',

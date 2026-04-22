@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
@@ -86,6 +86,34 @@ pub fn mark_workspace_pr_comment_resolved_local(
         &timestamp(),
     )?;
     build_cockpit(state, workspace_id, None, false)
+}
+
+pub fn resolve_workspace_pr_thread(
+    state: &AppState,
+    workspace_id: &str,
+    comment_id: &str,
+) -> Result<WorkspaceReviewCockpit, String> {
+    let comment = review_cockpit_repository::get_pr_comment(&state.db, workspace_id, comment_id)?
+        .ok_or_else(|| format!("PR comment {comment_id} was not found"))?;
+    let thread_id = comment
+        .thread_id
+        .ok_or_else(|| "This comment is not part of a resolvable GitHub review thread.".to_string())?;
+    run_thread_mutation(state, workspace_id, &thread_id, "resolveReviewThread")?;
+    refresh_workspace_pr_comments(state, workspace_id)
+}
+
+pub fn reopen_workspace_pr_thread(
+    state: &AppState,
+    workspace_id: &str,
+    comment_id: &str,
+) -> Result<WorkspaceReviewCockpit, String> {
+    let comment = review_cockpit_repository::get_pr_comment(&state.db, workspace_id, comment_id)?
+        .ok_or_else(|| format!("PR comment {comment_id} was not found"))?;
+    let thread_id = comment
+        .thread_id
+        .ok_or_else(|| "This comment is not part of a resolvable GitHub review thread.".to_string())?;
+    run_thread_mutation(state, workspace_id, &thread_id, "unresolveReviewThread")?;
+    refresh_workspace_pr_comments(state, workspace_id)
 }
 
 pub fn queue_review_agent_prompt(
@@ -201,7 +229,11 @@ fn fetch_github_pr_comments(
     let mut comments = parse_pr_view_comments(workspace_id, &value);
 
     if number > 0 {
+        let mut thread_by_comment_node_id = HashMap::<String, ThreadInfo>::new();
         if let Some((owner, repo)) = git_remote_owner_repo(&root) {
+            if let Ok(threads) = fetch_review_threads(&gh, &root, &owner, &repo, number as u64) {
+                thread_by_comment_node_id = threads;
+            }
             let endpoint = format!("repos/{owner}/{repo}/pulls/{number}/comments");
             let output = Command::new(&gh)
                 .current_dir(&root)
@@ -215,9 +247,19 @@ fn fetch_github_pr_comments(
                 }
             }
         }
+        attach_thread_metadata(&mut comments, &thread_by_comment_node_id);
     }
     dedupe_comments(&mut comments);
     Ok((comments, None))
+}
+
+#[derive(Debug, Clone)]
+struct ThreadInfo {
+    id: String,
+    review_id: Option<u64>,
+    resolved: bool,
+    outdated: bool,
+    resolvable: bool,
 }
 
 pub fn parse_pr_view_comments(workspace_id: &str, value: &Value) -> Vec<WorkspacePrComment> {
@@ -253,6 +295,12 @@ pub fn parse_pr_view_comments(workspace_id: &str, value: &Value) -> Vec<Workspac
                     .and_then(Value::as_str)
                     .map(str::to_string),
                 resolved_at: None,
+                comment_node_id: item.get("id").and_then(Value::as_str).map(str::to_string),
+                thread_id: None,
+                review_id: None,
+                thread_resolved: false,
+                thread_outdated: false,
+                thread_resolvable: false,
             });
         }
     }
@@ -287,6 +335,12 @@ pub fn parse_pr_view_comments(workspace_id: &str, value: &Value) -> Vec<Workspac
                     .and_then(Value::as_str)
                     .map(str::to_string),
                 resolved_at: None,
+                comment_node_id: item.get("id").and_then(Value::as_str).map(str::to_string),
+                thread_id: None,
+                review_id: None,
+                thread_resolved: false,
+                thread_outdated: false,
+                thread_resolvable: false,
             });
         }
     }
@@ -341,13 +395,190 @@ pub fn parse_inline_comments(workspace_id: &str, value: &Value) -> Vec<Workspace
                     .and_then(Value::as_str)
                     .map(str::to_string),
                 resolved_at: None,
+                comment_node_id: item
+                    .get("node_id")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+                thread_id: None,
+                review_id: item.get("pull_request_review_id").and_then(Value::as_u64),
+                thread_resolved: false,
+                thread_outdated: false,
+                thread_resolvable: false,
             })
         })
         .collect()
 }
 
+fn fetch_review_threads(
+    gh: &str,
+    root: &Path,
+    owner: &str,
+    repo: &str,
+    number: u64,
+) -> Result<HashMap<String, ThreadInfo>, String> {
+    let query = r#"
+query($owner: String!, $repo: String!, $number: Int!) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 100) {
+        nodes {
+          id
+          isResolved
+          isOutdated
+          comments(first: 100) {
+            nodes {
+              id
+              pullRequestReview { databaseId }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"#;
+    let output = Command::new(gh)
+        .current_dir(root)
+        .arg("api")
+        .arg("graphql")
+        .arg("-f")
+        .arg(format!("query={query}"))
+        .arg("-F")
+        .arg(format!("owner={owner}"))
+        .arg("-F")
+        .arg(format!("repo={repo}"))
+        .arg("-F")
+        .arg(format!("number={number}"))
+        .output()
+        .map_err(|err| format!("Failed to fetch GitHub review threads: {err}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            "Failed to fetch GitHub review threads.".to_string()
+        } else {
+            stderr
+        });
+    }
+    let parsed = serde_json::from_slice::<Value>(&output.stdout)
+        .map_err(|err| format!("Failed to parse GitHub review threads response: {err}"))?;
+    let nodes = parsed
+        .get("data")
+        .and_then(|d| d.get("repository"))
+        .and_then(|d| d.get("pullRequest"))
+        .and_then(|d| d.get("reviewThreads"))
+        .and_then(|d| d.get("nodes"))
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    let mut by_comment_node_id = HashMap::new();
+    for node in nodes {
+        let thread_id = node
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        if thread_id.is_empty() {
+            continue;
+        }
+        let resolved = node
+            .get("isResolved")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let outdated = node
+            .get("isOutdated")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let comment_nodes = node
+            .get("comments")
+            .and_then(|d| d.get("nodes"))
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        for comment_node in comment_nodes {
+            let comment_node_id = comment_node
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            if comment_node_id.is_empty() {
+                continue;
+            }
+            let review_id = comment_node
+                .get("pullRequestReview")
+                .and_then(|d| d.get("databaseId"))
+                .and_then(Value::as_u64);
+            by_comment_node_id.insert(
+                comment_node_id,
+                ThreadInfo {
+                    id: thread_id.clone(),
+                    review_id,
+                    resolved,
+                    outdated,
+                    resolvable: !outdated,
+                },
+            );
+        }
+    }
+    Ok(by_comment_node_id)
+}
+
+fn attach_thread_metadata(
+    comments: &mut [WorkspacePrComment],
+    thread_by_comment_node_id: &HashMap<String, ThreadInfo>,
+) {
+    for comment in comments.iter_mut() {
+        let Some(comment_node_id) = comment.comment_node_id.as_deref() else {
+            continue;
+        };
+        let Some(thread) = thread_by_comment_node_id.get(comment_node_id) else {
+            continue;
+        };
+        comment.thread_id = Some(thread.id.clone());
+        comment.review_id = thread.review_id;
+        comment.thread_resolved = thread.resolved;
+        comment.thread_outdated = thread.outdated;
+        comment.thread_resolvable = thread.resolvable;
+        if thread.resolved && comment.state == "open" {
+            comment.state = "resolved".to_string();
+        }
+    }
+}
+
+fn run_thread_mutation(
+    state: &AppState,
+    workspace_id: &str,
+    thread_id: &str,
+    mutation_name: &str,
+) -> Result<(), String> {
+    let root = workspace_root(state, workspace_id)?;
+    let gh = find_gh_binary()?;
+    let query = format!(
+        "mutation($threadId: ID!) {{ {mutation_name}(input: {{threadId: $threadId}}) {{ thread {{ id isResolved }} }} }}"
+    );
+    let output = Command::new(&gh)
+        .current_dir(&root)
+        .arg("api")
+        .arg("graphql")
+        .arg("-f")
+        .arg(format!("query={query}"))
+        .arg("-f")
+        .arg(format!("threadId={thread_id}"))
+        .output()
+        .map_err(|err| format!("Failed to run GitHub {mutation_name}: {err}"))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(if stderr.is_empty() {
+        format!("GitHub {mutation_name} failed.")
+    } else {
+        stderr
+    })
+}
+
 fn dedupe_comments(comments: &mut Vec<WorkspacePrComment>) {
-    let mut seen = std::collections::HashSet::new();
+    let mut seen = HashSet::new();
     comments.retain(|comment| seen.insert(comment.comment_id.clone()));
 }
 
@@ -529,5 +760,43 @@ mod tests {
             parse_github_remote("https://github.com/owner/repo.git"),
             Some(("owner".to_string(), "repo".to_string()))
         );
+    }
+
+    #[test]
+    fn attaches_thread_metadata_to_inline_comments() {
+        let mut comments = vec![WorkspacePrComment {
+            workspace_id: "ws".to_string(),
+            provider: "github".to_string(),
+            comment_id: "inline-1".to_string(),
+            author: "bot".to_string(),
+            body: "body".to_string(),
+            path: Some("src/lib.rs".to_string()),
+            line: Some(7),
+            url: None,
+            state: "open".to_string(),
+            created_at: None,
+            resolved_at: None,
+            comment_node_id: Some("node-1".to_string()),
+            thread_id: None,
+            review_id: None,
+            thread_resolved: false,
+            thread_outdated: false,
+            thread_resolvable: false,
+        }];
+        let mut map = HashMap::new();
+        map.insert(
+            "node-1".to_string(),
+            ThreadInfo {
+                id: "thread-1".to_string(),
+                review_id: Some(42),
+                resolved: true,
+                outdated: false,
+                resolvable: true,
+            },
+        );
+        attach_thread_metadata(&mut comments, &map);
+        assert_eq!(comments[0].thread_id.as_deref(), Some("thread-1"));
+        assert!(comments[0].thread_resolved);
+        assert_eq!(comments[0].state, "resolved");
     }
 }

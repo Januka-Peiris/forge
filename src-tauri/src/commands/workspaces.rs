@@ -120,3 +120,11 @@ pub fn set_workspace_cost_limit(
 ) -> Result<(), String> {
     workspace_repository::set_cost_limit(&state.db, &workspace_id, limit_usd)
 }
+
+#[tauri::command]
+pub fn pull_workspace_branch(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> Result<String, String> {
+    workspace_service::pull_workspace_branch(&state, &workspace_id)
+}

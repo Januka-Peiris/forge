@@ -4,6 +4,7 @@ import { refreshWorkspacePrDraft } from '../../lib/tauri-api/pr-draft';
 import { cleanupWorkspace } from '../../lib/tauri-api/workspace-cleanup';
 import { recoverWorkspaceSessions } from '../../lib/tauri-api/workspace-health';
 import { refreshWorkspacePrComments } from '../../lib/tauri-api/review-cockpit';
+import { pullWorkspaceBranch } from '../../lib/tauri-api/workspaces';
 import type { WorkspaceSessionRecoveryResult } from '../../types/workspace-health';
 import type { WorkspacePrDraft } from '../../types/pr-draft';
 import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
@@ -127,7 +128,7 @@ export function useDetailPanelWorkflowActions({
     try {
       const cockpit = await refreshWorkspacePrComments(workspaceId);
       setReviewCockpit(cockpit);
-      const openComments = cockpit.prComments.filter((comment) => !comment.resolvedAt && comment.state !== 'resolved').length;
+      const openComments = cockpit.prComments.filter((comment) => !comment.threadResolved && !comment.resolvedAt && comment.state !== 'resolved').length;
       setReviewMessage(`Fetched ${openComments} open PR comment(s).`);
       await refreshCockpitData();
       onRefreshWorkspaceState?.();
@@ -135,6 +136,22 @@ export function useDetailPanelWorkflowActions({
       setReviewMessage(err instanceof Error ? err.message : String(err));
     } finally {
       setReviewCommentsRefreshing(false);
+    }
+  };
+
+  const pullBranchFromCockpit = async () => {
+    if (!workspaceId) return;
+    setScriptActionBusy('pull');
+    setScriptActionMessage(null);
+    try {
+      const message = await pullWorkspaceBranch(workspaceId);
+      setScriptActionMessage(message);
+      await refreshCockpitData();
+      onRefreshWorkspaceState?.();
+    } catch (err) {
+      setScriptActionMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setScriptActionBusy(null);
     }
   };
 
@@ -242,6 +259,7 @@ export function useDetailPanelWorkflowActions({
     refreshPrDraftFromCockpit,
     copyPrDraftFromCockpit,
     refreshPrCommentsFromCockpit,
+    pullBranchFromCockpit,
     createPrFromCockpit,
     cleanupFromCockpit,
     archiveFromCockpit,

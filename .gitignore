@@ -36,3 +36,6 @@ src-tauri/gen/
 
 # Forge-managed local workspaces
 forge/
+
+# Research files
+.research/

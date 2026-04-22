@@ -81,6 +81,32 @@ pub fn mark_workspace_pr_comment_resolved_local(
 }
 
 #[tauri::command]
+pub fn resolve_workspace_pr_thread(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    comment_id: String,
+) -> Result<WorkspaceReviewCockpit, String> {
+    review_cockpit_service::resolve_workspace_pr_thread(&state, &workspace_id, &comment_id)
+}
+
+#[tauri::command]
+pub fn reopen_workspace_pr_thread(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    comment_id: String,
+) -> Result<WorkspaceReviewCockpit, String> {
+    review_cockpit_service::reopen_workspace_pr_thread(&state, &workspace_id, &comment_id)
+}
+
+#[tauri::command]
+pub fn sync_workspace_pr_threads(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> Result<WorkspaceReviewCockpit, String> {
+    review_cockpit_service::refresh_workspace_pr_comments(&state, &workspace_id)
+}
+
+#[tauri::command]
 pub fn queue_review_agent_prompt(
     state: State<'_, AppState>,
     input: QueueReviewAgentPromptInput,

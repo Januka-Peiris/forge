@@ -153,7 +153,8 @@ fn insert_with_transaction(
             agent_session_started_at, repository_id, repository_path, selected_branch,
             selected_worktree_id, selected_worktree_path, workspace_root_path,
             worktree_managed_by_forge, workspace_source, parent_workspace_id, source_workspace_id,
-            derived_from_branch, worktree_path, recent_events, updated_at
+            derived_from_branch, run_tests_on_create, create_pr_on_complete,
+            worktree_path, recent_events, updated_at
         ) VALUES (
             ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8,
             ?9, ?10, ?11, ?12, ?13,
@@ -162,7 +163,8 @@ fn insert_with_transaction(
             ?23, ?24, ?25,
             ?26, ?27, ?28, ?29,
             ?30, ?31, ?32,
-            ?33, ?34, ?35, ?36, ?37, ?38, ?39, CURRENT_TIMESTAMP
+            ?33, ?34, ?35, ?36, ?37, ?38, ?39,
+            ?40, ?41, CURRENT_TIMESTAMP
         )
         "#,
         params![
@@ -203,6 +205,8 @@ fn insert_with_transaction(
             summary.parent_workspace_id,
             summary.source_workspace_id,
             summary.derived_from_branch,
+            summary.run_tests_on_create as i64,
+            summary.create_pr_on_complete as i64,
             detail.worktree_path,
             recent_events,
         ],
@@ -286,6 +290,8 @@ fn workspace_summary_from_row(
         derived_from_branch: row.get("derived_from_branch")?,
         linked_worktrees: list_linked_worktrees(connection, &id)?,
         cost_limit_usd: row.get("cost_limit_usd")?,
+        run_tests_on_create: row.get::<_, i64>("run_tests_on_create")? != 0,
+        create_pr_on_complete: row.get::<_, i64>("create_pr_on_complete")? != 0,
     })
 }
 

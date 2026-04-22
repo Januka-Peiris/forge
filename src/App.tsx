@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
-import { DetailPanel } from './components/detail/DetailPanel';
+import { WorkspaceInspectorRail } from './components/inspector/WorkspaceInspectorRail';
 import { Sidebar, type NavView } from './components/layout/Sidebar';
 import { AppFrame } from './components/layout/AppFrame';
 import { WorkspaceTerminal } from './components/terminal/WorkspaceTerminal';
@@ -8,8 +8,10 @@ import { openDeepLink } from './lib/tauri-api/deep-links';
 import { getSettings } from './lib/tauri-api/settings';
 import { forgeWarn } from './lib/forge-log';
 import { measureAsync, perfMark, perfMeasure } from './lib/perf';
-import { listWorkspaces } from './lib/tauri-api/workspaces';
-import type { ActivityItem, CreateWorkspaceInput } from './types';
+import { listWorkspaces, openInCursor as openWorkspaceInCursorById } from './lib/tauri-api/workspaces';
+import { runWorkspaceSetup } from './lib/tauri-api/workspace-scripts';
+import { syncWorkspacePrThreads } from './lib/tauri-api/review-cockpit';
+import type { CreateWorkspaceInput } from './types';
 import { LoadingView, ErrorView } from './components/views/LoadingView';
 import { EnvironmentSetupModal } from './components/modals/EnvironmentSetupModal';
 import { SettingsView } from './components/settings/SettingsView';
@@ -50,13 +52,12 @@ export default function App() {
   const [modalRepositoryId, setModalRepositoryId] = useState<string | undefined>(undefined);
   const [branchFromWorkspaceId, setBranchFromWorkspaceId] = useState<string | null>(null);
   const [deepLinkNotice, setDeepLinkNotice] = useState<string | null>(null);
-  const [activityItems, setActivityItems] = useState<ActivityItem[]>([]);
+  const [, setActivityItems] = useState<unknown[]>([]);
   const [selectedReviewPath, setSelectedReviewPath] = useState<string | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [reviewTargetCommentId, setReviewTargetCommentId] = useState<string | null>(null);
   const [requestedEditorFilePath, setRequestedEditorFilePath] = useState<string | null>(null);
-  const [activeEditorFilePath, setActiveEditorFilePath] = useState<string | null>(null);
 
   const {
     addRepositoryToSettings,
@@ -68,10 +69,12 @@ export default function App() {
 
   const {
     collapsedRailWidth,
-    detailPanelCollapsed,
-    detailPanelWidth,
-    setDetailPanelCollapsed,
-    setDetailPanelWidth,
+    inspectorCollapsed,
+    inspectorTab,
+    inspectorWidth,
+    setInspectorCollapsed,
+    setInspectorTab,
+    setInspectorWidth,
     setSidebarCollapsed,
     setSidebarWidth,
     sidebarCollapsed,
@@ -91,14 +94,9 @@ export default function App() {
   const {
     archivedWorkspaceIds,
     archiveWorkspace,
-    attachLinkedWorktree,
     createWorkspaceFromInput,
-    deleteWorkspaceRecord,
-    detachLinkedWorktree,
     displayedWorkspaces,
-    linkedWorktreesByWorkspaceId,
     markPrCreated,
-    openLinkedWorktree,
     openWorkspaceInCursor,
     replaceWorkspaces,
     selected,
@@ -120,7 +118,7 @@ export default function App() {
   }, []);
   const setWorkspacesView = useCallback(() => setView('workspaces'), []);
   const toggleCommandPalette = useCallback(() => setCommandPaletteOpen((open) => !open), []);
-  const toggleDetailPanel = useCallback(() => setDetailPanelCollapsed((collapsed) => !collapsed), [setDetailPanelCollapsed]);
+  const toggleInspector = useCallback(() => setInspectorCollapsed((collapsed) => !collapsed), [setInspectorCollapsed]);
 
   useAppKeyboardShortcuts({
     commandPaletteOpen,
@@ -134,7 +132,7 @@ export default function App() {
     onSelectWorkspace: setSelectedId,
     onSetWorkspacesView: setWorkspacesView,
     onToggleCommandPalette: toggleCommandPalette,
-    onToggleDetailPanel: toggleDetailPanel,
+    onToggleInspector: toggleInspector,
   });
 
   useEffect(() => {
@@ -255,7 +253,6 @@ export default function App() {
           workspace={selected}
           requestedFilePath={requestedEditorFilePath}
           onRequestedFilePathHandled={() => setRequestedEditorFilePath(null)}
-          onActiveEditorFileChange={setActiveEditorFilePath}
           onOpenInCursor={() => void openWorkspaceInCursor()}
         />
       );
@@ -282,46 +279,40 @@ export default function App() {
   };
 
   const isReviewView = view === 'reviews';
+  const showInspector = view === 'workspaces' || view === 'files';
   const effectiveSidebarWidth = sidebarCollapsed ? collapsedRailWidth : sidebarWidth;
 
   return (
     <div className="h-[100dvh] flex flex-col overflow-hidden bg-forge-bg text-forge-text antialiased selection:bg-forge-green/25">
       <AppFrame
         collapsedRailWidth={collapsedRailWidth}
-        detailPanel={(
-        <DetailPanel
-          workspace={selected}
-          onCollapse={() => setDetailPanelCollapsed(true)}
-          onOpenInCursor={() => void openWorkspaceInCursor()}
-          isArchived={selected ? archivedWorkspaceIds.includes(selected.id) : false}
-          onArchiveWorkspace={archiveWorkspace}
-          onDeleteWorkspace={selected ? () => void deleteWorkspaceRecord(selected.id) : undefined}
-          onOpenReviewFile={(path) => {
-            setSelectedReviewPath(path ?? null);
-            setView('reviews');
-          }}
-          activityItems={selected ? activityItems.filter((item) => item.workspaceId === selected.id) : []}
-          repositories={settingsState?.discoveredRepositories ?? []}
-          linkedWorktrees={selected ? linkedWorktreesByWorkspaceId[selected.id] ?? [] : []}
-          onAttachLinkedWorktree={(worktreeId) => void attachLinkedWorktree(worktreeId)}
-          onDetachLinkedWorktree={(worktreeId) => void detachLinkedWorktree(worktreeId)}
-          onOpenLinkedWorktreeInCursor={openLinkedWorktree}
-          onCreateChildWorkspace={() => {
-            if (!selected) return;
-            setModalRepositoryId(selected.repositoryId);
-            setBranchFromWorkspaceId(selected.id);
-            setModalOpen(true);
-          }}
-          onCreatePr={selected ? () => markPrCreated(selected.id) : undefined}
-        />
+        inspector={(
+          <WorkspaceInspectorRail
+            workspace={selected}
+            isOpen={!inspectorCollapsed}
+            width={inspectorWidth}
+            activeTab={inspectorTab}
+            onTabChange={setInspectorTab}
+            onClose={() => setInspectorCollapsed(true)}
+            onOpenReviewFile={(path) => {
+              setSelectedReviewPath(path ?? null);
+              setView('reviews');
+            }}
+            onOpenFile={(path) => {
+              setView('files');
+              setRequestedEditorFilePath(path);
+            }}
+          />
         )}
-        detailPanelCollapsed={detailPanelCollapsed}
-        detailPanelWidth={detailPanelWidth}
+        inspectorCollapsed={inspectorCollapsed}
+        inspectorWidth={inspectorWidth}
         isReviewView={isReviewView}
-        onExpandDetailPanel={() => setDetailPanelCollapsed(false)}
+        showInspector={showInspector}
+        onCollapseInspector={() => setInspectorCollapsed(true)}
+        onExpandInspector={() => setInspectorCollapsed(false)}
         onExpandSidebar={() => setSidebarCollapsed(false)}
-        onResetDetailWidth={() => setDetailPanelWidth(280)}
-        onResizeDetail={(event) => startResize(event, 'right')}
+        onResetInspectorWidth={() => setInspectorWidth(340)}
+        onResizeInspector={(event) => startResize(event, 'right')}
         onResizeSidebar={(event) => startResize(event, 'left')}
         onResetSidebarWidth={() => setSidebarWidth(300)}
         sidebar={(
@@ -336,6 +327,10 @@ export default function App() {
           selectedWorkspaceId={selectedId}
           onSelectWorkspace={setSelectedId}
           onArchiveWorkspace={(workspaceId) => archiveWorkspace(workspaceId)}
+          onOpenWorkspaceInCursor={(workspaceId) => { void openWorkspaceInCursorById(workspaceId); }}
+          onRunWorkspaceSetup={(workspaceId) => runWorkspaceSetup(workspaceId).then(() => undefined)}
+          onRefreshWorkspaceThreads={(workspaceId) => syncWorkspacePrThreads(workspaceId).then(() => undefined)}
+          onCreateWorkspacePr={(workspaceId) => markPrCreated(workspaceId)}
           onRemoveRepository={(repositoryId) => void removeRepositoryFromSettings(repositoryId)}
           onNewWorkspace={(repositoryId) => {
             setModalRepositoryId(repositoryId);
@@ -345,11 +340,6 @@ export default function App() {
           onAddRepository={() => void addRepositoryToSettings()}
           onCollapse={() => setSidebarCollapsed(true)}
           onFilteredWorkspacesChange={setDisplayedWorkspaces}
-          selectedFilePath={activeEditorFilePath}
-          onOpenFile={(path) => {
-            setView('files');
-            setRequestedEditorFilePath(path);
-          }}
         />
         )}
         sidebarCollapsed={sidebarCollapsed}

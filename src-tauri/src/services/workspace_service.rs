@@ -1,5 +1,6 @@
 use std::path::Path;
 use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::models::{
     AttachLinkedWorktreeInput, CreateChildWorkspaceInput, CreateWorkspaceInput,
@@ -158,5 +159,120 @@ pub fn open_worktree_in_cursor(path: &str) -> Result<(), String> {
         } else {
             format!("Cursor failed to open linked worktree: {stderr}")
         })
+    }
+}
+
+pub fn pull_workspace_branch(state: &AppState, workspace_id: &str) -> Result<String, String> {
+    let detail = workspace_repository::get_detail(&state.db, workspace_id)?
+        .ok_or_else(|| format!("Workspace {workspace_id} was not found"))?;
+    let root = detail
+        .summary
+        .workspace_root_path
+        .clone()
+        .unwrap_or(detail.worktree_path);
+    let root_path = Path::new(&root);
+    if !root_path.exists() || !root_path.is_dir() {
+        return Err(format!("Workspace path is unavailable: {}", root_path.display()));
+    }
+    if has_unmerged_conflicts(root_path)? {
+        return Err(
+            "Cannot pull because Git reports unresolved conflicts. Resolve or abort first."
+                .to_string(),
+        );
+    }
+    if is_dirty(root_path)? {
+        return Err(
+            "Cannot pull because the workspace has uncommitted changes. Commit/stash first."
+                .to_string(),
+        );
+    }
+    let base_branch = detail.base_branch;
+    run_git(root_path, &["fetch", "origin"])?;
+    let behind = behind_count(root_path, &base_branch)?;
+    if behind == 0 {
+        return Ok(format!("Already up to date with origin/{base_branch}."));
+    }
+    if let Err(err) = run_git(root_path, &["rebase", &format!("origin/{base_branch}")]) {
+        let _ = run_git(root_path, &["rebase", "--abort"]);
+        return Err(format!("Pull/rebase failed: {err}"));
+    }
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs().to_string())
+        .unwrap_or_else(|_| "0".to_string());
+    let _ = workspace_repository::update_last_rebase(&state.db, workspace_id, &now);
+    Ok(format!("Rebased onto origin/{base_branch} ({behind} commit(s) behind)."))
+}
+
+fn run_git(root: &Path, args: &[&str]) -> Result<String, String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .output()
+        .map_err(|err| format!("Failed to run git {}: {err}", args.join(" ")))?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        Err(if stderr.is_empty() {
+            format!("git {} failed", args.join(" "))
+        } else {
+            stderr
+        })
+    }
+}
+
+fn has_unmerged_conflicts(root: &Path) -> Result<bool, String> {
+    let output = run_git(root, &["diff", "--name-only", "--diff-filter=U"])?;
+    Ok(!output.trim().is_empty())
+}
+
+fn is_dirty(root: &Path) -> Result<bool, String> {
+    let output = run_git(root, &["status", "--porcelain"])?;
+    Ok(!output.trim().is_empty())
+}
+
+fn behind_count(root: &Path, base_branch: &str) -> Result<u32, String> {
+    let output = run_git(
+        root,
+        &[
+            "rev-list",
+            "--left-right",
+            "--count",
+            &format!("HEAD...origin/{base_branch}"),
+        ],
+    )?;
+    let (_, behind) = parse_ahead_behind_counts(&output);
+    Ok(behind)
+}
+
+fn parse_ahead_behind_counts(output: &str) -> (u32, u32) {
+    let mut parts = output.split_whitespace();
+    let ahead = parts
+        .next()
+        .and_then(|value| value.parse::<u32>().ok())
+        .unwrap_or(0);
+    let behind = parts
+        .next()
+        .and_then(|value| value.parse::<u32>().ok())
+        .unwrap_or(0);
+    (ahead, behind)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_ahead_behind_counts;
+
+    #[test]
+    fn parses_ahead_behind_counts() {
+        assert_eq!(parse_ahead_behind_counts("2 5"), (2, 5));
+        assert_eq!(parse_ahead_behind_counts("0\t1"), (0, 1));
+    }
+
+    #[test]
+    fn invalid_ahead_behind_output_defaults_to_zero() {
+        assert_eq!(parse_ahead_behind_counts("n/a"), (0, 0));
+        assert_eq!(parse_ahead_behind_counts(""), (0, 0));
     }
 }

@@ -970,6 +970,8 @@ mod tests {
             description: None,
             skills: vec![],
             templates: vec![],
+            role_preference: None,
+            coordinator_eligible: None,
         };
 
         let details = activity::format_terminal_start_activity_details(
@@ -1003,6 +1005,8 @@ mod tests {
             description: None,
             skills: vec![],
             templates: vec![],
+            role_preference: None,
+            coordinator_eligible: None,
         };
 
         let details =

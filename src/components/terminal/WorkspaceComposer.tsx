@@ -3,7 +3,7 @@ import { Link2, ListChecks, RefreshCw, Settings2, Zap } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import type { AgentChatSession, WorkspaceAgentContext, WorkspaceContextPreview } from '../../types';
+import type { AgentChatSession, AgentProfile, WorkspaceAgentContext, WorkspaceContextPreview, WorkspaceCoordinatorStatus } from '../../types';
 import type { PromptTemplate } from '../../types/prompt-template';
 import { getWorkspaceContextPreview, refreshWorkspaceRepoContext } from '../../lib/tauri-api/agent-context';
 import { formatSessionError } from '../../lib/ui-errors';
@@ -84,6 +84,12 @@ export interface ComposerSettings {
   selectedTaskMode: string;
   selectedReasoning: string;
   sendBehavior: 'send_now' | 'interrupt_send' | 'queue_send';
+  promptMode: 'direct' | 'coordinator';
+  coordinatorBrainProfileId: string;
+  coordinatorCoderProfileId: string;
+  coordinatorAutoStepOnWorkerComplete: boolean;
+  coordinatorAutoStepTrigger: 'terminal_completion' | 'any_worker_status';
+  coordinatorAutoStepCooldownSeconds: number;
 }
 
 interface WorkspaceComposerProps {
@@ -95,12 +101,15 @@ interface WorkspaceComposerProps {
   promptTemplateWarning: string | null;
   promptTemplates: PromptTemplate[];
   agentContext: WorkspaceAgentContext | null;
+  agentProfiles: AgentProfile[];
+  coordinatorStatus: WorkspaceCoordinatorStatus | null;
   settings: ComposerSettings;
   onSettingsChange: (patch: Partial<ComposerSettings>) => void;
   onSend: (text: string) => void;
   onTogglePlanMode: () => void;
   onApplyWorkflowPreset: (preset: 'plan-act' | 'plan-codex-review' | 'implement-review-pr', defaultPrompt: string) => void;
   onInterrupt: () => void;
+  onStopCoordinator: () => void;
 }
 
 export function WorkspaceComposer({
@@ -112,12 +121,15 @@ export function WorkspaceComposer({
   promptTemplateWarning,
   promptTemplates,
   agentContext,
+  agentProfiles,
+  coordinatorStatus,
   settings,
   onSettingsChange,
   onSend,
   onTogglePlanMode,
   onApplyWorkflowPreset,
   onInterrupt,
+  onStopCoordinator,
 }: WorkspaceComposerProps) {
   const [promptInput, setPromptInput] = useState('');
   const [composerHeight, setComposerHeight] = useState<number>(() => {
@@ -286,6 +298,11 @@ export function WorkspaceComposer({
       ? KIMI_THINKING_OPTIONS
       : CLAUDE_THINKING_OPTIONS;
 
+  const coordinatorWorkerCount = coordinatorStatus?.workers.filter((worker) => worker.status === 'running').length ?? 0;
+  const latestPlannerDiagnostic = coordinatorStatus?.plannerLastMessage
+    ?? coordinatorStatus?.recentActions.find((action) => action.actionKind === 'planner')?.message
+    ?? null;
+
   return (
     <div className="shrink-0 border-t border-forge-border bg-forge-surface" style={{ height: `${composerHeight}px` }}>
       <div
@@ -296,6 +313,111 @@ export function WorkspaceComposer({
       />
       <div className="flex h-[calc(100%-4px)] min-h-0 flex-col gap-2 overflow-hidden p-2">
         <div className="shrink-0 flex items-center gap-2 overflow-x-auto">
+          <div className="flex shrink-0 items-center gap-1 rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-muted">
+            <span className="text-forge-dim">Mode</span>
+            <Select value={settings.promptMode} onValueChange={(value) => onSettingsChange({ promptMode: value as ComposerSettings['promptMode'] })}>
+              <SelectTrigger compact className={settings.promptMode === 'coordinator' ? 'text-forge-orange' : ''}><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="direct">Direct</SelectItem>
+                <SelectItem value="coordinator">Coordinator</SelectItem>
+              </SelectContent>
+            </Select>
+            {settings.promptMode === 'coordinator' && (
+              <>
+                <span>·</span>
+                <Select
+                  value={settings.coordinatorBrainProfileId}
+                  onValueChange={(value) => onSettingsChange({ coordinatorBrainProfileId: value })}
+                >
+                  <SelectTrigger compact title="Coordinator brain profile"><SelectValue placeholder="Brain" /></SelectTrigger>
+                  <SelectContent>
+                    {agentProfiles.filter((profile) => profile.agent !== 'shell').map((profile) => (
+                      <SelectItem key={`composer-brain-${profile.id}`} value={profile.id}>{profile.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span>→</span>
+                <Select
+                  value={settings.coordinatorCoderProfileId}
+                  onValueChange={(value) => onSettingsChange({ coordinatorCoderProfileId: value })}
+                >
+                  <SelectTrigger compact title="Coordinator coder profile"><SelectValue placeholder="Coder" /></SelectTrigger>
+                  <SelectContent>
+                    {agentProfiles.filter((profile) => profile.agent !== 'shell').map((profile) => (
+                      <SelectItem key={`composer-coder-${profile.id}`} value={profile.id}>{profile.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span>·</span>
+                <span className={coordinatorStatus?.activeRun ? 'text-forge-orange' : 'text-forge-muted'}>
+                  {coordinatorStatus?.activeRun ? `running (${coordinatorWorkerCount} workers)` : 'idle'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onSettingsChange({ coordinatorAutoStepOnWorkerComplete: !settings.coordinatorAutoStepOnWorkerComplete })}
+                  className={`rounded border px-1.5 py-0.5 text-[10px] ${
+                    settings.coordinatorAutoStepOnWorkerComplete
+                      ? 'border-forge-green/30 bg-forge-green/10 text-forge-green'
+                      : 'border-forge-border bg-black/10 text-forge-muted'
+                  }`}
+                  title="Automatically run a coordinator step when a worker completes"
+                >
+                  Auto-step {settings.coordinatorAutoStepOnWorkerComplete ? 'on' : 'off'}
+                </button>
+                {settings.coordinatorAutoStepOnWorkerComplete && (
+                  <>
+                    <Select
+                      value={settings.coordinatorAutoStepTrigger}
+                      onValueChange={(value) => onSettingsChange({ coordinatorAutoStepTrigger: value as ComposerSettings['coordinatorAutoStepTrigger'] })}
+                    >
+                      <SelectTrigger compact title="Auto-step trigger"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="terminal_completion">on complete</SelectItem>
+                        <SelectItem value="any_worker_status">on any update</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={String(settings.coordinatorAutoStepCooldownSeconds)}
+                      onValueChange={(value) => {
+                        const next = Number.parseInt(value, 10);
+                        onSettingsChange({
+                          coordinatorAutoStepCooldownSeconds: Number.isFinite(next) ? next : 3,
+                        });
+                      }}
+                    >
+                      <SelectTrigger compact title="Auto-step cooldown"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0">0s</SelectItem>
+                        <SelectItem value="3">3s</SelectItem>
+                        <SelectItem value="5">5s</SelectItem>
+                        <SelectItem value="10">10s</SelectItem>
+                        <SelectItem value="20">20s</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </>
+                )}
+                {latestPlannerDiagnostic && (
+                  <>
+                    <span>·</span>
+                    <span className="max-w-[280px] truncate text-forge-dim" title={latestPlannerDiagnostic}>
+                      {latestPlannerDiagnostic}
+                    </span>
+                  </>
+                )}
+                {coordinatorStatus?.activeRun && (
+                  <button
+                    type="button"
+                    onClick={onStopCoordinator}
+                    className="rounded border border-forge-yellow/30 bg-forge-yellow/10 px-1.5 py-0.5 text-[10px] text-forge-yellow hover:bg-forge-yellow/20"
+                    title="Stop active coordinator run"
+                  >
+                    Stop
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+
           {focusedChatSession && (
             <div className="flex shrink-0 items-center gap-1 rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-muted">
               {(provider === 'claude_code' || provider === 'codex' || provider === 'kimi_code') && (
@@ -510,7 +632,7 @@ export function WorkspaceComposer({
           {promptTemplateWarning && (
             <span className="text-xs text-forge-yellow">{promptTemplateWarning}</span>
           )}
-          <span className="text-xs text-forge-muted">Type <span className="font-mono text-forge-text/80">/</span> for workflows</span>
+          <span className="text-xs text-forge-muted">Type <span className="font-mono text-forge-text/80">/</span> for workflows (e.g. <span className="font-mono text-forge-text/80">/plan-act</span>)</span>
         </div>
 
         {slashMatches.length > 0 && (
@@ -551,7 +673,7 @@ export function WorkspaceComposer({
                 ? 'Send instruction to agent (Enter interrupts agent if needed then sends, Shift+Enter for newline)…'
                 : 'Send instruction to agent (Enter to send, Shift+Enter for newline)…'
             }
-            className="h-full min-h-0 w-0 flex-1 resize-none overflow-y-auto rounded border border-forge-border bg-forge-bg px-3 py-2 text-sm leading-relaxed text-forge-text placeholder:text-forge-muted focus:border-forge-green/40 focus:outline-none"
+            className="h-full min-h-0 w-0 flex-1 resize-none overflow-y-auto rounded-chat border border-forge-border bg-forge-bg px-3 py-2 text-sm leading-relaxed text-forge-text placeholder:text-forge-muted focus:border-forge-green/40 focus:outline-none"
             onKeyDown={(e) => {
               if (e.key === 'Escape') { e.currentTarget.blur(); return; }
               if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); onTogglePlanMode(); return; }
@@ -566,7 +688,7 @@ export function WorkspaceComposer({
               <button
                 type="button"
                 onClick={onInterrupt}
-                className="rounded border border-forge-yellow/30 bg-forge-yellow/10 px-3 py-2 text-xs font-semibold text-forge-yellow hover:bg-forge-yellow/20"
+                className="rounded-btn border border-forge-yellow/30 bg-forge-yellow/10 px-3 py-2 text-xs font-semibold text-forge-yellow hover:bg-forge-yellow/20"
                 title="Interrupt the running agent turn"
               >
                 Interrupt
@@ -575,13 +697,13 @@ export function WorkspaceComposer({
             <button
               disabled={busy || !promptInput.trim()}
               onClick={handleSend}
-              className="rounded border border-forge-green/30 bg-forge-green/5 px-3 py-2 text-sm font-semibold text-forge-green/80 hover:bg-forge-green/10 disabled:opacity-50"
+              className="rounded-btn border border-forge-green/30 bg-forge-green/5 px-3 py-2 text-sm font-semibold text-forge-green/80 hover:bg-forge-green/10 disabled:opacity-50"
               title={settings.sendBehavior === 'interrupt_send' ? 'Interrupt then send (same as Enter)' : 'Send now (same as Enter)'}
             >
               <Zap className="inline h-3.5 w-3.5" /> Send
             </button>
             {queuedCount > 0 && (
-              <div className="rounded border border-forge-border/60 bg-black/20 px-2 py-1 text-center text-[11px] text-forge-muted">
+              <div className="rounded-btn border border-forge-border/60 bg-black/20 px-2 py-1 text-center text-[11px] text-forge-muted">
                 {queuedCount} queued
               </div>
             )}

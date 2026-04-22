@@ -10,13 +10,13 @@ use std::sync::atomic::Ordering;
 
 use commands::{
     activity, agent_chat, agent_context, agent_memory, agent_profiles, agent_runs, checkpoints,
-    deep_links, environment, git_review, local_llms, merge_readiness,
+    coordinator as coordinator_commands, deep_links, environment, git_review, local_llms, merge_readiness,
     orchestrator as orchestrator_commands, pr_draft, prompt_templates,
     repositories as repository_commands, review_cockpit, review_summary, reviews, settings,
     terminal, workspace_attention, workspace_cleanup, workspace_file_tree, workspace_health,
     workspace_ports, workspace_readiness, workspace_scripts, workspace_templates, workspaces,
 };
-use services::{orchestrator_service, rebase_service};
+use services::{coordinator_service, orchestrator_service, rebase_service};
 use state::AppState;
 use tauri::Manager;
 
@@ -54,6 +54,9 @@ pub fn run() {
                     *guard = model;
                 }
             }
+            if let Err(error) = coordinator_service::reconcile_all_active_runs_on_startup(&state) {
+                log::warn!(target: "forge_lib", "Failed to reconcile active coordinator runs on startup: {error}");
+            }
 
             rebase_service::start_auto_rebase_loop(state.clone());
             orchestrator_service::start_orchestrator_loop(state.clone());
@@ -67,6 +70,7 @@ pub fn run() {
             workspaces::create_child_workspace,
             workspaces::open_in_cursor,
             workspaces::open_worktree_in_cursor,
+            workspaces::pull_workspace_branch,
             workspaces::delete_workspace,
             workspaces::attach_workspace_linked_worktree,
             workspaces::list_workspace_linked_worktrees,
@@ -79,6 +83,9 @@ pub fn run() {
             review_cockpit::mark_workspace_file_reviewed,
             review_cockpit::refresh_workspace_pr_comments,
             review_cockpit::mark_workspace_pr_comment_resolved_local,
+            review_cockpit::resolve_workspace_pr_thread,
+            review_cockpit::reopen_workspace_pr_thread,
+            review_cockpit::sync_workspace_pr_threads,
             review_cockpit::queue_review_agent_prompt,
             activity::list_activity,
             activity::list_workspace_activity,
@@ -124,6 +131,11 @@ pub fn run() {
             checkpoints::restore_workspace_checkpoint,
             checkpoints::delete_workspace_checkpoint,
             checkpoints::create_branch_from_workspace_checkpoint,
+            coordinator_commands::get_workspace_coordinator_status,
+            coordinator_commands::start_workspace_coordinator,
+            coordinator_commands::step_workspace_coordinator,
+            coordinator_commands::stop_workspace_coordinator,
+            coordinator_commands::replay_workspace_coordinator_action,
             git_review::get_workspace_changed_files,
             git_review::get_workspace_file_diff,
             review_summary::get_workspace_review_summary,
@@ -177,6 +189,9 @@ pub fn run() {
             workspace_file_tree::list_workspace_file_tree,
             workspace_file_tree::read_workspace_file,
             workspace_file_tree::write_workspace_file,
+            workspace_file_tree::create_workspace_directory,
+            workspace_file_tree::rename_workspace_path,
+            workspace_file_tree::delete_workspace_path,
             workspace_ports::list_workspace_ports,
             workspace_ports::open_workspace_port,
             workspace_ports::kill_workspace_port_process,

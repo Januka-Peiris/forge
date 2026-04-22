@@ -4,14 +4,16 @@ import { Button } from '../ui/button';
 
 interface AppFrameProps {
   children: ReactNode;
-  detailPanel: ReactNode;
-  detailPanelCollapsed: boolean;
-  detailPanelWidth: number;
+  inspector: ReactNode;
+  inspectorCollapsed: boolean;
+  inspectorWidth: number;
   isReviewView: boolean;
-  onExpandDetailPanel: () => void;
+  showInspector?: boolean;
+  onCollapseInspector?: () => void;
+  onExpandInspector: () => void;
   onExpandSidebar: () => void;
-  onResetDetailWidth: () => void;
-  onResizeDetail: (event: React.MouseEvent<HTMLDivElement>) => void;
+  onResetInspectorWidth: () => void;
+  onResizeInspector: (event: React.MouseEvent<HTMLDivElement>) => void;
   onResizeSidebar: (event: React.MouseEvent<HTMLDivElement>) => void;
   onResetSidebarWidth: () => void;
   sidebar: ReactNode;
@@ -22,14 +24,16 @@ interface AppFrameProps {
 
 export function AppFrame({
   children,
-  detailPanel,
-  detailPanelCollapsed,
-  detailPanelWidth,
+  inspector,
+  inspectorCollapsed,
+  inspectorWidth,
   isReviewView,
-  onExpandDetailPanel,
+  showInspector = !isReviewView,
+  onCollapseInspector,
+  onExpandInspector,
   onExpandSidebar,
-  onResetDetailWidth,
-  onResizeDetail,
+  onResetInspectorWidth,
+  onResizeInspector,
   onResizeSidebar,
   onResetSidebarWidth,
   sidebar,
@@ -37,7 +41,7 @@ export function AppFrame({
   sidebarWidth,
   collapsedRailWidth,
 }: AppFrameProps) {
-  const showDetailPanel = !isReviewView;
+  const showDetailPanel = showInspector && !isReviewView;
   return (
     <div className="flex flex-1 min-h-0">
       {!isReviewView && (
@@ -83,21 +87,33 @@ export function AppFrame({
 
         {showDetailPanel && (
           <>
-            {!detailPanelCollapsed ? (
+            {!inspectorCollapsed ? (
               <>
                 <div
                   role="separator"
-                  aria-label="Resize detail panel"
-                  onMouseDown={onResizeDetail}
-                  onDoubleClick={onResetDetailWidth}
+                  aria-label="Resize inspector"
+                  onMouseDown={onResizeInspector}
+                  onDoubleClick={onResetInspectorWidth}
                   className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-forge-border/70 active:bg-forge-green/60"
                   title="Double-click to reset width"
                 />
                 <div
                   className="relative z-[2] shrink-0 h-full shadow-forge-panel"
-                  style={{ width: `${detailPanelWidth}px` }}
+                  style={{ width: `${inspectorWidth}px` }}
                 >
-                  {detailPanel}
+                  {onCollapseInspector && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon-xs"
+                      onClick={onCollapseInspector}
+                      title="Collapse inspector"
+                      className="absolute -left-3 top-2 z-10 h-6 w-6 border-forge-green/40 bg-forge-card/95 text-forge-green shadow-md"
+                    >
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                  {inspector}
                 </div>
               </>
             ) : (
@@ -109,9 +125,9 @@ export function AppFrame({
                   type="button"
                   variant="outline"
                   size="icon-xs"
-                  onClick={onExpandDetailPanel}
-                  title="Expand detail panel"
-                  className="mt-2.5"
+                  onClick={onExpandInspector}
+                  title="Open inspector"
+                  className="mt-2.5 h-8 w-8 border-forge-green/40 bg-forge-card/95 text-forge-green shadow-md hover:bg-forge-green/10"
                 >
                   <ChevronLeft className="h-3.5 w-3.5" />
                 </Button>

@@ -12,6 +12,7 @@ import 'prismjs/components/prism-tsx';
 import 'prismjs/components/prism-typescript';
 import type { AgentProfile, ForgeWorkspaceConfig, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
 import type { AgentChatEvent, AgentChatSession } from '../../types/agent-chat';
+import type { WorkspaceCoordinatorStatus } from '../../types/coordinator';
 import type { WorkspaceChangedFile } from '../../types/git-review';
 import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
 import {
@@ -25,12 +26,9 @@ import { CommandApprovalModal, type PendingCommand } from '../modals/CommandAppr
 import {
   getWorkspaceForgeConfig,
 } from '../../lib/tauri-api/workspace-scripts';
-import {
-  listWorkspacePorts,
-} from '../../lib/tauri-api/workspace-ports';
 import { listWorkspacePromptTemplates } from '../../lib/tauri-api/prompt-templates';
 import { getWorkspaceAgentContext } from '../../lib/tauri-api/agent-context';
-import { getWorkspaceHealth, recoverWorkspaceSessions } from '../../lib/tauri-api/workspace-health';
+import { getWorkspaceHealth } from '../../lib/tauri-api/workspace-health';
 import { getWorkspaceReadiness } from '../../lib/tauri-api/workspace-readiness';
 import { getWorkspaceChangedFiles } from '../../lib/tauri-api/git-review';
 import { getWorkspaceReviewCockpit } from '../../lib/tauri-api/review-cockpit';
@@ -39,6 +37,12 @@ import {
   listAgentChatSessions,
 } from '../../lib/tauri-api/agent-chat';
 import { getAiModelSettings } from '../../lib/tauri-api/settings';
+import {
+  getWorkspaceCoordinatorStatus,
+  stepWorkspaceCoordinator,
+  replayWorkspaceCoordinatorAction,
+  stopWorkspaceCoordinator,
+} from '../../lib/tauri-api/coordinator';
 import {
   defaultWorkspaceAgentProfileId,
   listWorkspaceAgentProfiles,
@@ -61,6 +65,7 @@ import { useSyncedRef } from '../../lib/hooks/useSyncedRef';
 import { useWorkspaceTerminalOutput } from './useWorkspaceTerminalOutput';
 import { WorkspaceTerminalEmptyState } from './WorkspaceTerminalEmptyState';
 import { WorkspaceContextFooter } from './WorkspaceContextFooter';
+import { CoordinatorTimeline } from './CoordinatorTimeline';
 import { useWorkspaceTerminalComposerActions } from './useWorkspaceTerminalComposerActions';
 import { useWorkspaceTerminalSessionActions } from './useWorkspaceTerminalSessionActions';
 import { useWorkspaceTerminalPolling } from './useWorkspaceTerminalPolling';
@@ -125,10 +130,10 @@ export function WorkspaceTerminal({
   const [focusedChatId, setFocusedChatId] = useState<string | null>(null);
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [commandBusy, setCommandBusy] = useState<string | null>(null);
+  const [, setCommandBusy] = useState<string | null>(null);
   const [forgeConfig, setForgeConfig] = useState<ForgeWorkspaceConfig | null>(null);
-  const [ports, setPorts] = useState<WorkspacePort[]>([]);
-  const [portsBusy, setPortsBusy] = useState(false);
+  const [, setPorts] = useState<WorkspacePort[]>([]);
+  const [, setPortsBusy] = useState(false);
   const [promptTemplateWarning, setPromptTemplateWarning] = useState<string | null>(null);
   const [promptTemplates, setPromptTemplates] = useState<PromptTemplate[]>([]);
   const [agentContext, setAgentContext] = useState<WorkspaceAgentContext | null>(null);
@@ -145,6 +150,12 @@ export function WorkspaceTerminal({
     selectedTaskMode: 'Act',
     selectedReasoning: 'Default',
     sendBehavior: 'send_now',
+    promptMode: 'direct',
+    coordinatorBrainProfileId: '',
+    coordinatorCoderProfileId: '',
+    coordinatorAutoStepOnWorkerComplete: false,
+    coordinatorAutoStepTrigger: 'terminal_completion',
+    coordinatorAutoStepCooldownSeconds: 3,
   });
   const [queuedPrompts, setQueuedPrompts] = useState<Record<string, string[]>>({});
   const [providerModelDefaults, setProviderModelDefaults] = useState({
@@ -153,6 +164,8 @@ export function WorkspaceTerminal({
     kimi: DEFAULT_KIMI_MODEL,
   });
   const [error, setError] = useState<string | null>(null);
+  const [coordinatorStatus, setCoordinatorStatus] = useState<WorkspaceCoordinatorStatus | null>(null);
+  const [coordinatorToast, setCoordinatorToast] = useState<string | null>(null);
   const [pendingCommand, setPendingCommand] = useState<PendingCommand | null>(null);
   const [openEditors, setOpenEditors] = useState<EditorTab[]>([]);
   const [activeEditorPath, setActiveEditorPath] = useState<string | null>(null);
@@ -178,12 +191,22 @@ export function WorkspaceTerminal({
   const chatSessionsRef = useSyncedRef(chatSessions);
   /** Serializes agent prompt writes so rapid Enter / Send do not race attach + PTY. */
   const promptSendChainRef = useRef(Promise.resolve());
+  const lastCoordinatorAutoStepEventRef = useRef<string | null>(null);
+  const coordinatorAutoStepRunningRef = useRef(false);
+  const coordinatorAutoStepQueuedRef = useRef(false);
+  const coordinatorAutoStepQueuedInstructionRef = useRef<string | null>(null);
+  const lastCoordinatorAutoStepAtRef = useRef<number>(0);
+  const coordinatorAutoStepTimerRef = useRef<number | null>(null);
   const workspaceId = workspace?.id ?? null;
 
   const setActionError = useCallback((err: unknown) => {
     const msg = formatSessionError(err);
     forgeWarn('terminal', 'action error', { err, message: msg });
     setError(msg);
+  }, []);
+  const showCoordinatorToast = useCallback((message: string) => {
+    setCoordinatorToast(message);
+    window.setTimeout(() => setCoordinatorToast((current) => (current === message ? null : current)), 4200);
   }, []);
 
   const focusedSession = useMemo(
@@ -325,19 +348,6 @@ export function WorkspaceTerminal({
     }
   }, [workspaceId]);
 
-  const refreshPorts = useCallback(async () => {
-    if (!workspaceId) return;
-    setPortsBusy(true);
-    try {
-      setPorts(await listWorkspacePorts(workspaceId));
-    } catch (err) {
-      forgeWarn('ports', 'scan error', { err });
-      setPorts([]);
-    } finally {
-      setPortsBusy(false);
-    }
-  }, [workspaceId]);
-
   const refreshPromptTemplates = useCallback(async () => {
     if (!workspaceId) return;
     try {
@@ -372,31 +382,6 @@ export function WorkspaceTerminal({
     }
   }, [workspaceId]);
 
-  const recoverSessions = async () => {
-    if (!workspaceId) return;
-    const confirmed = window.confirm(
-      [
-        'Recover stale or unhealthy sessions?',
-        '',
-        'Forge will close stale, detached, stuck, failed, or interrupted terminal sessions in the active view while preserving their history.',
-        'After recovery, start a fresh agent tab when you are ready.',
-      ].join('\n'),
-    );
-    if (!confirmed) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await recoverWorkspaceSessions(workspaceId);
-      const warning = result.warnings.length > 0 ? ` ${result.warnings[0]}` : '';
-      setError(`Recovered ${result.closedSessions} session(s); skipped ${result.skippedSessions}.${warning}`);
-      await Promise.all([refreshSessions(), refreshHealth()]);
-    } catch (err) {
-      setError(formatSessionError(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const refreshReadiness = useCallback(async () => {
     if (!workspaceId) return;
     try {
@@ -430,11 +415,40 @@ export function WorkspaceTerminal({
       setSelectedProfileId((current) =>
         profiles.some((profile) => profile.id === current) ? current : defaultWorkspaceAgentProfileId(profiles),
       );
+      setComposerSettings((current) => {
+        const nonShell = profiles.filter((profile) => profile.agent !== 'shell');
+        const fallbackBrain = nonShell.find((profile) => profile.id === 'codex-high')
+          ?? nonShell.find((profile) => profile.id === 'claude-plan')
+          ?? nonShell[0];
+        const fallbackCoder = nonShell.find((profile) => profile.id === 'kimi-default')
+          ?? nonShell.find((profile) => profile.id === 'codex-default')
+          ?? nonShell[0];
+        return {
+          ...current,
+          coordinatorBrainProfileId:
+            current.coordinatorBrainProfileId && nonShell.some((profile) => profile.id === current.coordinatorBrainProfileId)
+              ? current.coordinatorBrainProfileId
+              : (fallbackBrain?.id ?? ''),
+          coordinatorCoderProfileId:
+            current.coordinatorCoderProfileId && nonShell.some((profile) => profile.id === current.coordinatorCoderProfileId)
+              ? current.coordinatorCoderProfileId
+              : (fallbackCoder?.id ?? ''),
+        };
+      });
     } catch (err) {
       forgeWarn('agent-profiles', 'load error', { err });
       setAgentProfiles([]);
     }
   }, [setSelectedProfileId, workspaceId]);
+
+  const refreshCoordinatorStatus = useCallback(async () => {
+    if (!workspaceId) return;
+    try {
+      setCoordinatorStatus(await getWorkspaceCoordinatorStatus(workspaceId));
+    } catch {
+      setCoordinatorStatus(null);
+    }
+  }, [workspaceId]);
 
   const refreshModelSettings = useCallback(async () => {
     try {
@@ -557,6 +571,17 @@ export function WorkspaceTerminal({
     setSavingEditorPaths(new Set());
     setFocusedId(null);
     setError(null);
+    setCoordinatorStatus(null);
+    setCoordinatorToast(null);
+    lastCoordinatorAutoStepEventRef.current = null;
+    coordinatorAutoStepRunningRef.current = false;
+    coordinatorAutoStepQueuedRef.current = false;
+    coordinatorAutoStepQueuedInstructionRef.current = null;
+    lastCoordinatorAutoStepAtRef.current = 0;
+    if (coordinatorAutoStepTimerRef.current !== null) {
+      window.clearTimeout(coordinatorAutoStepTimerRef.current);
+      coordinatorAutoStepTimerRef.current = null;
+    }
     setComposerSettings((current) => ({ ...current, selectedClaudeAgent: 'general-purpose' }));
   }, [focusedChatIdRef, focusedIdRef, resetOutputState]);
 
@@ -571,6 +596,7 @@ export function WorkspaceTerminal({
       void refreshSessions(true);
       void refreshChatSessions(undefined, 'all');
       void refreshWorkbenchState();
+      void refreshCoordinatorStatus();
       const timer = window.setTimeout(() => {
         if (document.hidden) return;
         void refreshHealth();
@@ -578,7 +604,7 @@ export function WorkspaceTerminal({
       }, 1500);
       return () => window.clearTimeout(timer);
     }
-  }, [refreshAgentContext, refreshAgentProfiles, refreshChatSessions, refreshForgeConfig, refreshHealth, refreshModelSettings, refreshReadiness, refreshPromptTemplates, refreshSessions, refreshWorkbenchState, resetWorkspaceState, workspaceId]);
+  }, [refreshAgentContext, refreshAgentProfiles, refreshChatSessions, refreshCoordinatorStatus, refreshForgeConfig, refreshHealth, refreshModelSettings, refreshReadiness, refreshPromptTemplates, refreshSessions, refreshWorkbenchState, resetWorkspaceState, workspaceId]);
 
   useEffect(() => {
     const provider = focusedChatSession?.provider;
@@ -635,7 +661,70 @@ export function WorkspaceTerminal({
     refreshHealth,
     refreshReadiness,
     refreshWorkbenchState,
+    refreshCoordinatorStatus,
   });
+
+  const triggerCoordinatorAutoStep = useCallback((instruction: string) => {
+    if (!workspaceId) return;
+    coordinatorAutoStepQueuedInstructionRef.current = instruction;
+    if (coordinatorAutoStepRunningRef.current) {
+      coordinatorAutoStepQueuedRef.current = true;
+      return;
+    }
+    const cooldownMs = Math.max(0, composerSettings.coordinatorAutoStepCooldownSeconds) * 1000;
+    const elapsed = Date.now() - lastCoordinatorAutoStepAtRef.current;
+    if (cooldownMs > 0 && elapsed < cooldownMs) {
+      coordinatorAutoStepQueuedRef.current = true;
+      if (coordinatorAutoStepTimerRef.current !== null) {
+        window.clearTimeout(coordinatorAutoStepTimerRef.current);
+      }
+      coordinatorAutoStepTimerRef.current = window.setTimeout(() => {
+        coordinatorAutoStepTimerRef.current = null;
+        const queuedInstruction = coordinatorAutoStepQueuedInstructionRef.current;
+        if (!queuedInstruction) return;
+        triggerCoordinatorAutoStep(queuedInstruction);
+      }, cooldownMs - elapsed);
+      return;
+    }
+    const nextInstruction = coordinatorAutoStepQueuedInstructionRef.current;
+    if (!nextInstruction) return;
+    coordinatorAutoStepQueuedInstructionRef.current = null;
+    coordinatorAutoStepQueuedRef.current = false;
+    coordinatorAutoStepRunningRef.current = true;
+    lastCoordinatorAutoStepAtRef.current = Date.now();
+    void stepWorkspaceCoordinator({
+      workspaceId,
+      instruction: nextInstruction,
+      brainProfileId: composerSettings.coordinatorBrainProfileId || null,
+      coderProfileId: composerSettings.coordinatorCoderProfileId || null,
+    })
+      .then((next) => setCoordinatorStatus(next))
+      .catch((err) => {
+        const message = formatSessionError(err);
+        if (message.startsWith('COORDINATOR_STEP_IN_PROGRESS:')) {
+          return;
+        }
+        setActionError(err);
+      })
+      .finally(() => {
+        coordinatorAutoStepRunningRef.current = false;
+        if (coordinatorAutoStepQueuedRef.current && coordinatorAutoStepQueuedInstructionRef.current) {
+          triggerCoordinatorAutoStep(coordinatorAutoStepQueuedInstructionRef.current);
+        }
+      });
+  }, [
+    composerSettings.coordinatorAutoStepCooldownSeconds,
+    composerSettings.coordinatorBrainProfileId,
+    composerSettings.coordinatorCoderProfileId,
+    setActionError,
+    workspaceId,
+  ]);
+
+  useEffect(() => () => {
+    if (coordinatorAutoStepTimerRef.current !== null) {
+      window.clearTimeout(coordinatorAutoStepTimerRef.current);
+    }
+  }, []);
 
   useWorkspaceTerminalEvents({
     workspaceId,
@@ -647,17 +736,36 @@ export function WorkspaceTerminal({
     refreshChatSessions,
     refreshReadiness,
     refreshWorkbenchState,
+    refreshCoordinatorStatus,
+    onCoordinatorNotify: (payload) => {
+      showCoordinatorToast(payload.message);
+      const match = payload.message.match(/^Worker\\s+([^\\s]+)\\s+([^\\s]+)$/i);
+      if (!match) return;
+      if (!workspaceId) return;
+      if (!composerSettings.coordinatorAutoStepOnWorkerComplete) return;
+      if (composerSettings.promptMode !== 'coordinator') return;
+      const workerId = match[1];
+      const workerStatus = match[2].toLowerCase();
+      if (
+        composerSettings.coordinatorAutoStepTrigger === 'terminal_completion'
+        && !['succeeded', 'failed', 'stopped', 'interrupted', 'completed'].includes(workerStatus)
+      ) {
+        return;
+      }
+      const signature = `${workerId}:${workerStatus}`;
+      if (lastCoordinatorAutoStepEventRef.current === signature) return;
+      lastCoordinatorAutoStepEventRef.current = signature;
+      triggerCoordinatorAutoStep(
+        `Worker ${workerId} reported status ${workerStatus}. Review progress, notify the user, and choose the next coordinator action.`,
+      );
+    },
   });
 
   const {
     createTerminal,
     createChatSession,
     closeChatSession,
-    runSetup,
     startRunCommand,
-    stopRunCommands,
-    openPort,
-    killPort,
     interruptFocusedAgent,
     attachTerminal,
     stopTerminal,
@@ -706,6 +814,7 @@ export function WorkspaceTerminal({
     refreshChatSessions,
     refreshWorkbenchState,
     refreshReadiness,
+    refreshCoordinatorStatus,
     closeChatSession,
     startRunCommand,
     setReviewCockpit,
@@ -715,6 +824,7 @@ export function WorkspaceTerminal({
     setBusy,
     setError,
     setActionError,
+    onCoordinatorInfo: showCoordinatorToast,
     promptSendChainRef,
   });
 
@@ -775,12 +885,6 @@ export function WorkspaceTerminal({
       )}
       <WorkspaceHeader
         workspace={workspace}
-        ports={ports}
-        portsBusy={portsBusy}
-        forgeConfig={forgeConfig}
-        commandBusy={commandBusy}
-        workspaceHealth={workspaceHealth}
-        workspaceReadiness={workspaceReadiness}
         visibleSessions={visibleSessions}
         chatSessions={chatSessions}
         dockOverflowSessions={dockOverflowSessions}
@@ -794,17 +898,8 @@ export function WorkspaceTerminal({
         onCreateTerminal={(kind, profile, title, profileId) => void createTerminal(kind, profile, title, profileId)}
         onCopyFocusedOutput={() => void copyFocusedOutput()}
         onInterruptFocusedAgent={() => void interruptFocusedAgent()}
-        onRunSetup={() => void runSetup()}
-        onStartRunCommand={(index, restart) => void startRunCommand(index, restart)}
-        onStopRunCommands={() => void stopRunCommands()}
-        onRefreshPorts={() => void refreshPorts()}
-        onOpenPort={(port) => void openPort(port)}
-        onKillPort={(port) => void killPort(port)}
-        onRefreshHealth={() => void refreshHealth()}
-        onRecoverSessions={() => void recoverSessions()}
         onCloseTerminal={(sessionId) => void closeTerminal(sessionId)}
         onCloseChatSession={(sessionId) => void closeChatSession(sessionId)}
-        onStartShell={() => void createTerminal('shell', 'shell', 'Shell')}
         onAttachTerminal={(session) => void attachTerminal(session)}
         onAttachChatSession={(sessionId) => {
           focusedChatIdRef.current = sessionId;
@@ -815,6 +910,35 @@ export function WorkspaceTerminal({
           if (!chatEvents[sessionId]) void listAgentChatEvents(sessionId).then((events) => setChatEvents((current) => ({ ...current, [sessionId]: events })));
         }}
         onSetError={setError}
+      />
+      {coordinatorToast && (
+        <div className="mx-2 mt-2 rounded border border-forge-blue/30 bg-forge-blue/10 px-3 py-1.5 text-xs text-forge-blue">
+          {coordinatorToast}
+        </div>
+      )}
+
+      <CoordinatorTimeline
+        status={coordinatorStatus}
+        agentProfiles={agentProfiles}
+        onRefresh={() => void refreshCoordinatorStatus()}
+        onReplayAction={async (actionId, promptOverride) => {
+          if (!workspaceId) return;
+          try {
+            const next = await replayWorkspaceCoordinatorAction({
+              workspaceId,
+              actionId,
+              promptOverride: promptOverride ?? null,
+            });
+            setCoordinatorStatus(next);
+          } catch (err) {
+            const message = formatSessionError(err);
+            if (message.startsWith('COORDINATOR_STEP_IN_PROGRESS:')) {
+              showCoordinatorToast('Coordinator is busy. Try replay again after the current step finishes.');
+              return;
+            }
+            throw err;
+          }
+        }}
       />
 
       <div className="flex min-h-0 flex-1 gap-2 p-2">
@@ -963,12 +1087,19 @@ export function WorkspaceTerminal({
           promptTemplateWarning={promptTemplateWarning}
           promptTemplates={promptTemplates}
           agentContext={agentContext}
+          agentProfiles={agentProfiles}
+          coordinatorStatus={coordinatorStatus}
           settings={composerSettings}
           onSettingsChange={(patch) => setComposerSettings((current) => ({ ...current, ...patch }))}
           onSend={sendPrompt}
           onTogglePlanMode={togglePlanMode}
           onApplyWorkflowPreset={applyWorkflowPreset}
           onInterrupt={() => void interruptFocusedAgent()}
+          onStopCoordinator={() => {
+            void stopWorkspaceCoordinator(workspace.id)
+              .then((status) => setCoordinatorStatus(status))
+              .catch(setActionError);
+          }}
         />
       )}
     </div>

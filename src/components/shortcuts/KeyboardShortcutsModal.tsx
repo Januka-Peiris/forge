@@ -9,7 +9,7 @@ const SHORTCUTS = [
   ['Cmd/Ctrl 1–9', 'Select visible workspace'],
   ['/', 'Focus workspace composer'],
   ['[ / ]', 'Previous / next workspace'],
-  ['Cmd/Ctrl Shift D', 'Toggle detail panel'],
+  ['Cmd/Ctrl Shift D', 'Toggle inspector'],
   ['Cmd/Ctrl Shift R', 'Open Review Cockpit'],
   ['Shift Tab', 'Toggle Plan / Act mode'],
   ['Enter', 'Send composer prompt'],

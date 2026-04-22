@@ -45,8 +45,7 @@ Forge is being shaped as a **local-first agent conductor**: simple by default, i
 - Needs-action now has its own filter so blocked/waiting/unread workspaces remain visible when drilling into the attention summary.
 - Workspace list filters now show the narrowed count, active attention filter state, clear/reset actions, and a more useful empty state.
 - Workspace list filtering, sorting, status counts, and attention summaries are memoized to keep keyboard navigation and long-list triage responsive.
-- Workspace list supports keyboard-first search focus with `/` and clears the narrowed view with `Escape`.
-- Workspace list supports keyboard navigation with `j`/`ArrowDown` and `k`/`ArrowUp` across the currently visible workspaces.
+- Workspace list supports keyboard-first quick actions via `Cmd/Ctrl+K` (command palette), direct workspace selection with `Cmd/Ctrl+1..9`, and previous/next workspace navigation with `[` / `]`.
 - Workspace list header shows subtle shortcut hints for search, movement, and reset on larger screens.
 - Selected workspace cards scroll into view during keyboard navigation, keeping long-list triage usable.
 

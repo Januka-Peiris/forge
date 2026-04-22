@@ -378,6 +378,8 @@ mod tests {
             description: None,
             skills: vec![],
             templates: vec![],
+            role_preference: None,
+            coordinator_eligible: None,
         });
 
         assert_eq!(diagnostic.status, "error");
@@ -404,6 +406,8 @@ mod tests {
             description: None,
             skills: vec![],
             templates: vec![],
+            role_preference: None,
+            coordinator_eligible: None,
         });
 
         assert_eq!(check.status, "warning");
@@ -426,6 +430,8 @@ mod tests {
             description: None,
             skills: vec![],
             templates: vec![],
+            role_preference: None,
+            coordinator_eligible: None,
         });
 
         assert_eq!(check.status, "warning");
@@ -478,6 +484,8 @@ mod tests {
             description: None,
             skills: vec![],
             templates: vec![],
+            role_preference: None,
+            coordinator_eligible: None,
         };
         let check = endpoint_reachability_check(&profile).expect("endpoint check");
         assert_eq!(check.status, "warning");

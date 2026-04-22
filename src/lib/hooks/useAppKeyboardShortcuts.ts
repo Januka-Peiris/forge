@@ -13,7 +13,7 @@ interface UseAppKeyboardShortcutsInput {
   onSelectWorkspace: (workspaceId: string) => void;
   onSetWorkspacesView: () => void;
   onToggleCommandPalette: () => void;
-  onToggleDetailPanel: () => void;
+  onToggleInspector: () => void;
 }
 
 function isEditableShortcutTarget(target: EventTarget | null): boolean {
@@ -42,7 +42,7 @@ export function useAppKeyboardShortcuts({
   onSelectWorkspace,
   onSetWorkspacesView,
   onToggleCommandPalette,
-  onToggleDetailPanel,
+  onToggleInspector,
 }: UseAppKeyboardShortcutsInput) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -81,7 +81,7 @@ export function useAppKeyboardShortcuts({
 
       if (meta && event.shiftKey && key === 'd') {
         event.preventDefault();
-        onToggleDetailPanel();
+        onToggleInspector();
         return;
       }
 
@@ -139,7 +139,7 @@ export function useAppKeyboardShortcuts({
     onSelectWorkspace,
     onSetWorkspacesView,
     onToggleCommandPalette,
-    onToggleDetailPanel,
+    onToggleInspector,
     selectedWorkspaceId,
     shortcutsOpen,
   ]);

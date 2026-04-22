@@ -51,13 +51,88 @@ pub fn write_workspace_file(
     content: &str,
 ) -> Result<(), String> {
     let root = workspace_root_path(state, workspace_id)?;
-    let file_path = resolve_file_path(&root, path)?;
+    let file_path = resolve_target_path(&root, path)?;
+    let parent = file_path
+        .parent()
+        .ok_or_else(|| "Invalid file path.".to_string())?;
+    fs::create_dir_all(parent).map_err(|err| {
+        format!(
+            "Could not create parent directory {}: {err}",
+            parent.display()
+        )
+    })?;
     fs::write(&file_path, content.as_bytes()).map_err(|err| {
         format!(
             "Could not write workspace file {}: {err}",
             file_path.display()
         )
     })
+}
+
+pub fn create_workspace_directory(
+    state: &AppState,
+    workspace_id: &str,
+    path: &str,
+) -> Result<(), String> {
+    let root = workspace_root_path(state, workspace_id)?;
+    let dir_path = resolve_target_path(&root, path)?;
+    fs::create_dir_all(&dir_path).map_err(|err| {
+        format!(
+            "Could not create workspace directory {}: {err}",
+            dir_path.display()
+        )
+    })
+}
+
+pub fn rename_workspace_path(
+    state: &AppState,
+    workspace_id: &str,
+    from_path: &str,
+    to_path: &str,
+) -> Result<(), String> {
+    let root = workspace_root_path(state, workspace_id)?;
+    let from = resolve_any_path(&root, from_path)?;
+    let to = resolve_target_path(&root, to_path)?;
+    if from == to {
+        return Ok(());
+    }
+    if let Some(parent) = to.parent() {
+        fs::create_dir_all(parent).map_err(|err| {
+            format!(
+                "Could not prepare destination directory {}: {err}",
+                parent.display()
+            )
+        })?;
+    }
+    fs::rename(&from, &to).map_err(|err| {
+        format!(
+            "Could not rename {} to {}: {err}",
+            from.display(),
+            to.display()
+        )
+    })
+}
+
+pub fn delete_workspace_path(
+    state: &AppState,
+    workspace_id: &str,
+    path: &str,
+) -> Result<(), String> {
+    let root = workspace_root_path(state, workspace_id)?;
+    let target = resolve_any_path(&root, path)?;
+    if target.is_dir() {
+        fs::remove_dir_all(&target).map_err(|err| {
+            format!(
+                "Could not delete directory {}: {err}",
+                target.display()
+            )
+        })
+    } else if target.is_file() {
+        fs::remove_file(&target)
+            .map_err(|err| format!("Could not delete file {}: {err}", target.display()))
+    } else {
+        Err(format!("Path is not a file or directory: {path}"))
+    }
 }
 
 fn workspace_root_path(state: &AppState, workspace_id: &str) -> Result<PathBuf, String> {
@@ -127,6 +202,50 @@ fn resolve_file_path(root: &Path, path: &str) -> Result<PathBuf, String> {
         Ok(canonical_candidate)
     } else {
         Err(format!("Path escapes workspace root: {trimmed}"))
+    }
+}
+
+fn resolve_target_path(root: &Path, path: &str) -> Result<PathBuf, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("Path is required.".to_string());
+    }
+    if trimmed.starts_with('/') || trimmed.contains("..") {
+        return Err("Path must be relative to the workspace root.".to_string());
+    }
+    let candidate = root.join(trimmed);
+    ensure_within_root(root, &candidate, trimmed)?;
+    Ok(candidate)
+}
+
+fn resolve_any_path(root: &Path, path: &str) -> Result<PathBuf, String> {
+    let candidate = resolve_target_path(root, path)?;
+    if !candidate.exists() {
+        return Err(format!("Path not found in workspace: {}", path.trim()));
+    }
+    Ok(candidate)
+}
+
+fn ensure_within_root(root: &Path, candidate: &Path, input: &str) -> Result<(), String> {
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|err| format!("Failed to resolve workspace root: {err}"))?;
+    let canonical_base = if let Some(parent) = candidate.parent() {
+        parent
+            .canonicalize()
+            .unwrap_or_else(|_| canonical_root.clone())
+    } else {
+        canonical_root.clone()
+    };
+    let joined = canonical_base.join(
+        candidate
+            .file_name()
+            .ok_or_else(|| format!("Invalid path: {input}"))?,
+    );
+    if joined == canonical_root || joined.starts_with(&canonical_root) {
+        Ok(())
+    } else {
+        Err(format!("Path escapes workspace root: {input}"))
     }
 }
 

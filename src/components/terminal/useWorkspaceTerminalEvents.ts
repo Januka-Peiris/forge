@@ -14,6 +14,8 @@ interface UseWorkspaceTerminalEventsParams {
   refreshChatSessions: (preferredFocusId?: string | null, scope?: 'all' | 'active') => Promise<void>;
   refreshReadiness: () => Promise<void>;
   refreshWorkbenchState: () => Promise<void>;
+  refreshCoordinatorStatus: () => Promise<void>;
+  onCoordinatorNotify?: (payload: { workspaceId: string; message: string }) => void;
 }
 
 export function useWorkspaceTerminalEvents({
@@ -26,6 +28,8 @@ export function useWorkspaceTerminalEvents({
   refreshChatSessions,
   refreshReadiness,
   refreshWorkbenchState,
+  refreshCoordinatorStatus,
+  onCoordinatorNotify,
 }: UseWorkspaceTerminalEventsParams) {
   useEffect(() => {
     if (!workspaceId) return;
@@ -33,6 +37,7 @@ export function useWorkspaceTerminalEvents({
     let unlistenTerminalOutput: UnlistenFn | undefined;
     let unlistenApproval: UnlistenFn | undefined;
     let unlistenAgentChat: UnlistenFn | undefined;
+    let unlistenCoordinatorNotify: UnlistenFn | undefined;
     let disposed = false;
 
     void listen<PendingCommand>('forge://command-approval-required', (event) => {
@@ -77,16 +82,27 @@ export function useWorkspaceTerminalEvents({
       if (disposed) fn(); else unlistenAgentChat = fn;
     }).catch(() => undefined);
 
+    void listen<{ workspaceId: string; message: string }>('forge://coordinator-notify', (event) => {
+      if (disposed || event.payload.workspaceId !== workspaceId) return;
+      onCoordinatorNotify?.(event.payload);
+      void refreshCoordinatorStatus();
+    }).then((fn) => {
+      if (disposed) fn(); else unlistenCoordinatorNotify = fn;
+    }).catch(() => undefined);
+
     return () => {
       disposed = true;
       if (unlistenTerminalOutput) unlistenTerminalOutput();
       if (unlistenApproval) unlistenApproval();
       if (unlistenAgentChat) unlistenAgentChat();
+      if (unlistenCoordinatorNotify) unlistenCoordinatorNotify();
     };
   }, [
     bumpNextSeqFromChunk,
     enqueueOutput,
     refreshChatSessions,
+    onCoordinatorNotify,
+    refreshCoordinatorStatus,
     refreshReadiness,
     refreshWorkbenchState,
     setChatEvents,

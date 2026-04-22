@@ -16,3 +16,15 @@ export function readWorkspaceFile(workspaceId: string, path: string): Promise<st
 export function writeWorkspaceFile(workspaceId: string, path: string, content: string): Promise<void> {
   return invokeCommand<void>('write_workspace_file', { workspaceId, path, content });
 }
+
+export function createWorkspaceDirectory(workspaceId: string, path: string): Promise<void> {
+  return invokeCommand<void>('create_workspace_directory', { workspaceId, path });
+}
+
+export function renameWorkspacePath(workspaceId: string, fromPath: string, toPath: string): Promise<void> {
+  return invokeCommand<void>('rename_workspace_path', { workspaceId, fromPath, toPath });
+}
+
+export function deleteWorkspacePath(workspaceId: string, path: string): Promise<void> {
+  return invokeCommand<void>('delete_workspace_path', { workspaceId, path });
+}

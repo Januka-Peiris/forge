@@ -29,6 +29,12 @@ export interface WorkspacePrComment {
   state: string;
   createdAt?: string | null;
   resolvedAt?: string | null;
+  commentNodeId?: string | null;
+  threadId?: string | null;
+  reviewId?: number | null;
+  threadResolved?: boolean;
+  threadOutdated?: boolean;
+  threadResolvable?: boolean;
 }
 
 export interface WorkspaceReviewCockpit {

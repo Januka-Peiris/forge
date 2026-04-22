@@ -18,6 +18,15 @@ export { toWorkspace } from './workspace';
 export type { AgentContextWorktree, WorkspaceAgentContext, WorkspaceContextItem, WorkspaceContextPreview } from './agent-context';
 export type { AgentProfile } from './agent-profile';
 export type {
+  CoordinatorActionLog,
+  ReplayWorkspaceCoordinatorActionInput,
+  CoordinatorRun,
+  CoordinatorWorker,
+  StartWorkspaceCoordinatorInput,
+  StepWorkspaceCoordinatorInput,
+  WorkspaceCoordinatorStatus,
+} from './coordinator';
+export type {
   WorkspaceCheckpoint,
   WorkspaceCheckpointDiff,
   WorkspaceCheckpointRestorePlan,

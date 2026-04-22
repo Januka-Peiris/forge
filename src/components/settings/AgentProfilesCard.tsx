@@ -11,6 +11,7 @@ import {
   listWorkspaceAgentProfiles,
   saveAppAgentProfiles,
 } from '../../lib/tauri-api/agent-profiles';
+import { getSetting, setSetting } from '../../lib/tauri-api/settings';
 import { checkEnvironment } from '../../lib/tauri-api/environment';
 import { diagnoseLocalLlmProfile, listLocalLlmModels } from '../../lib/tauri-api/local-llms';
 import { getStoredAgentProfileId, setStoredAgentProfileId } from '../../lib/hooks/useAgentProfile';
@@ -26,6 +27,8 @@ export function AgentProfilesCard() {
   const [ollamaModels, setOllamaModels] = useState<LocalLlmModel[]>([]);
   const [ollamaStatus, setOllamaStatus] = useState<'ok' | 'missing' | 'unknown'>('unknown');
   const [defaultProfileId, setDefaultProfileId] = useState(() => getStoredAgentProfileId());
+  const [coordinatorBrainProfileId, setCoordinatorBrainProfileId] = useState<string>('');
+  const [coordinatorCoderProfileId, setCoordinatorCoderProfileId] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [diagnostics, setDiagnostics] = useState<Record<string, LocalLlmProfileDiagnostic>>({});
@@ -59,6 +62,23 @@ export function AgentProfilesCard() {
     if (modelsResult.error && ollama?.status === 'ok') {
       setMessage(modelsResult.error);
     }
+    const [savedBrain, savedCoder] = await Promise.all([
+      getSetting('coordinator_default_brain_profile_id').catch(() => null),
+      getSetting('coordinator_default_coder_profile_id').catch(() => null),
+    ]);
+    const nonShell = effective.filter((profile) => profile.agent !== 'shell');
+    const fallbackBrain = nonShell.find((profile) => profile.id === 'codex-high')
+      ?? nonShell.find((profile) => profile.id === 'claude-plan')
+      ?? nonShell[0]
+      ?? null;
+    const fallbackCoder = nonShell.find((profile) => profile.id === 'kimi-default')
+      ?? nonShell.find((profile) => profile.id === 'codex-default')
+      ?? nonShell[0]
+      ?? null;
+    const selectedBrain = nonShell.some((profile) => profile.id === savedBrain) ? (savedBrain ?? '') : fallbackBrain?.id ?? '';
+    const selectedCoder = nonShell.some((profile) => profile.id === savedCoder) ? (savedCoder ?? '') : fallbackCoder?.id ?? '';
+    setCoordinatorBrainProfileId(selectedBrain);
+    setCoordinatorCoderProfileId(selectedCoder);
   }, [defaultProfileId]);
 
   useEffect(() => {
@@ -85,6 +105,8 @@ export function AgentProfilesCard() {
         description: `Local ${provider} profile`,
         skills: [],
         templates: [],
+        rolePreference: 'coder',
+        coordinatorEligible: true,
       };
       const saved = await saveAppAgentProfiles([
         ...appProfiles.filter((profile) => profile.id !== id),
@@ -142,6 +164,8 @@ export function AgentProfilesCard() {
             model: profile.model,
             mode: profile.mode,
             description: profile.description,
+            rolePreference: profile.rolePreference,
+            coordinatorEligible: profile.coordinatorEligible,
           },
         ],
       },
@@ -215,6 +239,53 @@ export function AgentProfilesCard() {
               ))}
             </SelectContent>
           </Select>
+        </div>
+      </div>
+
+      <div className="mb-4 rounded-lg border border-forge-border/70 bg-black/10 p-3">
+        <div className="mb-2">
+          <p className="text-[12px] font-semibold text-forge-text">Coordinator defaults</p>
+          <p className="text-[11px] text-forge-muted">Used by workspace Coordinator mode unless a launch override is provided.</p>
+        </div>
+        <div className="grid gap-2 md:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-[11px] font-semibold text-forge-text">Brain profile</label>
+            <Select
+              value={coordinatorBrainProfileId}
+              onValueChange={(value) => {
+                setCoordinatorBrainProfileId(value);
+                void setSetting('coordinator_default_brain_profile_id', value);
+              }}
+            >
+              <SelectTrigger className="w-full"><SelectValue placeholder="Choose brain profile" /></SelectTrigger>
+              <SelectContent>
+                {selectableProfiles.map((profile) => (
+                  <SelectItem key={`brain-${profile.id}`} value={profile.id}>
+                    {profile.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="mb-1 block text-[11px] font-semibold text-forge-text">Coder profile</label>
+            <Select
+              value={coordinatorCoderProfileId}
+              onValueChange={(value) => {
+                setCoordinatorCoderProfileId(value);
+                void setSetting('coordinator_default_coder_profile_id', value);
+              }}
+            >
+              <SelectTrigger className="w-full"><SelectValue placeholder="Choose coder profile" /></SelectTrigger>
+              <SelectContent>
+                {selectableProfiles.map((profile) => (
+                  <SelectItem key={`coder-${profile.id}`} value={profile.id}>
+                    {profile.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 

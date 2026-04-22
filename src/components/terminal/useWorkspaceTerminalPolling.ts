@@ -12,6 +12,7 @@ interface UseWorkspaceTerminalPollingParams {
   refreshHealth: () => Promise<void>;
   refreshReadiness: () => Promise<void>;
   refreshWorkbenchState: () => Promise<void>;
+  refreshCoordinatorStatus: () => Promise<void>;
 }
 
 export function useWorkspaceTerminalPolling({
@@ -23,6 +24,7 @@ export function useWorkspaceTerminalPolling({
   refreshHealth,
   refreshReadiness,
   refreshWorkbenchState,
+  refreshCoordinatorStatus,
 }: UseWorkspaceTerminalPollingParams) {
   const metadataPollTickRef = useRef(0);
 
@@ -52,6 +54,7 @@ export function useWorkspaceTerminalPolling({
         void refreshHealth();
         void refreshReadiness();
         void refreshWorkbenchState();
+        void refreshCoordinatorStatus();
       }
     }, 5000);
 
@@ -63,6 +66,7 @@ export function useWorkspaceTerminalPolling({
     refreshReadiness,
     refreshSessions,
     refreshWorkbenchState,
+    refreshCoordinatorStatus,
     visibleSessionsRef,
     workspaceId,
   ]);

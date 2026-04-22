@@ -44,6 +44,8 @@ pub fn run(connection: &Connection) -> Result<(), String> {
                 parent_workspace_id TEXT,
                 source_workspace_id TEXT,
                 derived_from_branch TEXT,
+                run_tests_on_create INTEGER NOT NULL DEFAULT 1,
+                create_pr_on_complete INTEGER NOT NULL DEFAULT 1,
                 worktree_path TEXT NOT NULL,
                 recent_events TEXT NOT NULL DEFAULT '[]',
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -361,6 +363,12 @@ pub fn run(connection: &Connection) -> Result<(), String> {
                 state TEXT NOT NULL DEFAULT 'open',
                 created_at_remote TEXT,
                 resolved_at TEXT,
+                comment_node_id TEXT,
+                thread_id TEXT,
+                review_id INTEGER,
+                thread_resolved INTEGER NOT NULL DEFAULT 0,
+                thread_outdated INTEGER NOT NULL DEFAULT 0,
+                thread_resolvable INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (workspace_id, provider, comment_id),
@@ -395,6 +403,61 @@ pub fn run(connection: &Connection) -> Result<(), String> {
             CREATE INDEX IF NOT EXISTS idx_orchestrator_log_run_at
                 ON orchestrator_log(run_at DESC);
 
+            CREATE TABLE IF NOT EXISTS workspace_coordinator_runs (
+                id TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'running',
+                brain_profile_id TEXT NOT NULL,
+                coder_profile_id TEXT NOT NULL,
+                goal TEXT NOT NULL,
+                last_response TEXT,
+                last_error TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                completed_at TEXT,
+                FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_workspace_coordinator_runs_workspace_status
+                ON workspace_coordinator_runs(workspace_id, status, updated_at DESC);
+
+            CREATE TABLE IF NOT EXISTS workspace_coordinator_workers (
+                id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL,
+                workspace_id TEXT NOT NULL,
+                profile_id TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'running',
+                last_prompt TEXT,
+                last_session_id TEXT,
+                notified_status TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (run_id) REFERENCES workspace_coordinator_runs(id) ON DELETE CASCADE,
+                FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_workspace_coordinator_workers_run
+                ON workspace_coordinator_workers(run_id, created_at ASC);
+
+            CREATE TABLE IF NOT EXISTS workspace_coordinator_actions (
+                id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL,
+                workspace_id TEXT NOT NULL,
+                action_kind TEXT NOT NULL,
+                replay_kind TEXT,
+                replayed_from_action_id TEXT,
+                worker_id TEXT,
+                prompt TEXT,
+                message TEXT,
+                raw_json TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (run_id) REFERENCES workspace_coordinator_runs(id) ON DELETE CASCADE,
+                FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_workspace_coordinator_actions_workspace_created
+                ON workspace_coordinator_actions(workspace_id, created_at DESC);
+
             CREATE TABLE IF NOT EXISTS context_symbol_cache (
                 blob_oid TEXT NOT NULL,
                 parser_version TEXT NOT NULL,
@@ -428,6 +491,45 @@ pub fn run(connection: &Connection) -> Result<(), String> {
     )?;
     add_column_if_missing(connection, "workspaces", "parent_workspace_id", "TEXT")?;
     add_column_if_missing(connection, "workspaces", "source_workspace_id", "TEXT")?;
+    add_column_if_missing(
+        connection,
+        "workspaces",
+        "run_tests_on_create",
+        "INTEGER NOT NULL DEFAULT 1",
+    )?;
+    add_column_if_missing(
+        connection,
+        "workspaces",
+        "create_pr_on_complete",
+        "INTEGER NOT NULL DEFAULT 1",
+    )?;
+
+    add_column_if_missing(
+        connection,
+        "workspace_pr_comments",
+        "comment_node_id",
+        "TEXT",
+    )?;
+    add_column_if_missing(connection, "workspace_pr_comments", "thread_id", "TEXT")?;
+    add_column_if_missing(connection, "workspace_pr_comments", "review_id", "INTEGER")?;
+    add_column_if_missing(
+        connection,
+        "workspace_pr_comments",
+        "thread_resolved",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
+    add_column_if_missing(
+        connection,
+        "workspace_pr_comments",
+        "thread_outdated",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
+    add_column_if_missing(
+        connection,
+        "workspace_pr_comments",
+        "thread_resolvable",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
     add_column_if_missing(connection, "workspaces", "derived_from_branch", "TEXT")?;
     add_column_if_missing(
         connection,
@@ -476,6 +578,24 @@ pub fn run(connection: &Connection) -> Result<(), String> {
     )?;
     add_column_if_missing(connection, "workspaces", "cost_limit_usd", "REAL")?;
     add_column_if_missing(connection, "agent_chat_sessions", "closed_at", "TEXT")?;
+    add_column_if_missing(
+        connection,
+        "workspace_coordinator_workers",
+        "notified_status",
+        "TEXT",
+    )?;
+    add_column_if_missing(
+        connection,
+        "workspace_coordinator_actions",
+        "replay_kind",
+        "TEXT",
+    )?;
+    add_column_if_missing(
+        connection,
+        "workspace_coordinator_actions",
+        "replayed_from_action_id",
+        "TEXT",
+    )?;
     add_column_if_missing(
         connection,
         "merge_readiness",
@@ -527,4 +647,62 @@ fn add_column_if_missing(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn table_columns(connection: &Connection, table: &str) -> Vec<String> {
+        let mut statement = connection
+            .prepare(&format!("PRAGMA table_info({table})"))
+            .expect("table info query");
+        statement
+            .query_map([], |row| row.get::<_, String>(1))
+            .expect("table info rows")
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .expect("table info collect")
+    }
+
+    #[test]
+    fn backfills_coordinator_action_replay_columns() {
+        let connection = Connection::open_in_memory().expect("open in-memory db");
+        connection
+            .execute_batch(
+                r#"
+                CREATE TABLE workspace_coordinator_actions (
+                    id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    workspace_id TEXT NOT NULL,
+                    action_kind TEXT NOT NULL,
+                    worker_id TEXT,
+                    prompt TEXT,
+                    message TEXT,
+                    raw_json TEXT,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE workspace_coordinator_workers (
+                    id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    workspace_id TEXT NOT NULL,
+                    profile_id TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'running',
+                    last_prompt TEXT,
+                    last_session_id TEXT,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                "#,
+            )
+            .expect("seed old schema");
+
+        run(&connection).expect("run migrations");
+        let action_columns = table_columns(&connection, "workspace_coordinator_actions");
+        assert!(action_columns.iter().any(|name| name == "replay_kind"));
+        assert!(action_columns
+            .iter()
+            .any(|name| name == "replayed_from_action_id"));
+        let worker_columns = table_columns(&connection, "workspace_coordinator_workers");
+        assert!(worker_columns.iter().any(|name| name == "notified_status"));
+    }
 }

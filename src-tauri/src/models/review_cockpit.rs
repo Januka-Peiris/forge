@@ -36,6 +36,12 @@ pub struct WorkspacePrComment {
     pub state: String,
     pub created_at: Option<String>,
     pub resolved_at: Option<String>,
+    pub comment_node_id: Option<String>,
+    pub thread_id: Option<String>,
+    pub review_id: Option<u64>,
+    pub thread_resolved: bool,
+    pub thread_outdated: bool,
+    pub thread_resolvable: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

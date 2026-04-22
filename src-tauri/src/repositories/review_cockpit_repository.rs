@@ -91,13 +91,20 @@ pub fn upsert_pr_comments(
             tx.execute(
                 r#"
                 INSERT INTO workspace_pr_comments (
-                    workspace_id, provider, comment_id, author, body, path, line, url, state, created_at_remote, resolved_at, updated_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, CURRENT_TIMESTAMP)
+                    workspace_id, provider, comment_id, author, body, path, line, url, state, created_at_remote, resolved_at,
+                    comment_node_id, thread_id, review_id, thread_resolved, thread_outdated, thread_resolvable, updated_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, CURRENT_TIMESTAMP)
                 ON CONFLICT(workspace_id, provider, comment_id) DO UPDATE SET
                     author = excluded.author, body = excluded.body, path = excluded.path,
                     line = excluded.line, url = excluded.url, state = excluded.state,
                     created_at_remote = excluded.created_at_remote,
-                    resolved_at = COALESCE(workspace_pr_comments.resolved_at, excluded.resolved_at),
+                    resolved_at = COALESCE(excluded.resolved_at, workspace_pr_comments.resolved_at),
+                    comment_node_id = excluded.comment_node_id,
+                    thread_id = excluded.thread_id,
+                    review_id = excluded.review_id,
+                    thread_resolved = excluded.thread_resolved,
+                    thread_outdated = excluded.thread_outdated,
+                    thread_resolvable = excluded.thread_resolvable,
                     updated_at = CURRENT_TIMESTAMP
                 "#,
                 params![
@@ -112,6 +119,12 @@ pub fn upsert_pr_comments(
                     comment.state,
                     comment.created_at,
                     comment.resolved_at,
+                    comment.comment_node_id,
+                    comment.thread_id,
+                    comment.review_id,
+                    comment.thread_resolved as i64,
+                    comment.thread_outdated as i64,
+                    comment.thread_resolvable as i64,
                 ],
             )?;
         }
@@ -127,7 +140,8 @@ pub fn list_pr_comments(
     db.with_connection(|connection| {
         let mut stmt = connection.prepare(
             r#"
-            SELECT workspace_id, provider, comment_id, author, body, path, line, url, state, created_at_remote, resolved_at
+            SELECT workspace_id, provider, comment_id, author, body, path, line, url, state, created_at_remote, resolved_at,
+                   comment_node_id, thread_id, review_id, thread_resolved, thread_outdated, thread_resolvable
             FROM workspace_pr_comments
             WHERE workspace_id = ?1
             ORDER BY COALESCE(path, ''), line, created_at_remote DESC, comment_id
@@ -149,7 +163,8 @@ pub fn get_pr_comment(
         connection
             .query_row(
                 r#"
-                SELECT workspace_id, provider, comment_id, author, body, path, line, url, state, created_at_remote, resolved_at
+                SELECT workspace_id, provider, comment_id, author, body, path, line, url, state, created_at_remote, resolved_at,
+                       comment_node_id, thread_id, review_id, thread_resolved, thread_outdated, thread_resolvable
                 FROM workspace_pr_comments
                 WHERE workspace_id = ?1 AND comment_id = ?2
                 LIMIT 1
@@ -206,6 +221,12 @@ fn pr_comment_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspacePrC
         state: row.get("state")?,
         created_at: row.get("created_at_remote")?,
         resolved_at: row.get("resolved_at")?,
+        comment_node_id: row.get("comment_node_id")?,
+        thread_id: row.get("thread_id")?,
+        review_id: row.get::<_, Option<i64>>("review_id")?.map(|value| value.max(0) as u64),
+        thread_resolved: row.get::<_, i64>("thread_resolved")? != 0,
+        thread_outdated: row.get::<_, i64>("thread_outdated")? != 0,
+        thread_resolvable: row.get::<_, i64>("thread_resolvable")? != 0,
     })
 }
 

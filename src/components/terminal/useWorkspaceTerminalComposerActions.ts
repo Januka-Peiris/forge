@@ -3,7 +3,9 @@ import { createWorkspacePr } from '../../lib/tauri-api/pr-draft';
 import { refreshWorkspacePrComments } from '../../lib/tauri-api/review-cockpit';
 import { sendAgentChatMessage, interruptAgentChatSession } from '../../lib/tauri-api/agent-chat';
 import { interruptWorkspaceTerminalSessionById, queueWorkspaceAgentPrompt } from '../../lib/tauri-api/terminal';
+import { stepWorkspaceCoordinator } from '../../lib/tauri-api/coordinator';
 import { latestPlanEvent } from '../../lib/agent-workbench';
+import { formatSessionError } from '../../lib/ui-errors';
 import type { AgentChatEvent, AgentChatNextAction, AgentChatSession } from '../../types/agent-chat';
 import type { ForgeWorkspaceConfig, TerminalSession } from '../../types';
 import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
@@ -21,6 +23,7 @@ interface UseWorkspaceTerminalComposerActionsParams {
   refreshChatSessions: (preferredFocusId?: string | null, scope?: 'all' | 'active') => Promise<void>;
   refreshWorkbenchState: () => Promise<void>;
   refreshReadiness: () => Promise<void>;
+  refreshCoordinatorStatus: () => Promise<void>;
   closeChatSession: (sessionId: string) => Promise<void>;
   startRunCommand: (index: number, restart?: boolean) => Promise<void>;
   setReviewCockpit: (cockpit: WorkspaceReviewCockpit | null) => void;
@@ -30,6 +33,7 @@ interface UseWorkspaceTerminalComposerActionsParams {
   setBusy: (busy: boolean) => void;
   setError: (error: string | null) => void;
   setActionError: (err: unknown) => void;
+  onCoordinatorInfo?: (message: string) => void;
   promptSendChainRef: MutableRefObject<Promise<void>>;
 }
 
@@ -45,6 +49,7 @@ export function useWorkspaceTerminalComposerActions({
   refreshChatSessions,
   refreshWorkbenchState,
   refreshReadiness,
+  refreshCoordinatorStatus,
   closeChatSession,
   startRunCommand,
   setReviewCockpit,
@@ -54,6 +59,7 @@ export function useWorkspaceTerminalComposerActions({
   setBusy,
   setError,
   setActionError,
+  onCoordinatorInfo,
   promptSendChainRef,
 }: UseWorkspaceTerminalComposerActionsParams) {
   const togglePlanMode = () => {
@@ -181,6 +187,18 @@ export function useWorkspaceTerminalComposerActions({
       setBusy(true);
       setError(null);
       try {
+        if (composerSettings.promptMode === 'coordinator') {
+          const brainProfileId = composerSettings.coordinatorBrainProfileId.trim();
+          const coderProfileId = composerSettings.coordinatorCoderProfileId.trim();
+          await stepWorkspaceCoordinator({
+            workspaceId,
+            instruction: text,
+            brainProfileId: brainProfileId.length > 0 ? brainProfileId : null,
+            coderProfileId: coderProfileId.length > 0 ? coderProfileId : null,
+          });
+          await refreshCoordinatorStatus();
+          return;
+        }
         if (focusedChatSession) {
           if (focusedChatSession.status === 'running' && effectiveBehavior === 'queue_send') {
             setQueuedPrompts((current) => ({
@@ -211,6 +229,7 @@ export function useWorkspaceTerminalComposerActions({
             model: selectedModel,
           });
           await refreshChatSessions(focusedChatSession.id);
+          await refreshCoordinatorStatus().catch(() => undefined);
           return;
         }
         if (effectiveBehavior === 'interrupt_send' && focusedSession) {
@@ -224,7 +243,14 @@ export function useWorkspaceTerminalComposerActions({
           taskMode: selectedTaskMode,
           reasoning: selectedReasoning,
         });
+        await refreshCoordinatorStatus().catch(() => undefined);
       } catch (err) {
+        const message = formatSessionError(err);
+        if (message.startsWith('COORDINATOR_STEP_IN_PROGRESS:')) {
+          onCoordinatorInfo?.('Coordinator is already stepping. Waiting for current step to finish…');
+          await refreshCoordinatorStatus().catch(() => undefined);
+          return;
+        }
         setActionError(err);
       } finally {
         setBusy(false);

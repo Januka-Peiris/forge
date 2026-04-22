@@ -25,8 +25,10 @@ import {
   markWorkspaceFileReviewed,
   markWorkspacePrCommentResolvedLocal,
   queueReviewAgentPrompt,
-  refreshWorkspacePrComments,
+  reopenWorkspacePrThread,
+  resolveWorkspacePrThread,
   refreshWorkspaceReviewCockpit,
+  syncWorkspacePrThreads,
 } from '../../lib/tauri-api/review-cockpit';
 import { formatSessionError } from '../../lib/ui-errors';
 import { measureAsync } from '../../lib/perf';
@@ -193,7 +195,7 @@ export function ReviewCockpit({
     setBusy(true);
     setError(null);
     try {
-      setCockpit(await refreshWorkspacePrComments(workspaceId));
+      setCockpit(await syncWorkspacePrThreads(workspaceId));
     } catch (err) {
       setError(formatSessionError(err));
     } finally {
@@ -201,12 +203,38 @@ export function ReviewCockpit({
     }
   };
 
-  const resolveComment = async (commentId: string) => {
+  const resolveCommentLocal = async (commentId: string) => {
     if (!workspaceId) return;
     setBusy(true);
     setError(null);
     try {
       setCockpit(await markWorkspacePrCommentResolvedLocal(workspaceId, commentId));
+    } catch (err) {
+      setError(formatSessionError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const resolveThread = async (commentId: string) => {
+    if (!workspaceId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setCockpit(await resolveWorkspacePrThread(workspaceId, commentId));
+    } catch (err) {
+      setError(formatSessionError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reopenThread = async (commentId: string) => {
+    if (!workspaceId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setCockpit(await reopenWorkspacePrThread(workspaceId, commentId));
     } catch (err) {
       setError(formatSessionError(err));
     } finally {
@@ -668,7 +696,9 @@ export function ReviewCockpit({
                             effectiveSelectedPath={effectiveSelectedPath}
                             onSelectFile={(path) => void selectFile(path)}
                             onSendPrompt={(action, payload) => void sendPrompt(action, payload)}
-                            onResolveComment={(commentId) => void resolveComment(commentId)}
+                            onResolveCommentLocal={(commentId) => void resolveCommentLocal(commentId)}
+                            onResolveThread={(commentId) => void resolveThread(commentId)}
+                            onReopenThread={(commentId) => void reopenThread(commentId)}
                           />
                         ))}
                       </div>
@@ -690,7 +720,9 @@ export function ReviewCockpit({
                             effectiveSelectedPath={effectiveSelectedPath}
                             onSelectFile={(path) => void selectFile(path)}
                             onSendPrompt={(action, payload) => void sendPrompt(action, payload)}
-                            onResolveComment={(commentId) => void resolveComment(commentId)}
+                            onResolveCommentLocal={(commentId) => void resolveCommentLocal(commentId)}
+                            onResolveThread={(commentId) => void resolveThread(commentId)}
+                            onReopenThread={(commentId) => void reopenThread(commentId)}
                           />
                         ))}
                       </div>

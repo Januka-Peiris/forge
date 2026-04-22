@@ -13,4 +13,6 @@ export interface AgentProfile {
   description?: string | null;
   skills: string[];
   templates: string[];
+  rolePreference?: 'brain' | 'coder' | 'general' | string | null;
+  coordinatorEligible?: boolean | null;
 }

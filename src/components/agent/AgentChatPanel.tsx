@@ -311,7 +311,7 @@ function AgentEventCard({
   if (event.eventType === 'user_message') {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[78%] rounded bg-forge-green/55 px-3 py-2 text-sm leading-relaxed text-white">
+        <div className="max-w-[78%] rounded bg-forge-green/35 px-3 py-2 text-sm leading-relaxed text-white">
           {event.body}
         </div>
       </div>

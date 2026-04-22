@@ -9,7 +9,8 @@ use crate::repositories::{
     activity_repository, repository_repository, settings_repository, workspace_repository,
 };
 use crate::services::{
-    git_worktree_service, repo_scanner_service, terminal_service, workspace_script_service,
+    git_worktree_service, pr_draft_service, repo_scanner_service, terminal_service,
+    workspace_script_service,
 };
 use crate::state::AppState;
 
@@ -150,6 +151,8 @@ pub(super) fn create_workspace(
             derived_from_branch: input.derived_from_branch.clone(),
             linked_worktrees: vec![],
             cost_limit_usd: None,
+            run_tests_on_create: input.run_tests,
+            create_pr_on_complete: input.create_pr,
         },
         worktree_path,
         base_branch: input.base_branch,
@@ -228,6 +231,34 @@ pub(super) fn create_workspace(
                 "Automatic setup is disabled. Run setup manually from the workspace commands panel.",
             ),
         );
+    }
+
+    if detail.summary.run_tests_on_create {
+        if let Ok(config) = workspace_script_service::get_workspace_forge_config(state, &detail.summary.id) {
+            if !config.run.is_empty() {
+                let mut started = 0usize;
+                for index in 0..config.run.len() {
+                    if workspace_script_service::start_workspace_run_command(state, &detail.summary.id, index).is_ok() {
+                        started += 1;
+                    }
+                }
+                if started > 0 {
+                    let _ = activity_repository::record(
+                        &state.db,
+                        &detail.summary.id,
+                        &detail.summary.repo,
+                        Some(&detail.summary.branch),
+                        "Workspace checks launched",
+                        "info",
+                        Some(&format!("Started {started} run command(s) from workspace options.")),
+                    );
+                }
+            }
+        }
+    }
+
+    if detail.summary.create_pr_on_complete {
+        let _ = pr_draft_service::refresh_workspace_pr_draft(state, &detail.summary.id);
     }
 
     Ok(detail)

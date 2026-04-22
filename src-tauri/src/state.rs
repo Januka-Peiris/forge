@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::process::Child;
 use std::sync::atomic::{AtomicBool, AtomicU64};
@@ -17,6 +17,7 @@ pub type ProcessRegistry = Arc<Mutex<HashMap<String, Arc<Mutex<Option<Child>>>>>
 pub type TerminalRegistry = Arc<Mutex<HashMap<String, Arc<ActiveTerminal>>>>;
 /// Maps session_id → raw PTY input bytes that are pending user approval.
 pub type PendingCommandRegistry = Arc<Mutex<HashMap<String, String>>>;
+pub type CoordinatorStepRegistry = Arc<Mutex<HashSet<String>>>;
 
 pub struct ActiveTerminal {
     pub session_id: String,
@@ -43,6 +44,8 @@ pub struct AppState {
     pub orchestrator_last_run: Arc<Mutex<Option<String>>>,
     /// Actions taken in the most recent orchestrator pass.
     pub orchestrator_last_actions: Arc<Mutex<Vec<OrchestratorAction>>>,
+    /// Workspace ids with an in-flight coordinator step.
+    pub coordinator_step_inflight: CoordinatorStepRegistry,
 }
 
 impl AppState {
@@ -116,6 +119,7 @@ impl AppState {
             orchestrator_model: Arc::new(Mutex::new("claude-opus-4-6".to_string())),
             orchestrator_last_run: Arc::new(Mutex::new(None)),
             orchestrator_last_actions: Arc::new(Mutex::new(Vec::new())),
+            coordinator_step_inflight: Arc::new(Mutex::new(HashSet::new())),
         };
         Ok(state)
     }

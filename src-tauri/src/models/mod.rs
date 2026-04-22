@@ -5,6 +5,7 @@ pub mod agent_memory;
 pub mod agent_profile;
 pub mod agent_run;
 pub mod checkpoint;
+pub mod coordinator;
 pub mod deep_link;
 pub mod environment;
 pub mod git_review;
@@ -44,6 +45,11 @@ pub use agent_run::{StartWorkspaceRunInput, WorkspaceRun, WorkspaceRunLog};
 pub use checkpoint::{
     WorkspaceCheckpoint, WorkspaceCheckpointBranchResult, WorkspaceCheckpointDeleteResult,
     WorkspaceCheckpointDiff, WorkspaceCheckpointRestorePlan, WorkspaceCheckpointRestoreResult,
+};
+pub use coordinator::{
+    CoordinatorAction, CoordinatorActionLog, CoordinatorRun, CoordinatorWorker,
+    ReplayWorkspaceCoordinatorActionInput, StartWorkspaceCoordinatorInput,
+    StepWorkspaceCoordinatorInput, WorkspaceCoordinatorStatus,
 };
 pub use deep_link::{OpenDeepLinkInput, OpenDeepLinkResult};
 pub use environment::EnvironmentCheckItem;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ElementType } from 'react';
+import { useEffect, useMemo, useRef, useState, type ElementType, type ReactNode } from 'react';
 import {
   ChevronDown,
   ChevronLeft,
@@ -6,7 +6,6 @@ import {
   ClipboardCheck,
   Filter,
   FolderPlus,
-  FolderTree,
   LayoutGrid,
   Plus,
   Search,
@@ -37,7 +36,6 @@ import {
 } from '../ui/select';
 import { Tooltip } from '../ui/tooltip';
 import { WorkspaceListItem } from '../workspaces/WorkspaceListItem';
-import { WorkspaceFilesPanel } from '../terminal/WorkspaceFilesPanel';
 
 export type NavView = 'workspaces' | 'files' | 'reviews' | 'settings' | 'memory';
 
@@ -52,18 +50,19 @@ interface SidebarProps {
   selectedWorkspaceId: string | null;
   onSelectWorkspace: (workspaceId: string) => void;
   onArchiveWorkspace: (workspaceId: string) => void;
+  onOpenWorkspaceInCursor?: (workspaceId: string) => void;
+  onRunWorkspaceSetup?: (workspaceId: string) => Promise<void> | void;
+  onRefreshWorkspaceThreads?: (workspaceId: string) => Promise<void> | void;
+  onCreateWorkspacePr?: (workspaceId: string) => void;
   onRemoveRepository: (repositoryId: string) => void;
   onNewWorkspace: (repositoryId?: string) => void;
   onAddRepository?: () => void;
   onCollapse?: () => void;
   onFilteredWorkspacesChange?: (workspaces: Workspace[]) => void;
-  onOpenFile?: (path: string) => void;
-  selectedFilePath?: string | null;
 }
 
 const primaryNav: { id: NavView; label: string; icon: ElementType }[] = [
   { id: 'workspaces', label: 'Workspaces', icon: LayoutGrid },
-  { id: 'files', label: 'Files', icon: FolderTree },
   { id: 'reviews', label: 'Reviews', icon: ClipboardCheck },
 ];
 const secondaryNav: { id: NavView; label: string; icon: ElementType }[] = [
@@ -77,17 +76,20 @@ export function Sidebar({
   repositories,
   workspaces,
   workspaceAttention,
+  conflictingWorkspaceIds,
   archivedWorkspaceIds,
   selectedWorkspaceId,
   onSelectWorkspace,
   onArchiveWorkspace,
+  onOpenWorkspaceInCursor,
+  onRunWorkspaceSetup,
+  onRefreshWorkspaceThreads,
+  onCreateWorkspacePr,
   onRemoveRepository,
   onNewWorkspace,
   onAddRepository,
   onCollapse,
   onFilteredWorkspacesChange,
-  onOpenFile,
-  selectedFilePath,
 }: SidebarProps) {
   const [filter, setFilter] = useState<'all' | 'active' | 'archived'>('all');
   const [sort, setSort] = useState<'recent' | 'name' | 'status'>('recent');
@@ -105,6 +107,11 @@ export function Sidebar({
   const [batchSending, setBatchSending] = useState(false);
   const batchMode = batchSelected.size > 0;
   const [orchestrator, setOrchestrator] = useState<OrchestratorStatus | null>(null);
+  const [workspaceContextMenu, setWorkspaceContextMenu] = useState<{
+    x: number;
+    y: number;
+    workspace: Workspace;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -113,6 +120,17 @@ export function Sidebar({
       .catch(() => undefined);
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (!workspaceContextMenu) return;
+    const close = () => setWorkspaceContextMenu(null);
+    window.addEventListener('click', close);
+    window.addEventListener('blur', close);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('blur', close);
+    };
+  }, [workspaceContextMenu]);
 
   const handleOrchestratorToggle = async (enabled: boolean) => {
     setOrchestrator((prev) => prev ? { ...prev, enabled } : prev);
@@ -179,6 +197,7 @@ export function Sidebar({
         workspace.name.toLowerCase().includes(q)
         || (workspace.branch ?? '').toLowerCase().includes(q)
         || workspace.repo.toLowerCase().includes(q)
+        || (workspace.currentTask ?? '').toLowerCase().includes(q)
       );
     };
 
@@ -197,7 +216,12 @@ export function Sidebar({
     const sorter = (left: Workspace, right: Workspace) => {
       if (sort === 'name') return left.name.localeCompare(right.name);
       if (sort === 'status') return left.status.localeCompare(right.status);
-      return 0;
+      const leftTs = Date.parse(left.lastUpdated ?? '') || 0;
+      const rightTs = Date.parse(right.lastUpdated ?? '') || 0;
+      if (rightTs !== leftTs) return rightTs - leftTs;
+      const leftIdTs = Number((left.id.match(/(\d+)$/)?.[1]) ?? 0);
+      const rightIdTs = Number((right.id.match(/(\d+)$/)?.[1]) ?? 0);
+      return rightIdTs - leftIdTs;
     };
     const fromDiscovered = repositories.map((repo) => ({
       id: repo.id,
@@ -236,11 +260,6 @@ export function Sidebar({
     }
     return cents > 0 ? `$${(cents / 100).toFixed(2)}` : null;
   }, [workspaces]);
-  const selectedWorkspace = useMemo(
-    () => workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? null,
-    [selectedWorkspaceId, workspaces],
-  );
-
   const renderNavBtn = ({ id, label, icon: Icon }: { id: NavView; label: string; icon: ElementType }) => {
     const isActive = activeView === id;
     return (
@@ -286,29 +305,6 @@ export function Sidebar({
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3">
-        {activeView === 'files' ? (
-          <div className="flex h-full min-h-0 flex-col gap-2">
-            <div className="px-2">
-              <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest">Files</p>
-              <p className="mt-1 truncate text-ui-label text-forge-text/90" title={selectedWorkspace?.name ?? ''}>
-                {selectedWorkspace ? `${selectedWorkspace.repo} / ${selectedWorkspace.name}` : 'Select a workspace to browse files'}
-              </p>
-            </div>
-            {selectedWorkspace ? (
-              <div className="min-h-0 flex-1">
-                <WorkspaceFilesPanel
-                  workspaceId={selectedWorkspace.id}
-                  selectedFilePath={selectedFilePath}
-                  onFileSelect={onOpenFile}
-                />
-              </div>
-            ) : (
-              <div className="rounded-xl border border-forge-border bg-forge-card/50 px-3 py-2 text-ui-label text-forge-muted">
-                Select a workspace from <span className="font-semibold text-forge-text">Workspaces</span> first.
-              </div>
-            )}
-          </div>
-        ) : (
         <>
         <div className="flex items-center justify-between px-2">
           <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest">Workspaces</p>
@@ -461,6 +457,7 @@ export function Sidebar({
                         const isSelected = workspace.id === selectedWorkspaceId;
                         const isHovered = hoveredId === workspace.id;
                         const attention = workspaceAttention[workspace.id];
+                        const hasConflict = conflictingWorkspaceIds.has(workspace.id);
                         const isArchived = archivedSet.has(workspace.id);
                         const totals = workspaceChangeTotals[workspace.id] ?? { additions: 0, deletions: 0 };
 
@@ -484,6 +481,15 @@ export function Sidebar({
                               onNavigate('workspaces');
                               onSelectWorkspace(workspace.id);
                             }}
+                            onContextMenu={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              setWorkspaceContextMenu({
+                                x: event.clientX,
+                                y: event.clientY,
+                                workspace,
+                              });
+                            }}
                             prefix={
                               <button
                                 onClick={(e) => { e.stopPropagation(); toggleBatchSelect(workspace.id); }}
@@ -496,11 +502,20 @@ export function Sidebar({
                               </button>
                             }
                             suffix={
-                              !!attention?.unreadCount && (
-                                <span className="shrink-0 rounded-full bg-forge-orange px-1.5 py-0.5 text-[10px] font-bold text-white shadow-amber-glow">
-                                  {attention.unreadCount > 99 ? '99+' : attention.unreadCount}
-                                </span>
-                              )
+                              (attention?.unreadCount || hasConflict) ? (
+                                <div className="flex items-center gap-1">
+                                  {!!attention?.unreadCount && (
+                                    <span className="shrink-0 rounded-full bg-forge-orange px-1.5 py-0.5 text-[10px] font-bold text-white shadow-amber-glow">
+                                      {attention.unreadCount > 99 ? '99+' : attention.unreadCount}
+                                    </span>
+                                  )}
+                                  {hasConflict && (
+                                    <span className="shrink-0 rounded-full border border-forge-red/30 bg-forge-red/15 px-1.5 py-0.5 text-[10px] font-bold text-forge-red">
+                                      conflict
+                                    </span>
+                                  )}
+                                </div>
+                              ) : null
                             }
                             actions={
                               <Tooltip content={isArchived ? 'Restore Workspace' : 'Archive Workspace'} side="left">
@@ -528,8 +543,66 @@ export function Sidebar({
           })}
         </div>
         </>
-        )}
       </div>
+      {workspaceContextMenu && (
+        <div
+          className="fixed z-50 min-w-[220px] rounded-panel border border-forge-border bg-forge-surface p-1 shadow-forge-panel"
+          style={{ left: workspaceContextMenu.x, top: workspaceContextMenu.y }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          {onOpenWorkspaceInCursor && (
+            <SidebarContextAction onClick={() => {
+              onSelectWorkspace(workspaceContextMenu.workspace.id);
+              onNavigate('workspaces');
+              setWorkspaceContextMenu(null);
+              onOpenWorkspaceInCursor(workspaceContextMenu.workspace.id);
+            }}
+            >
+              Open in Cursor
+            </SidebarContextAction>
+          )}
+          {onRunWorkspaceSetup && (
+            <SidebarContextAction onClick={() => {
+              onSelectWorkspace(workspaceContextMenu.workspace.id);
+              onNavigate('workspaces');
+              setWorkspaceContextMenu(null);
+              void onRunWorkspaceSetup(workspaceContextMenu.workspace.id);
+            }}
+            >
+              Run setup checks
+            </SidebarContextAction>
+          )}
+          {onRefreshWorkspaceThreads && (
+            <SidebarContextAction onClick={() => {
+              onSelectWorkspace(workspaceContextMenu.workspace.id);
+              onNavigate('workspaces');
+              setWorkspaceContextMenu(null);
+              void onRefreshWorkspaceThreads(workspaceContextMenu.workspace.id);
+            }}
+            >
+              Refresh PR threads
+            </SidebarContextAction>
+          )}
+          {onCreateWorkspacePr && (
+            <SidebarContextAction onClick={() => {
+              onSelectWorkspace(workspaceContextMenu.workspace.id);
+              setWorkspaceContextMenu(null);
+              onCreateWorkspacePr(workspaceContextMenu.workspace.id);
+            }}
+            >
+              Mark PR created
+            </SidebarContextAction>
+          )}
+          <SidebarContextAction onClick={() => {
+            const id = workspaceContextMenu.workspace.id;
+            setWorkspaceContextMenu(null);
+            onArchiveWorkspace(id);
+          }}
+          >
+            {archivedSet.has(workspaceContextMenu.workspace.id) ? 'Restore workspace' : 'Archive workspace'}
+          </SidebarContextAction>
+        </div>
+      )}
 
       {/* Orchestrator panel */}
       {orchestrator !== null && (
@@ -621,5 +694,23 @@ export function Sidebar({
         {secondaryNav.map(renderNavBtn)}
       </div>
     </aside>
+  );
+}
+
+function SidebarContextAction({
+  children,
+  onClick,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center rounded-btn px-2.5 py-1.5 text-left text-xs text-forge-text hover:bg-forge-surface-overlay"
+    >
+      {children}
+    </button>
   );
 }

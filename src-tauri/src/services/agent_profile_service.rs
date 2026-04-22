@@ -118,6 +118,8 @@ pub fn raw_to_profile(raw: RawAgentProfile) -> Option<AgentProfile> {
         description: raw.description,
         skills: raw.skills,
         templates: raw.templates,
+        role_preference: trim_optional(raw.role_preference),
+        coordinator_eligible: raw.coordinator_eligible,
     })
 }
 
@@ -165,6 +167,7 @@ fn normalize_saved_profile(mut profile: AgentProfile) -> Option<AgentProfile> {
     profile.provider = trim_optional(profile.provider);
     profile.endpoint = trim_optional(profile.endpoint);
     profile.description = trim_optional(profile.description);
+    profile.role_preference = trim_optional(profile.role_preference);
     profile.local = profile.local
         || profile.agent == "local_llm"
         || profile
@@ -178,6 +181,103 @@ fn normalize_saved_profile(mut profile: AgentProfile) -> Option<AgentProfile> {
             .map(is_local_endpoint)
             .unwrap_or(false);
     Some(profile)
+}
+
+pub fn resolve_profile_for_role(
+    state: &AppState,
+    workspace_id: Option<&str>,
+    role: &str,
+    requested_profile_id: Option<&str>,
+) -> Result<AgentProfile, String> {
+    if let Some(requested_profile_id) = requested_profile_id {
+        let profile =
+            resolve_agent_profile(state, workspace_id, Some(requested_profile_id), None)?;
+        if profile.agent == "shell" {
+            return Err("Shell profile is not eligible for coordinator brain/coder roles".to_string());
+        }
+        return Ok(profile);
+    }
+
+    let profiles = list_workspace_agent_profiles(state, workspace_id)?;
+    let is_eligible = |p: &&AgentProfile| {
+        if p.agent == "shell" {
+            return false;
+        }
+        p.coordinator_eligible.unwrap_or(true)
+    };
+    let role = role.to_ascii_lowercase();
+
+    let setting_key = if role == "brain" {
+        "coordinator_default_brain_profile_id"
+    } else if role == "coder" {
+        "coordinator_default_coder_profile_id"
+    } else {
+        "default_agent_profile_id"
+    };
+    if let Ok(Some(saved)) = settings_repository::get_value(&state.db, setting_key) {
+        if let Some(profile) = profiles
+            .iter()
+            .find(|p| p.id == saved && is_eligible(p))
+            .cloned()
+        {
+            return Ok(profile);
+        }
+    }
+
+    if let Some(profile) = profiles
+        .iter()
+        .filter(is_eligible)
+        .find(|p| {
+            p.role_preference
+                .as_deref()
+                .map(|value| value.eq_ignore_ascii_case(&role))
+                .unwrap_or(false)
+        })
+        .cloned()
+    {
+        return Ok(profile);
+    }
+
+    let ordered = profiles
+        .iter()
+        .filter(is_eligible)
+        .collect::<Vec<_>>();
+    if role == "coder" {
+        if let Some(profile) = ordered
+            .iter()
+            .find(|p| p.id == "kimi-default")
+            .map(|p| (*p).clone())
+        {
+            return Ok(profile);
+        }
+        if let Some(profile) = ordered
+            .iter()
+            .find(|p| p.id == "codex-default")
+            .map(|p| (*p).clone())
+        {
+            return Ok(profile);
+        }
+    }
+    if role == "brain" {
+        if let Some(profile) = ordered
+            .iter()
+            .find(|p| p.id == "codex-high")
+            .map(|p| (*p).clone())
+        {
+            return Ok(profile);
+        }
+        if let Some(profile) = ordered
+            .iter()
+            .find(|p| p.id == "claude-plan")
+            .map(|p| (*p).clone())
+        {
+            return Ok(profile);
+        }
+    }
+    ordered
+        .first()
+        .map(|profile| (*profile).clone())
+        .ok_or_else(|| format!("No eligible {} profile found", role))
 }
 
 fn trim_optional(value: Option<String>) -> Option<String> {
@@ -335,6 +435,8 @@ pub fn default_profiles() -> Vec<AgentProfile> {
             description: Some("Claude Code agent work".to_string()),
             skills: vec![],
             templates: vec![],
+            role_preference: Some("brain".to_string()),
+            coordinator_eligible: Some(true),
         },
         AgentProfile {
             id: "claude-plan".to_string(),
@@ -351,6 +453,8 @@ pub fn default_profiles() -> Vec<AgentProfile> {
             description: Some("Claude planning-oriented profile".to_string()),
             skills: vec![],
             templates: vec![],
+            role_preference: Some("brain".to_string()),
+            coordinator_eligible: Some(true),
         },
         AgentProfile {
             id: "codex-default".to_string(),
@@ -367,6 +471,8 @@ pub fn default_profiles() -> Vec<AgentProfile> {
             description: Some("General Codex agent work".to_string()),
             skills: vec![],
             templates: vec![],
+            role_preference: Some("brain".to_string()),
+            coordinator_eligible: Some(true),
         },
         AgentProfile {
             id: "codex-high".to_string(),
@@ -383,6 +489,8 @@ pub fn default_profiles() -> Vec<AgentProfile> {
             description: Some("Codex with high reasoning prompt context".to_string()),
             skills: vec![],
             templates: vec![],
+            role_preference: Some("brain".to_string()),
+            coordinator_eligible: Some(true),
         },
         AgentProfile {
             id: "kimi-default".to_string(),
@@ -399,6 +507,8 @@ pub fn default_profiles() -> Vec<AgentProfile> {
             description: Some("General Kimi Code agent work".to_string()),
             skills: vec![],
             templates: vec![],
+            role_preference: Some("coder".to_string()),
+            coordinator_eligible: Some(true),
         },
         AgentProfile {
             id: "shell".to_string(),
@@ -415,6 +525,8 @@ pub fn default_profiles() -> Vec<AgentProfile> {
             description: Some("Plain shell utility terminal".to_string()),
             skills: vec![],
             templates: vec![],
+            role_preference: None,
+            coordinator_eligible: Some(false),
         },
     ]
 }
@@ -512,6 +624,8 @@ mod tests {
             description: None,
             skills: vec![],
             templates: vec![],
+            role_preference: None,
+            coordinator_eligible: None,
         };
         let preamble = prompt_metadata_preamble(&profile, None, None);
         assert!(profile.local);
@@ -538,6 +652,8 @@ mod tests {
             description: None,
             skills: vec![],
             templates: vec![],
+            role_preference: None,
+            coordinator_eligible: None,
         };
         let envelope = local_llm_prompt_envelope(&profile, Some("Act"), "fix the failing test");
         assert!(envelope.contains(
@@ -566,6 +682,8 @@ fix the failing test"
             description: None,
             skills: vec![],
             templates: vec![],
+            role_preference: None,
+            coordinator_eligible: None,
         })
         .expect("profile");
 

@@ -30,7 +30,7 @@ export function buildPrCommentGroups(
     });
 
   const openCount = comments.filter(
-    (comment) => comment.state !== 'resolved_local' && !comment.resolvedAt,
+    (comment) => !comment.threadResolved && comment.state !== 'resolved_local' && !comment.resolvedAt,
   ).length;
 
   return { general, fileGroups, openCount, total: comments.length };

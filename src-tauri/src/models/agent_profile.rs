@@ -17,6 +17,10 @@ pub struct AgentProfile {
     pub description: Option<String>,
     pub skills: Vec<String>,
     pub templates: Vec<String>,
+    #[serde(default)]
+    pub role_preference: Option<String>,
+    #[serde(default)]
+    pub coordinator_eligible: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -40,4 +44,8 @@ pub(crate) struct RawAgentProfile {
     pub skills: Vec<String>,
     #[serde(default)]
     pub templates: Vec<String>,
+    #[serde(default)]
+    pub role_preference: Option<String>,
+    #[serde(default)]
+    pub coordinator_eligible: Option<bool>,
 }

@@ -62,6 +62,8 @@ export interface WorkspaceSummary {
   derivedFromBranch?: string;
   linkedWorktrees?: LinkedWorktreeRef[];
   costLimitUsd?: number;
+  runTestsOnCreate?: boolean;
+  createPrOnComplete?: boolean;
 }
 
 export interface WorkspaceDetail extends WorkspaceSummary {

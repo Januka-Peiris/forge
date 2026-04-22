@@ -301,9 +301,9 @@ export function NewWorkspaceModal({ onClose, onCreate, repositories, initialRepo
           <div className="space-y-2.5 pt-1">
             <p className="text-[11px] font-semibold text-forge-muted uppercase tracking-wider mb-1">Options</p>
             {[
-              { id: 'pr', label: 'Create pull request on completion', val: createPR, set: setCreatePR },
+              { id: 'pr', label: 'Prepare PR draft automatically', val: createPR, set: setCreatePR },
               { id: 'cursor', label: 'Open in Cursor after setup', val: openCursor, set: setOpenCursor },
-              { id: 'tests', label: 'Run tests automatically', val: runTests, set: setRunTests },
+              { id: 'tests', label: 'Auto-run configured checks', val: runTests, set: setRunTests },
             ].map(({ id, label, val, set }) => (
               <label key={id} className="flex items-center gap-3 cursor-pointer group">
                 <Checkbox

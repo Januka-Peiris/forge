@@ -8,7 +8,9 @@ interface ReviewCockpitCommentItemProps {
   effectiveSelectedPath: string | null;
   onSelectFile: (path: string) => void;
   onSendPrompt: (action: string, comment?: WorkspacePrComment) => void;
-  onResolveComment: (commentId: string) => void;
+  onResolveCommentLocal: (commentId: string) => void;
+  onResolveThread: (commentId: string) => void;
+  onReopenThread: (commentId: string) => void;
 }
 
 export function ReviewCockpitCommentItem({
@@ -18,8 +20,12 @@ export function ReviewCockpitCommentItem({
   effectiveSelectedPath,
   onSelectFile,
   onSendPrompt,
-  onResolveComment,
+  onResolveCommentLocal,
+  onResolveThread,
+  onReopenThread,
 }: ReviewCockpitCommentItemProps) {
+  const canResolveThread = !!comment.threadId && comment.threadResolvable && !comment.threadOutdated && !comment.threadResolved;
+  const canReopenThread = !!comment.threadId && comment.threadResolvable && !comment.threadOutdated && !!comment.threadResolved;
   return (
     <div
       id={`review-comment-${comment.commentId}`}
@@ -31,9 +37,17 @@ export function ReviewCockpitCommentItem({
           <MessageSquare className="h-3 w-3 shrink-0 text-forge-muted" />
           {comment.author}
         </span>
-        {(comment.path || comment.line || comment.state === 'resolved_local') && (
+        {(comment.path || comment.line || comment.state === 'resolved_local' || comment.threadResolved) && (
           <span className="shrink-0 rounded bg-forge-surface-overlay px-1.5 py-0.5 font-mono text-ui-tiny text-forge-muted">
-            {comment.state === 'resolved_local' ? 'resolved local' : comment.line ? `:${comment.line}` : 'general'}
+            {comment.threadOutdated
+              ? 'outdated'
+              : comment.threadResolved
+                ? 'thread resolved'
+                : comment.state === 'resolved_local'
+                  ? 'resolved local'
+                  : comment.line
+                    ? `:${comment.line}`
+                    : 'general'}
           </span>
         )}
       </div>
@@ -59,15 +73,32 @@ export function ReviewCockpitCommentItem({
         >
           <Send className="h-3 w-3" /> Send
         </button>
+        {canResolveThread && (
+          <button
+            disabled={busy}
+            onClick={() => onResolveThread(comment.commentId)}
+            className="flex items-center gap-1 rounded-md border border-forge-blue/25 bg-forge-blue/10 px-2 py-1 text-ui-caption font-semibold text-forge-blue hover:bg-forge-blue/15 disabled:opacity-50"
+          >
+            Resolve thread
+          </button>
+        )}
+        {canReopenThread && (
+          <button
+            disabled={busy}
+            onClick={() => onReopenThread(comment.commentId)}
+            className="flex items-center gap-1 rounded-md border border-forge-blue/25 bg-forge-blue/10 px-2 py-1 text-ui-caption font-semibold text-forge-blue hover:bg-forge-blue/15 disabled:opacity-50"
+          >
+            Reopen thread
+          </button>
+        )}
         <button
           disabled={busy || comment.state === 'resolved_local'}
-          onClick={() => onResolveComment(comment.commentId)}
+          onClick={() => onResolveCommentLocal(comment.commentId)}
           className="flex items-center gap-1 rounded-md border border-forge-border bg-forge-surface-overlay px-2 py-1 text-ui-caption font-semibold text-forge-muted hover:bg-forge-surface-overlay-high disabled:opacity-50"
+          title="Local only (does not resolve on GitHub)"
         >
-          {comment.state === 'resolved_local' ? (
-            <CheckCircle2 className="h-3 w-3 text-forge-green" />
-          ) : null}
-          {comment.state === 'resolved_local' ? 'Resolved' : 'Resolve'}
+          {comment.state === 'resolved_local' ? <CheckCircle2 className="h-3 w-3 text-forge-green" /> : null}
+          {comment.state === 'resolved_local' ? 'Local resolved' : 'Resolve local'}
         </button>
         {comment.url && (
           <a

@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useMemo, type MouseEvent } from 'react';
 import { GitBranch, GitPullRequest } from 'lucide-react';
 import type { Workspace } from '../../types';
 import { Tooltip } from '../ui/tooltip';
@@ -10,6 +10,7 @@ interface WorkspaceListItemProps {
   showRepo?: boolean;
   className?: string;
   onClick?: () => void;
+  onContextMenu?: (event: MouseEvent<HTMLDivElement>) => void;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
   actions?: React.ReactNode;
@@ -26,6 +27,7 @@ function WorkspaceListItemBase({
   showRepo = true,
   className = '',
   onClick,
+  onContextMenu,
   onMouseEnter,
   onMouseLeave,
   actions,
@@ -55,6 +57,7 @@ function WorkspaceListItemBase({
   return (
     <div
       onClick={onClick}
+      onContextMenu={onContextMenu}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       className={`relative rounded-md transition-all duration-200 group overflow-hidden py-1 px-2 cursor-pointer ${
@@ -142,4 +145,3 @@ export const WorkspaceListItem = memo(WorkspaceListItemBase, (prev, next) => (
   && prev.suffix === next.suffix
   && prev.actions === next.actions
 ));
-

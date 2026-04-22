@@ -108,6 +108,7 @@ export function DetailPanel({
     refreshPrDraftFromCockpit,
     copyPrDraftFromCockpit,
     refreshPrCommentsFromCockpit,
+    pullBranchFromCockpit,
     createPrFromCockpit,
     cleanupFromCockpit,
     archiveFromCockpit,
@@ -172,11 +173,11 @@ export function DetailPanel({
 
   const primaryAction = useMemo(() => {
     if (!workspace) return null;
-    if (workspace.behindBy > 0) return { label: 'Pull', icon: RefreshCw, onClick: () => {}, variant: 'outline' as const };
+    if (workspace.behindBy > 0) return { label: 'Pull', icon: RefreshCw, onClick: pullBranchFromCockpit, variant: 'outline' as const };
     if (!workspacePrStatus?.found && changedFileCount > 0) return { label: 'Draft PR', icon: GitPullRequest, onClick: createPrFromCockpit, variant: 'default' as const };
     if (workspacePrStatus?.url) return { label: 'View PR', icon: ExternalLink, onClick: () => window.open(workspacePrStatus.url!, '_blank'), variant: 'outline' as const };
     return null;
-  }, [workspace, workspacePrStatus, changedFileCount, createPrFromCockpit]);
+  }, [workspace, workspacePrStatus, changedFileCount, createPrFromCockpit, pullBranchFromCockpit]);
 
   if (!workspace) {
     return (
