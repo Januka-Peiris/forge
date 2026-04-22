@@ -1,7 +1,6 @@
 import type {
   CreateChildWorkspaceInput,
   CreateWorkspaceInput,
-  DiscoveredRepository,
   LinkedWorktreeRef,
   RepositoryWorkspaceOptions,
   Workspace,
@@ -56,10 +55,6 @@ export async function detachWorkspaceLinkedWorktree(workspaceId: string, worktre
   return invokeCommand<LinkedWorktreeRef[]>('detach_workspace_linked_worktree', { workspaceId, worktreeId });
 }
 
-
-export function listRepositoriesForWorkspaceCreation(): Promise<DiscoveredRepository[]> {
-  return invokeCommand<DiscoveredRepository[]>('list_repositories_for_workspace_creation');
-}
 
 export function getRepositoryWorkspaceOptions(repositoryId: string): Promise<RepositoryWorkspaceOptions> {
   return invokeCommand<RepositoryWorkspaceOptions>('get_repository_workspace_options', { repositoryId });

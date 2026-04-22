@@ -1,12 +1,8 @@
-import type { AiModelSettings, AppSettings, SaveAiModelSettingsInput, SaveRepoRootsInput } from '../../types/settings';
+import type { AiModelSettings, AppSettings, SaveAiModelSettingsInput } from '../../types/settings';
 import { invokeCommand } from './client';
 
 export function getSettings(): Promise<AppSettings> {
   return invokeCommand<AppSettings>('get_settings');
-}
-
-export function saveRepoRoots(input: SaveRepoRootsInput): Promise<AppSettings> {
-  return invokeCommand<AppSettings>('save_repo_roots', { input });
 }
 
 /** Resolves a directory to `git rev-parse --show-toplevel` (Rust). */

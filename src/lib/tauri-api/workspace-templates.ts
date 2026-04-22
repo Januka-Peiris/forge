@@ -13,7 +13,3 @@ export function createWorkspaceTemplate(
 ): Promise<WorkspaceTemplate> {
   return invokeCommand<WorkspaceTemplate>('create_workspace_template', { name, description, taskPrompt, agent });
 }
-
-export function deleteWorkspaceTemplate(id: string): Promise<void> {
-  return invokeCommand<void>('delete_workspace_template', { id });
-}

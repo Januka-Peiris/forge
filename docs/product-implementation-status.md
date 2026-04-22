@@ -86,6 +86,7 @@ Forge is being shaped as a **local-first agent conductor**: simple by default, i
 - The Review Cockpit remains the deeper path for diff inspection and review work.
 - The workspace cockpit now surfaces review blockers: merge-readiness reasons, local risk notes, cached/open PR comments, and quick PR-comment refresh.
 - Review Cockpit now groups PR comments by file path with general comments separately, shows comments needing attention, and keeps per-comment open-file/send/resolve/link actions local and explicit.
+- Review Cockpit supports GitHub review-thread resolution and reopening where the linked PR comment belongs to a resolvable thread.
 - Pending review cards now open the relevant workspace/review cockpit instead of showing non-functional approve/request-change actions, and they have a clearer empty state.
 - Pending reviews are sorted by risk/churn and show high/medium/low counts before the card grid.
 - Pending reviews show the top few items by default with an explicit show-more/show-fewer control to avoid cluttering the workspace list.
@@ -169,10 +170,18 @@ npm run build
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
+## Next Planned Roadmap
+
+1. **Task Center** — first-class task and event inspection in the workspace lifecycle area.
+2. **Scheduler / Automation UI** — inspect and control existing workspace scheduler jobs.
+3. **Memory capture + curation** — promote/dismiss candidate memories with clear scope and origin.
+4. **Hook / Guardrail Inspector** — inspect configured hooks, last outcomes, and safety blocks.
+5. **Context Pressure UX** — explain stale maps, low-signal context, exclusions, and token pressure.
+
 ## Remaining Useful Next Slices
 
 - Manual UX pass in the running app to tune spacing, default collapsed states, and copy.
 - Finish notification settings polish (helper text, guardrails, and persistence UX tuning).
 - Optional future local LLM presets/adapters for LM Studio, llama.cpp, vLLM, or direct OpenAI-compatible HTTP.
-- Optional deeper GitHub work: true review-thread resolution and CI log fetching.
+- Optional deeper GitHub work: CI log fetching and richer GitHub inspection beyond the current PR/check/thread surfaces.
 - Optional MCP runtime launch support if Forge later chooses to manage MCP processes directly.
