@@ -6,6 +6,7 @@ import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 import {
+  agentProfilesForCoordinatorPicker,
   agentProfilesForPromptPicker,
   listAppAgentProfiles,
   listWorkspaceAgentProfiles,
@@ -19,7 +20,7 @@ import { formatCommandPreview, parseCommandArgs } from '../../lib/shell-args';
 
 import type { AgentProfile, LocalLlmModel, LocalLlmProfileDiagnostic } from '../../types';
 
-const DEFAULT_PROFILE_IDS = new Set(['claude-default', 'claude-plan', 'codex-default', 'codex-high', 'kimi-default', 'shell']);
+const DEFAULT_PROFILE_IDS = new Set(['shell']);
 
 export function AgentProfilesCard() {
   const [effectiveProfiles, setEffectiveProfiles] = useState<AgentProfile[]>([]);
@@ -52,7 +53,7 @@ export function AgentProfilesCard() {
     setEffectiveProfiles(effective);
     setAppProfiles(app);
     if (!effective.some((profile) => profile.id === defaultProfileId)) {
-      const fallback = effective.find((profile) => profile.agent !== 'shell')?.id ?? 'claude-default';
+      const fallback = agentProfilesForPromptPicker(effective)[0]?.id ?? '';
       setDefaultProfileId(fallback);
       setStoredAgentProfileId(fallback);
     }
@@ -66,17 +67,9 @@ export function AgentProfilesCard() {
       getSetting('coordinator_default_brain_profile_id').catch(() => null),
       getSetting('coordinator_default_coder_profile_id').catch(() => null),
     ]);
-    const nonShell = effective.filter((profile) => profile.agent !== 'shell');
-    const fallbackBrain = nonShell.find((profile) => profile.id === 'codex-high')
-      ?? nonShell.find((profile) => profile.id === 'claude-plan')
-      ?? nonShell[0]
-      ?? null;
-    const fallbackCoder = nonShell.find((profile) => profile.id === 'kimi-default')
-      ?? nonShell.find((profile) => profile.id === 'codex-default')
-      ?? nonShell[0]
-      ?? null;
-    const selectedBrain = nonShell.some((profile) => profile.id === savedBrain) ? (savedBrain ?? '') : fallbackBrain?.id ?? '';
-    const selectedCoder = nonShell.some((profile) => profile.id === savedCoder) ? (savedCoder ?? '') : fallbackCoder?.id ?? '';
+    const coordinatorProfiles = agentProfilesForCoordinatorPicker(effective);
+    const selectedBrain = coordinatorProfiles.some((profile) => profile.id === savedBrain) ? (savedBrain ?? '') : coordinatorProfiles[0]?.id ?? '';
+    const selectedCoder = coordinatorProfiles.some((profile) => profile.id === savedCoder) ? (savedCoder ?? '') : coordinatorProfiles[0]?.id ?? '';
     setCoordinatorBrainProfileId(selectedBrain);
     setCoordinatorCoderProfileId(selectedCoder);
   }, [defaultProfileId]);
@@ -85,27 +78,28 @@ export function AgentProfilesCard() {
     void refresh().catch((err) => setMessage(err instanceof Error ? err.message : String(err)));
   }, [refresh]);
 
-  const saveLocalProfile = async () => {
+  const saveProfile = async () => {
     setSaving(true);
     setMessage(null);
     try {
       const id = editingProfileId ?? uniqueProfileId(slug(label || model || provider || 'local-llm'), appProfiles);
+      const isOpenAi = provider === 'openai';
       const nextProfile: AgentProfile = {
         id,
         label: label.trim() || id,
-        agent: 'local_llm',
-        command: command.trim() || (provider === 'ollama' ? 'ollama' : ''),
-        args: parseCommandArgs(argsText),
-        model: model.trim() || null,
+        agent: isOpenAi ? 'openai' : 'local_llm',
+        command: command.trim() || (provider === 'ollama' ? 'ollama' : isOpenAi ? 'openai' : ''),
+        args: isOpenAi ? [] : parseCommandArgs(argsText),
+        model: model.trim() || (isOpenAi ? 'gpt-5.4' : null),
         reasoning: null,
         mode: 'act',
-        provider: provider.trim() || 'local',
-        endpoint: endpoint.trim() || null,
-        local: true,
-        description: `Local ${provider} profile`,
+        provider: provider.trim() || (isOpenAi ? 'openai' : 'local'),
+        endpoint: endpoint.trim() || (isOpenAi ? 'https://api.openai.com/v1' : null),
+        local: !isOpenAi,
+        description: isOpenAi ? 'OpenAI API profile for coordinator planning' : `Local ${provider} profile`,
         skills: [],
         templates: [],
-        rolePreference: 'coder',
+        rolePreference: isOpenAi ? 'brain' : 'coder',
         coordinatorEligible: true,
       };
       const saved = await saveAppAgentProfiles([
@@ -115,7 +109,7 @@ export function AgentProfilesCard() {
       setAppProfiles(saved);
       setEditingProfileId(null);
       await refresh();
-      setMessage(`${editingProfileId ? 'Updated' : 'Saved'} ${nextProfile.label}. It will appear in workspace agent profile pickers.`);
+      setMessage(`${editingProfileId ? 'Updated' : 'Saved'} ${nextProfile.label}.`);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : String(err));
     } finally {
@@ -203,6 +197,7 @@ export function AgentProfilesCard() {
 
   const appProfileIds = new Set(appProfiles.map((profile) => profile.id));
   const selectableProfiles = agentProfilesForPromptPicker(effectiveProfiles).filter((profile) => profile.agent !== 'shell');
+  const coordinatorProfiles = agentProfilesForCoordinatorPicker(effectiveProfiles);
 
   return (
     <div className="rounded-xl border border-forge-border bg-forge-card p-4">
@@ -230,7 +225,7 @@ export function AgentProfilesCard() {
               setMessage(`Default agent profile set to ${effectiveProfiles.find((profile) => profile.id === value)?.label ?? value}.`);
             }}
           >
-            <SelectTrigger className="w-full md:w-[260px]"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full md:w-[260px]"><SelectValue placeholder="No terminal-capable profiles configured" /></SelectTrigger>
             <SelectContent>
               {selectableProfiles.map((profile) => (
                 <SelectItem key={profile.id} value={profile.id}>
@@ -259,7 +254,7 @@ export function AgentProfilesCard() {
             >
               <SelectTrigger className="w-full"><SelectValue placeholder="Choose brain profile" /></SelectTrigger>
               <SelectContent>
-                {selectableProfiles.map((profile) => (
+                {coordinatorProfiles.map((profile) => (
                   <SelectItem key={`brain-${profile.id}`} value={profile.id}>
                     {profile.label}
                   </SelectItem>
@@ -278,7 +273,7 @@ export function AgentProfilesCard() {
             >
               <SelectTrigger className="w-full"><SelectValue placeholder="Choose coder profile" /></SelectTrigger>
               <SelectContent>
-                {selectableProfiles.map((profile) => (
+                {coordinatorProfiles.map((profile) => (
                   <SelectItem key={`coder-${profile.id}`} value={profile.id}>
                     {profile.label}
                   </SelectItem>
@@ -321,12 +316,12 @@ export function AgentProfilesCard() {
                       Edit
                     </Button>
                   )}
-                  {profile.local && (
+                  {(profile.local || profile.agent === 'openai') && (
                     <Button variant="ghost" size="xs" disabled={saving} onClick={() => void copyProfileJson(profile)} title="Copy .forge/config.json snippet">
                       Copy
                     </Button>
                   )}
-                  {profile.local && source !== 'app' && (
+                  {(profile.local || profile.agent === 'openai') && source !== 'app' && (
                     <Button variant="ghost" size="xs" disabled={saving} onClick={() => loadProfileIntoForm(profile, 'template')} title="Use as template">
                       Use
                     </Button>
@@ -365,10 +360,10 @@ export function AgentProfilesCard() {
       <div className="mt-4 rounded-lg border border-forge-border/70 bg-black/10 p-3">
         <div className="mb-3">
           <p className="text-[12px] font-semibold text-forge-text">
-            {editingProfileId ? 'Edit app-level local profile' : 'Add app-level local profile'}
+            {editingProfileId ? 'Edit app-level profile' : 'Add app-level profile'}
           </p>
           <p className="text-[11px] text-forge-muted">
-            {editingProfileId ? `Editing ${editingProfileId}.` : 'Saved for all workspaces. Commands stay visible and run in normal Forge terminals.'}
+            {editingProfileId ? `Editing ${editingProfileId}.` : 'Saved for all workspaces. Use local providers for terminal-driven agents and OpenAI for coordinator planning.'}
           </p>
         </div>
         <div className="grid gap-2 md:grid-cols-2">
@@ -385,11 +380,17 @@ export function AgentProfilesCard() {
                   setArgsText(`run ${model || 'llama3.2'}`);
                 } else if (value === 'lm-studio') {
                   setEndpoint('http://localhost:1234/v1');
+                } else if (value === 'openai') {
+                  setCommand('openai');
+                  setEndpoint('https://api.openai.com/v1');
+                  setModel('gpt-5.4');
+                  setArgsText('');
                 }
               }}
             >
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
+                <SelectItem value="openai">OpenAI API</SelectItem>
                 <SelectItem value="ollama">Ollama</SelectItem>
                 <SelectItem value="lm-studio">LM Studio</SelectItem>
                 <SelectItem value="llama.cpp">llama.cpp</SelectItem>
@@ -422,14 +423,16 @@ export function AgentProfilesCard() {
               </Select>
             </div>
           )}
-          <LabeledInput label="Model" value={model} onChange={(value) => { setModel(value); if (provider === 'ollama') setArgsText(`run ${value || 'llama3.2'}`); }} />
+          <LabeledInput label="Model" value={model} onChange={(value) => { setModel(value); if (provider === 'ollama') setArgsText(`run ${value || 'llama3.2'}`); }} placeholder={provider === 'openai' ? 'gpt-5.4' : 'qwen2.5-coder'} />
           <LabeledInput label="Endpoint metadata" value={endpoint} onChange={setEndpoint} />
-          <LabeledInput label="Command" value={command} onChange={setCommand} />
-          <LabeledInput label="Args" value={argsText} onChange={setArgsText} />
+          <LabeledInput label="Command" value={command} onChange={setCommand} placeholder={provider === 'openai' ? 'openai' : 'ollama'} />
+          <LabeledInput label="Args" value={argsText} onChange={setArgsText} placeholder={provider === 'openai' ? '(unused for OpenAI API)' : 'run qwen2.5-coder'} />
         </div>
         <div className="mt-3 flex items-center justify-between gap-3">
           <p className="text-[11px] text-forge-muted">
-            {provider === 'ollama' && ollamaModels.length > 0
+            {provider === 'openai'
+              ? <>Requires <span className="font-mono text-forge-text/80">OPENAI_API_KEY</span> in the Forge app environment.</>
+              : provider === 'ollama' && ollamaModels.length > 0
               ? `${ollamaModels.length} Ollama model(s) discovered.`
               : <>Tip: for Ollama run <span className="font-mono text-forge-text/80">ollama pull {model || 'llama3.2'}</span> first. Args support single/double quotes.</>}
           </p>
@@ -442,9 +445,9 @@ export function AgentProfilesCard() {
                 Cancel edit
               </Button>
             )}
-            <Button size="sm" onClick={() => void saveLocalProfile()} disabled={saving}>
+            <Button size="sm" onClick={() => void saveProfile()} disabled={saving}>
               <Plus className="h-3.5 w-3.5" />
-              {saving ? 'Saving…' : editingProfileId ? 'Update profile' : 'Save local profile'}
+              {saving ? 'Saving…' : editingProfileId ? 'Update profile' : 'Save profile'}
             </Button>
           </div>
         </div>
@@ -454,11 +457,11 @@ export function AgentProfilesCard() {
   );
 }
 
-function LabeledInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function LabeledInput({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string }) {
   return (
     <div>
       <label className="mb-1 block text-[11px] font-semibold text-forge-text">{label}</label>
-      <Input value={value} onChange={(event) => onChange(event.target.value)} />
+      <Input value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
     </div>
   );
 }

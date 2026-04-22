@@ -10,8 +10,8 @@ use std::sync::atomic::Ordering;
 
 use commands::{
     activity, agent_chat, agent_context, agent_memory, agent_profiles, agent_runs, checkpoints,
-    coordinator as coordinator_commands, deep_links, environment, git_review, local_llms, merge_readiness,
-    orchestrator as orchestrator_commands, pr_draft, prompt_templates,
+    coordinator as coordinator_commands, deep_links, environment, git_review, local_llms,
+    merge_readiness, orchestrator as orchestrator_commands, pr_draft, prompt_templates,
     repositories as repository_commands, review_cockpit, review_summary, reviews, settings,
     terminal, workspace_attention, workspace_cleanup, workspace_file_tree, workspace_health,
     workspace_ports, workspace_readiness, workspace_scripts, workspace_templates, workspaces,

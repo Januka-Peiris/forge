@@ -155,9 +155,10 @@ pub fn send_agent_chat_message(
 }
 
 fn workspace_mcp_metadata(state: &AppState, workspace_id: &str) -> Option<String> {
-    let profile = agent_profile_service::default_profiles()
+    let profile = agent_profile_service::list_workspace_agent_profiles(state, Some(workspace_id))
+        .ok()?
         .into_iter()
-        .find(|profile| profile.id == "claude-default")?;
+        .find(|profile| profile.agent == "claude_code")?;
     let metadata = agent_profile_service::prompt_metadata_preamble_for_workspace(
         state,
         Some(workspace_id),

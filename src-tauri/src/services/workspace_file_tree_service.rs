@@ -121,12 +121,8 @@ pub fn delete_workspace_path(
     let root = workspace_root_path(state, workspace_id)?;
     let target = resolve_any_path(&root, path)?;
     if target.is_dir() {
-        fs::remove_dir_all(&target).map_err(|err| {
-            format!(
-                "Could not delete directory {}: {err}",
-                target.display()
-            )
-        })
+        fs::remove_dir_all(&target)
+            .map_err(|err| format!("Could not delete directory {}: {err}", target.display()))
     } else if target.is_file() {
         fs::remove_file(&target)
             .map_err(|err| format!("Could not delete file {}: {err}", target.display()))

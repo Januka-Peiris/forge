@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import type { AgentChatSession, AgentProfile, WorkspaceAgentContext, WorkspaceContextPreview, WorkspaceCoordinatorStatus } from '../../types';
 import type { PromptTemplate } from '../../types/prompt-template';
 import { getWorkspaceContextPreview, refreshWorkspaceRepoContext } from '../../lib/tauri-api/agent-context';
+import { agentProfilesForCoordinatorPicker } from '../../lib/tauri-api/agent-profiles';
 import { formatSessionError } from '../../lib/ui-errors';
 import {
   AGENT_COMPOSER_DEFAULT_PX,
@@ -299,6 +300,10 @@ export function WorkspaceComposer({
       : CLAUDE_THINKING_OPTIONS;
 
   const coordinatorWorkerCount = coordinatorStatus?.workers.filter((worker) => worker.status === 'running').length ?? 0;
+  const coordinatorProfiles = useMemo(
+    () => agentProfilesForCoordinatorPicker(agentProfiles),
+    [agentProfiles],
+  );
   const latestPlannerDiagnostic = coordinatorStatus?.plannerLastMessage
     ?? coordinatorStatus?.recentActions.find((action) => action.actionKind === 'planner')?.message
     ?? null;
@@ -331,7 +336,7 @@ export function WorkspaceComposer({
                 >
                   <SelectTrigger compact title="Coordinator brain profile"><SelectValue placeholder="Brain" /></SelectTrigger>
                   <SelectContent>
-                    {agentProfiles.filter((profile) => profile.agent !== 'shell').map((profile) => (
+                    {coordinatorProfiles.map((profile) => (
                       <SelectItem key={`composer-brain-${profile.id}`} value={profile.id}>{profile.label}</SelectItem>
                     ))}
                   </SelectContent>
@@ -343,11 +348,14 @@ export function WorkspaceComposer({
                 >
                   <SelectTrigger compact title="Coordinator coder profile"><SelectValue placeholder="Coder" /></SelectTrigger>
                   <SelectContent>
-                    {agentProfiles.filter((profile) => profile.agent !== 'shell').map((profile) => (
+                    {coordinatorProfiles.map((profile) => (
                       <SelectItem key={`composer-coder-${profile.id}`} value={profile.id}>{profile.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {coordinatorProfiles.length === 0 && (
+                  <span className="text-forge-yellow">No eligible coordinator profiles (configure in Settings or .forge/config.json)</span>
+                )}
                 <span>·</span>
                 <span className={coordinatorStatus?.activeRun ? 'text-forge-orange' : 'text-forge-muted'}>
                   {coordinatorStatus?.activeRun ? `running (${coordinatorWorkerCount} workers)` : 'idle'}

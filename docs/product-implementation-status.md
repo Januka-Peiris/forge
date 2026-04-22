@@ -1,6 +1,6 @@
 # Forge Product Implementation Status
 
-Updated: 2026-04-18
+Updated: 2026-04-22
 
 Forge is being shaped as a **local-first agent conductor**: simple by default, inspectable on demand, and focused on orchestration rather than cloud agents or full-IDE replacement.
 
@@ -11,6 +11,15 @@ Forge is being shaped as a **local-first agent conductor**: simple by default, i
 - Make terminal, logs, diffs, checks, Git, context, and audit history available as progressive depth.
 - Prefer explicit, visible, reversible actions over surprising background automation.
 - Borrow useful ideas from other agent tools without chasing parity for its own sake.
+
+## Latest Research Findings (as of 2026-04-22)
+
+- Latest synthesized findings: [`docs/research-findings-2026-04-22.md`](./research-findings-2026-04-22.md)
+- Current tracked adoption slices from that review:
+  - coordinator/profile rationalization (explicit profiles only, OpenAI profile support)
+  - hook/event pipeline exploration
+  - notification routing upgrades
+  - deeper session recovery semantics
 
 ## Completed Product Slices
 

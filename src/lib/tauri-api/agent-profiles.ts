@@ -16,7 +16,7 @@ export function saveAppAgentProfiles(profiles: AgentProfile[]): Promise<AgentPro
 /** Non-shell profiles for pickers: Claude first, then Codex, then Kimi, then others. */
 export function agentProfilesForPromptPicker(profiles: AgentProfile[]): AgentProfile[] {
   return profiles
-    .filter((p) => p.agent !== 'shell')
+    .filter((p) => p.agent !== 'shell' && p.agent !== 'openai')
     .sort((a, b) => {
       const rank = (p: AgentProfile) => (
         p.agent === 'claude_code' ? 0 : p.agent === 'codex' ? 1 : p.agent === 'kimi_code' ? 2 : 3
@@ -26,7 +26,13 @@ export function agentProfilesForPromptPicker(profiles: AgentProfile[]): AgentPro
     });
 }
 
+export function agentProfilesForCoordinatorPicker(profiles: AgentProfile[]): AgentProfile[] {
+  return profiles
+    .filter((p) => p.agent !== 'shell' && p.coordinatorEligible !== false)
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
 export function defaultWorkspaceAgentProfileId(profiles: AgentProfile[]): string {
   const ordered = agentProfilesForPromptPicker(profiles);
-  return ordered[0]?.id ?? 'claude-default';
+  return ordered[0]?.id ?? '';
 }

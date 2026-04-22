@@ -44,6 +44,7 @@ import {
   stopWorkspaceCoordinator,
 } from '../../lib/tauri-api/coordinator';
 import {
+  agentProfilesForCoordinatorPicker,
   defaultWorkspaceAgentProfileId,
   listWorkspaceAgentProfiles,
 } from '../../lib/tauri-api/agent-profiles';
@@ -416,21 +417,17 @@ export function WorkspaceTerminal({
         profiles.some((profile) => profile.id === current) ? current : defaultWorkspaceAgentProfileId(profiles),
       );
       setComposerSettings((current) => {
-        const nonShell = profiles.filter((profile) => profile.agent !== 'shell');
-        const fallbackBrain = nonShell.find((profile) => profile.id === 'codex-high')
-          ?? nonShell.find((profile) => profile.id === 'claude-plan')
-          ?? nonShell[0];
-        const fallbackCoder = nonShell.find((profile) => profile.id === 'kimi-default')
-          ?? nonShell.find((profile) => profile.id === 'codex-default')
-          ?? nonShell[0];
+        const coordinatorProfiles = agentProfilesForCoordinatorPicker(profiles);
+        const fallbackBrain = coordinatorProfiles[0];
+        const fallbackCoder = coordinatorProfiles[0];
         return {
           ...current,
           coordinatorBrainProfileId:
-            current.coordinatorBrainProfileId && nonShell.some((profile) => profile.id === current.coordinatorBrainProfileId)
+            current.coordinatorBrainProfileId && coordinatorProfiles.some((profile) => profile.id === current.coordinatorBrainProfileId)
               ? current.coordinatorBrainProfileId
               : (fallbackBrain?.id ?? ''),
           coordinatorCoderProfileId:
-            current.coordinatorCoderProfileId && nonShell.some((profile) => profile.id === current.coordinatorCoderProfileId)
+            current.coordinatorCoderProfileId && coordinatorProfiles.some((profile) => profile.id === current.coordinatorCoderProfileId)
               ? current.coordinatorCoderProfileId
               : (fallbackCoder?.id ?? ''),
         };

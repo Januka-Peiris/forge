@@ -234,11 +234,19 @@ pub(super) fn create_workspace(
     }
 
     if detail.summary.run_tests_on_create {
-        if let Ok(config) = workspace_script_service::get_workspace_forge_config(state, &detail.summary.id) {
+        if let Ok(config) =
+            workspace_script_service::get_workspace_forge_config(state, &detail.summary.id)
+        {
             if !config.run.is_empty() {
                 let mut started = 0usize;
                 for index in 0..config.run.len() {
-                    if workspace_script_service::start_workspace_run_command(state, &detail.summary.id, index).is_ok() {
+                    if workspace_script_service::start_workspace_run_command(
+                        state,
+                        &detail.summary.id,
+                        index,
+                    )
+                    .is_ok()
+                    {
                         started += 1;
                     }
                 }
@@ -250,7 +258,9 @@ pub(super) fn create_workspace(
                         Some(&detail.summary.branch),
                         "Workspace checks launched",
                         "info",
-                        Some(&format!("Started {started} run command(s) from workspace options.")),
+                        Some(&format!(
+                            "Started {started} run command(s) from workspace options."
+                        )),
                     );
                 }
             }

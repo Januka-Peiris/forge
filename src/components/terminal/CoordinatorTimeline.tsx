@@ -14,9 +14,6 @@ function profileLabel(agentProfiles: AgentProfile[], profileId: string): string 
 }
 
 export function CoordinatorTimeline({ status, agentProfiles, onRefresh, onReplayAction }: CoordinatorTimelineProps) {
-  if (!status) return null;
-  if (!status.activeRun && status.recentActions.length === 0) return null;
-
   const [kindFilter, setKindFilter] = useState<'all' | 'planner' | 'worker' | 'notify' | 'lifecycle'>('all');
   const [workerFilter, setWorkerFilter] = useState<string>('all');
   const [expandedActionId, setExpandedActionId] = useState<string | null>(null);
@@ -26,7 +23,9 @@ export function CoordinatorTimeline({ status, agentProfiles, onRefresh, onReplay
   const [replayedAtByActionId, setReplayedAtByActionId] = useState<Record<string, string>>({});
   const [editingActionId, setEditingActionId] = useState<string | null>(null);
   const [promptOverrides, setPromptOverrides] = useState<Record<string, string>>({});
-  const activeWorkers = status.workers.filter((worker) => worker.status === 'running');
+  const workers = status?.workers ?? [];
+  const recentActions = status?.recentActions ?? [];
+  const activeWorkers = workers.filter((worker) => worker.status === 'running');
 
   const filteredActions = useMemo(() => {
     const byKind = (actionKind: string) => {
@@ -45,10 +44,10 @@ export function CoordinatorTimeline({ status, agentProfiles, onRefresh, onReplay
       return true;
     };
     const byWorker = (workerId?: string | null) => workerFilter === 'all' || workerId === workerFilter;
-    return status.recentActions
+    return recentActions
       .filter((action) => byKind(action.actionKind))
       .filter((action) => byWorker(action.workerId));
-  }, [kindFilter, status.recentActions, workerFilter]);
+  }, [kindFilter, recentActions, workerFilter]);
 
   const groupedByWorker = useMemo(() => {
     const groups = new Map<string, typeof filteredActions>();
@@ -61,15 +60,18 @@ export function CoordinatorTimeline({ status, agentProfiles, onRefresh, onReplay
     return groups;
   }, [filteredActions]);
   const selectedWorker = useMemo(
-    () => (selectedWorkerId ? status.workers.find((worker) => worker.id === selectedWorkerId) ?? null : null),
-    [selectedWorkerId, status.workers],
+    () => (selectedWorkerId ? workers.find((worker) => worker.id === selectedWorkerId) ?? null : null),
+    [selectedWorkerId, workers],
   );
   const selectedWorkerActions = useMemo(() => {
     if (!selectedWorker) return [];
-    return status.recentActions
+    return recentActions
       .filter((action) => action.workerId === selectedWorker.id)
       .slice(0, 8);
-  }, [selectedWorker, status.recentActions]);
+  }, [recentActions, selectedWorker]);
+
+  if (!status) return null;
+  if (!status.activeRun && status.recentActions.length === 0) return null;
 
   return (
     <div className="mx-2 mt-2 rounded-lg border border-forge-border bg-forge-card/60 p-2">

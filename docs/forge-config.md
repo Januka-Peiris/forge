@@ -77,13 +77,13 @@ Use `agentProfiles` or `agent_profiles` to define additional local agent profile
 {
   "agentProfiles": [
     {
-      "id": "codex-high-review",
-      "label": "Codex High Review",
-      "agent": "codex",
-      "command": "codex",
-      "reasoning": "high",
+      "id": "claude-sonnet-review",
+      "label": "Claude Sonnet Review",
+      "agent": "claude_code",
+      "command": "claude",
+      "model": "claude-sonnet-4-6",
       "mode": "review",
-      "description": "High-reasoning review profile"
+      "description": "Repo-defined review profile"
     }
   ]
 }
@@ -93,7 +93,7 @@ Common fields:
 
 - `id`
 - `label`
-- `agent`: `codex`, `claude_code`, `kimi_code`, `local_llm`, or `shell`
+- `agent`: `codex`, `claude_code`, `kimi_code`, `local_llm`, `openai`, or `shell`
 - `command`
 - `args`
 - `model`
@@ -120,12 +120,12 @@ App-level profiles are saved in Forge settings and are available to every worksp
 
 Use the **Test** action in Settings to validate a local profile before launching it in a workspace. The diagnostic checks command availability, local endpoint metadata, localhost TCP reachability, and Ollama model presence when relevant. It does not send a prompt, pull models, or start/stop servers.
 
-Built-in local profile:
+Example local profile:
 
-- `ollama-local`
+- `ollama-qwen-coder`
   - agent: `local_llm`
   - command: `ollama`
-  - args: `["run", "llama3.2"]`
+  - args: `["run", "qwen2.5-coder"]`
   - provider: `ollama`
   - endpoint: `http://localhost:11434`
 
@@ -238,10 +238,11 @@ Validation notes:
   "teardown": [],
   "agentProfiles": [
     {
-      "id": "codex-high",
-      "label": "Codex High",
-      "agent": "codex",
-      "reasoning": "high",
+      "id": "claude-opus-act",
+      "label": "Claude Opus Act",
+      "agent": "claude_code",
+      "command": "claude",
+      "model": "claude-opus-4-7",
       "mode": "act"
     }
   ],

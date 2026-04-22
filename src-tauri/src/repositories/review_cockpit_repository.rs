@@ -223,7 +223,9 @@ fn pr_comment_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspacePrC
         resolved_at: row.get("resolved_at")?,
         comment_node_id: row.get("comment_node_id")?,
         thread_id: row.get("thread_id")?,
-        review_id: row.get::<_, Option<i64>>("review_id")?.map(|value| value.max(0) as u64),
+        review_id: row
+            .get::<_, Option<i64>>("review_id")?
+            .map(|value| value.max(0) as u64),
         thread_resolved: row.get::<_, i64>("thread_resolved")? != 0,
         thread_outdated: row.get::<_, i64>("thread_outdated")? != 0,
         thread_resolvable: row.get::<_, i64>("thread_resolvable")? != 0,

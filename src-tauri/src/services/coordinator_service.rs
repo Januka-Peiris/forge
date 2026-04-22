@@ -3,8 +3,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
 
 use crate::models::{
-    CoordinatorAction, CoordinatorWorker, QueueAgentPromptInput, ReplayWorkspaceCoordinatorActionInput,
-    StartWorkspaceCoordinatorInput, StepWorkspaceCoordinatorInput, WorkspaceCoordinatorStatus,
+    CoordinatorAction, CoordinatorWorker, QueueAgentPromptInput,
+    ReplayWorkspaceCoordinatorActionInput, StartWorkspaceCoordinatorInput,
+    StepWorkspaceCoordinatorInput, WorkspaceCoordinatorStatus,
 };
 use crate::repositories::{
     activity_repository, coordinator_repository, settings_repository, terminal_repository,
@@ -218,21 +219,27 @@ pub fn replay_workspace_coordinator_action(
                 ));
             }
             let profile_id = if let Some(worker_id) = action.worker_id.as_deref() {
-                coordinator_repository::get_worker_by_id(&state.db, worker_id)?
-                    .map(|worker| worker.profile_id)
-                    .unwrap_or_else(|| {
-                        agent_profile_service::resolve_profile_for_role(
-                            state,
-                            Some(workspace_id),
-                            "coder",
-                            None,
-                        )
-                        .map(|profile| profile.id)
-                        .unwrap_or_else(|_| "kimi-default".to_string())
-                    })
-            } else {
-                agent_profile_service::resolve_profile_for_role(state, Some(workspace_id), "coder", None)?
+                if let Some(worker) =
+                    coordinator_repository::get_worker_by_id(&state.db, worker_id)?
+                {
+                    worker.profile_id
+                } else {
+                    agent_profile_service::resolve_profile_for_role(
+                        state,
+                        Some(workspace_id),
+                        "coder",
+                        None,
+                    )?
                     .id
+                }
+            } else {
+                agent_profile_service::resolve_profile_for_role(
+                    state,
+                    Some(workspace_id),
+                    "coder",
+                    None,
+                )?
+                .id
             };
             let queued = terminal_service::queue_workspace_agent_prompt(
                 state,
@@ -266,9 +273,13 @@ pub fn replay_workspace_coordinator_action(
         }
         "stop_worker" => {
             if let Some(worker_id) = action.worker_id.as_deref() {
-                if let Some(worker) = coordinator_repository::get_worker_by_id(&state.db, worker_id)? {
+                if let Some(worker) =
+                    coordinator_repository::get_worker_by_id(&state.db, worker_id)?
+                {
                     if let Some(session_id) = worker.last_session_id.as_deref() {
-                        let _ = terminal_service::stop_workspace_terminal_session_by_id(state, session_id);
+                        let _ = terminal_service::stop_workspace_terminal_session_by_id(
+                            state, session_id,
+                        );
                     }
                 }
             }
@@ -487,7 +498,8 @@ pub fn step_workspace_coordinator(
             "stop_worker" => {
                 let chosen = resolve_worker_for_action(&workers, action.worker_id.as_deref())?;
                 if let Some(session_id) = chosen.last_session_id.as_deref() {
-                    let _ = terminal_service::stop_workspace_terminal_session_by_id(state, session_id);
+                    let _ =
+                        terminal_service::stop_workspace_terminal_session_by_id(state, session_id);
                 }
                 let mut worker = chosen.clone();
                 worker.status = "stopped".to_string();
@@ -751,7 +763,9 @@ fn plan_actions(
          Workspace goal: {}\n\
          Worker count: {}\n\
          Current instruction: {}",
-        run.goal, workers.len(), instruction
+        run.goal,
+        workers.len(),
+        instruction
     );
     let workspace_cwd = resolve_workspace_cwd(state, &run.workspace_id);
 
@@ -761,6 +775,7 @@ fn plan_actions(
         "codex" => call_codex_brain(state, brain_profile, workspace_cwd.as_deref(), &prompt),
         "kimi_code" => call_kimi_brain(state, brain_profile, workspace_cwd.as_deref(), &prompt),
         "local_llm" => call_local_brain(state, brain_profile, workspace_cwd.as_deref(), &prompt),
+        "openai" => call_openai_brain(state, brain_profile, &prompt),
         _ => Err(format!(
             "No direct coordinator adapter for brain profile provider: {}",
             brain_profile.agent
@@ -786,37 +801,6 @@ fn plan_actions(
             adapter,
             parse_mode: "fallback_heuristic".to_string(),
         };
-    }
-
-    if let Some(model) = brain_profile.model.as_deref() {
-        if (model.starts_with("gpt-")
-            || model.starts_with("o1")
-            || model.starts_with("o3")
-            || model.starts_with("o4"))
-            && std::env::var("OPENAI_API_KEY").is_ok()
-        {
-            if let Ok(response) = call_openai_brain(model, &prompt) {
-                if let Ok((actions, parse_mode)) = extract_actions_from_response(&response) {
-                    return PlanResult {
-                        actions,
-                        raw_response: Some(response),
-                        planner_error: None,
-                        adapter: "openai_api".to_string(),
-                        parse_mode,
-                    };
-                }
-                return PlanResult {
-                    actions: heuristic_actions(workers, instruction),
-                    raw_response: Some(response),
-                    planner_error: Some(
-                        "Brain response was not valid JSON action array; used local fallback"
-                            .to_string(),
-                    ),
-                    adapter: "openai_api".to_string(),
-                    parse_mode: "fallback_heuristic".to_string(),
-                };
-            }
-        }
     }
 
     PlanResult {
@@ -891,19 +875,22 @@ fn call_codex_brain(
         command.current_dir(cwd);
     }
     command.args(["exec", "--json"]);
-    if let Some(model) = profile_default_model(state, profile).filter(|value| !value.trim().is_empty()) {
+    if let Some(model) =
+        profile_default_model(state, profile).filter(|value| !value.trim().is_empty())
+    {
         command.args(["-c", &format!("model=\"{}\"", model.replace('"', "\\\""))]);
     }
-    if let Some(reasoning) = normalize_codex_reasoning(
-        profile
-            .reasoning
-            .as_deref()
-            .unwrap_or("medium"),
-    ) {
+    if let Some(reasoning) =
+        normalize_codex_reasoning(profile.reasoning.as_deref().unwrap_or("medium"))
+    {
         command.args(["-c", &format!("model_reasoning_effort=\"{reasoning}\"")]);
     }
     let output = command
-        .args(if let Some(cwd) = cwd { vec!["--cd", cwd] } else { vec![] })
+        .args(if let Some(cwd) = cwd {
+            vec!["--cd", cwd]
+        } else {
+            vec![]
+        })
         .arg(prompt)
         .output()
         .map_err(|err| format!("Failed to run codex CLI for coordinator: {err}"))?;
@@ -977,7 +964,9 @@ fn call_local_brain(
         .map_err(|err| format!("Failed to run local brain command for coordinator: {err}"))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Local brain command failed for coordinator: {stderr}"));
+        return Err(format!(
+            "Local brain command failed for coordinator: {stderr}"
+        ));
     }
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
@@ -994,16 +983,34 @@ fn resolve_workspace_cwd(state: &AppState, workspace_id: &str) -> Option<String>
         })
 }
 
-fn call_openai_brain(model: &str, prompt: &str) -> Result<String, String> {
+fn call_openai_brain(
+    state: &AppState,
+    profile: &crate::models::AgentProfile,
+    prompt: &str,
+) -> Result<String, String> {
     let api_key = std::env::var("OPENAI_API_KEY")
         .map_err(|_| "OPENAI_API_KEY environment variable not set".to_string())?;
+    let model = profile_default_model(state, profile)
+        .or_else(|| profile.model.clone())
+        .unwrap_or_else(|| "gpt-5.4".to_string());
+    let base_url = profile
+        .endpoint
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("https://api.openai.com/v1");
+    let url = if base_url.ends_with("/chat/completions") {
+        base_url.to_string()
+    } else {
+        format!("{}/chat/completions", base_url.trim_end_matches('/'))
+    };
     let body = serde_json::json!({
         "model": model,
         "messages": [{"role": "user", "content": prompt}]
     });
 
     let response = reqwest::blocking::Client::new()
-        .post("https://api.openai.com/v1/chat/completions")
+        .post(url)
         .bearer_auth(api_key)
         .json(&body)
         .send()
@@ -1033,19 +1040,33 @@ fn resolve_profile_command(command: &str) -> Result<String, String> {
         .ok_or_else(|| format!("Brain command not found on PATH: {trimmed}"))
 }
 
-fn profile_default_model(state: &AppState, profile: &crate::models::AgentProfile) -> Option<String> {
-    if let Some(model) = profile.model.clone().filter(|value| !value.trim().is_empty()) {
+fn profile_default_model(
+    state: &AppState,
+    profile: &crate::models::AgentProfile,
+) -> Option<String> {
+    if let Some(model) = profile
+        .model
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+    {
         return Some(model);
     }
     match profile.agent.as_str() {
         "claude_code" => settings_repository::get_value(&state.db, "claude_agent_default_model")
             .ok()
             .flatten()
-            .or_else(|| settings_repository::get_value(&state.db, "agent_default_model").ok().flatten()),
+            .or_else(|| {
+                settings_repository::get_value(&state.db, "agent_default_model")
+                    .ok()
+                    .flatten()
+            }),
         "codex" => settings_repository::get_value(&state.db, "codex_agent_default_model")
             .ok()
             .flatten(),
         "kimi_code" => settings_repository::get_value(&state.db, "kimi_agent_default_model")
+            .ok()
+            .flatten(),
+        "openai" => settings_repository::get_value(&state.db, "openai_agent_default_model")
             .ok()
             .flatten(),
         _ => None,
@@ -1070,7 +1091,9 @@ fn normalize_kimi_thinking_flag(input: &str) -> Option<&'static str> {
     }
 }
 
-fn extract_actions_from_response(response: &str) -> Result<(Vec<CoordinatorAction>, String), String> {
+fn extract_actions_from_response(
+    response: &str,
+) -> Result<(Vec<CoordinatorAction>, String), String> {
     if let Ok(actions) = serde_json::from_str::<Vec<CoordinatorAction>>(response.trim()) {
         return Ok((actions, "direct_json".to_string()));
     }
@@ -1221,7 +1244,8 @@ mod tests {
 
     #[test]
     fn parses_jsonl_message_text() {
-        let stdout = r#"{"type":"message","message":"[{\"action\":\"notify_user\",\"message\":\"hi\"}]"}"#;
+        let stdout =
+            r#"{"type":"message","message":"[{\"action\":\"notify_user\",\"message\":\"hi\"}]"}"#;
         let text = extract_text_from_jsonl_stdout(stdout).expect("text");
         assert!(text.contains("notify_user"));
     }
@@ -1290,7 +1314,10 @@ mod tests {
         updated.status = "succeeded".to_string();
         updated.notified_status = Some("succeeded".to_string());
         let second = derive_runtime_worker_update(&updated, "succeeded");
-        assert!(second.is_none(), "repeated reconciliation should be idempotent");
+        assert!(
+            second.is_none(),
+            "repeated reconciliation should be idempotent"
+        );
     }
 
     #[test]

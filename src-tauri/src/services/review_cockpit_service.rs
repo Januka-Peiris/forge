@@ -95,9 +95,9 @@ pub fn resolve_workspace_pr_thread(
 ) -> Result<WorkspaceReviewCockpit, String> {
     let comment = review_cockpit_repository::get_pr_comment(&state.db, workspace_id, comment_id)?
         .ok_or_else(|| format!("PR comment {comment_id} was not found"))?;
-    let thread_id = comment
-        .thread_id
-        .ok_or_else(|| "This comment is not part of a resolvable GitHub review thread.".to_string())?;
+    let thread_id = comment.thread_id.ok_or_else(|| {
+        "This comment is not part of a resolvable GitHub review thread.".to_string()
+    })?;
     run_thread_mutation(state, workspace_id, &thread_id, "resolveReviewThread")?;
     refresh_workspace_pr_comments(state, workspace_id)
 }
@@ -109,9 +109,9 @@ pub fn reopen_workspace_pr_thread(
 ) -> Result<WorkspaceReviewCockpit, String> {
     let comment = review_cockpit_repository::get_pr_comment(&state.db, workspace_id, comment_id)?
         .ok_or_else(|| format!("PR comment {comment_id} was not found"))?;
-    let thread_id = comment
-        .thread_id
-        .ok_or_else(|| "This comment is not part of a resolvable GitHub review thread.".to_string())?;
+    let thread_id = comment.thread_id.ok_or_else(|| {
+        "This comment is not part of a resolvable GitHub review thread.".to_string()
+    })?;
     run_thread_mutation(state, workspace_id, &thread_id, "unresolveReviewThread")?;
     refresh_workspace_pr_comments(state, workspace_id)
 }

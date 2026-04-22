@@ -166,10 +166,7 @@ pub fn list_workers_for_run(db: &Database, run_id: &str) -> Result<Vec<Coordinat
     })
 }
 
-pub fn upsert_worker(
-    db: &Database,
-    worker: &CoordinatorWorker,
-) -> Result<(), String> {
+pub fn upsert_worker(db: &Database, worker: &CoordinatorWorker) -> Result<(), String> {
     db.with_connection_mut(|connection| {
         connection.execute(
             "INSERT INTO workspace_coordinator_workers (
@@ -318,7 +315,10 @@ pub fn get_worker_by_id(
     })
 }
 
-pub fn workspace_status(db: &Database, workspace_id: &str) -> Result<WorkspaceCoordinatorStatus, String> {
+pub fn workspace_status(
+    db: &Database,
+    workspace_id: &str,
+) -> Result<WorkspaceCoordinatorStatus, String> {
     let active_run = active_run_for_workspace(db, workspace_id)?;
     let workers = if let Some(run) = active_run.as_ref() {
         list_workers_for_run(db, &run.id)?

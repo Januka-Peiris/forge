@@ -4,7 +4,7 @@ import type { AgentProfile, TerminalProfile, TerminalSession, Workspace, Workspa
 import type { TerminalSearchResult } from '../../types/terminal';
 import { createWorkspaceTerminal, attachWorkspaceTerminalSession, listWorkspaceVisibleTerminalSessions, searchTerminalOutput, queueWorkspaceAgentPrompt } from '../../lib/tauri-api/terminal';
 import { getWorkspaceReviewCockpit, refreshWorkspacePrComments, queueReviewAgentPrompt } from '../../lib/tauri-api/review-cockpit';
-import { listWorkspaceAgentProfiles } from '../../lib/tauri-api/agent-profiles';
+import { agentProfilesForPromptPicker, listWorkspaceAgentProfiles } from '../../lib/tauri-api/agent-profiles';
 import { runWorkspaceSetup, startWorkspaceRunCommand, getWorkspaceForgeConfig } from '../../lib/tauri-api/workspace-scripts';
 import { cleanupWorkspace } from '../../lib/tauri-api/workspace-cleanup';
 import { getWorkspaceReadiness } from '../../lib/tauri-api/workspace-readiness';
@@ -206,7 +206,8 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
       icon: 'comment' as const,
       run: () => onOpenReviewComment(comment.commentId, comment.path),
     }));
-    const agentItems = selectedWorkspace ? agentProfiles.map((profile) => agentItem(selectedWorkspace.id, profile, onOpenWorkspace)) : [];
+    const runnableAgentProfiles = agentProfiles.filter((profile) => profile.agent === 'shell' || agentProfilesForPromptPicker([profile]).length > 0);
+    const agentItems = selectedWorkspace ? runnableAgentProfiles.map((profile) => agentItem(selectedWorkspace.id, profile, onOpenWorkspace)) : [];
     
     // Direct agent prompt mode
     const directPromptItem = selectedWorkspace && query.startsWith('@') ? [{

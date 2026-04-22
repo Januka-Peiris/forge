@@ -172,7 +172,10 @@ pub fn pull_workspace_branch(state: &AppState, workspace_id: &str) -> Result<Str
         .unwrap_or(detail.worktree_path);
     let root_path = Path::new(&root);
     if !root_path.exists() || !root_path.is_dir() {
-        return Err(format!("Workspace path is unavailable: {}", root_path.display()));
+        return Err(format!(
+            "Workspace path is unavailable: {}",
+            root_path.display()
+        ));
     }
     if has_unmerged_conflicts(root_path)? {
         return Err(
@@ -201,7 +204,9 @@ pub fn pull_workspace_branch(state: &AppState, workspace_id: &str) -> Result<Str
         .map(|duration| duration.as_secs().to_string())
         .unwrap_or_else(|_| "0".to_string());
     let _ = workspace_repository::update_last_rebase(&state.db, workspace_id, &now);
-    Ok(format!("Rebased onto origin/{base_branch} ({behind} commit(s) behind)."))
+    Ok(format!(
+        "Rebased onto origin/{base_branch} ({behind} commit(s) behind)."
+    ))
 }
 
 fn run_git(root: &Path, args: &[&str]) -> Result<String, String> {
