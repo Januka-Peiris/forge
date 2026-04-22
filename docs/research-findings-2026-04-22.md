@@ -26,6 +26,12 @@ Reviewed focus areas included hook/event systems, coordinator/task orchestration
 - This is the latest snapshot as of **April 22, 2026**.
 - Scope intentionally stays local-first and Forge-config driven.
 - External profile file parsing (`.claude` / `.codex`) remains out of this slice.
+- The immediate follow-on adoption slices guided by this research are now implemented in Forge:
+  - Task Center
+  - Scheduler / Automation UI
+  - Memory capture + curation
+  - Hook / Guardrail Inspector
+  - Context Pressure UX
 - Remaining items from this research pass are intentionally deferred:
   - companion/voice novelty
   - full marketplace/plugin parity

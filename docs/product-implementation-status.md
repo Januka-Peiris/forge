@@ -26,6 +26,12 @@ Forge is being shaped as a **local-first agent conductor**: simple by default, i
 - Remaining research-tracked items are deferred-by-design:
   - companion/voice novelty
   - full marketplace/plugin parity
+- The April 22 roadmap follow-on slices are now implemented:
+  - Task Center
+  - Scheduler / Automation UI
+  - Memory capture + curation
+  - Hook / Guardrail Inspector
+  - Context Pressure UX
 
 ## Completed Product Slices
 
@@ -109,9 +115,19 @@ Forge is being shaped as a **local-first agent conductor**: simple by default, i
 - Terminal interrupt/stop/close lifecycle actions are recorded in workspace activity.
 - Session recovery returns per-session close/skip/failure reasons for inspectable recovery history.
 - The Lifecycle cockpit now shows workspace health warnings, unhealthy terminal sessions, and a guarded Recover Sessions action.
+- The Config tab now includes a Hook & Guardrail Inspector with configured hooks, command-safety analysis, risky-script policy visibility, and recent hook/guardrail events.
 - Explicit workspace port kills are recorded in activity with pid, command, port, and cwd.
 - Workspace creation/setup activity uses durable timestamped audit records instead of placeholder timestamps.
 - Destructive/lifecycle actions now explain consequences before running.
+
+### Tasking, Scheduling, Memory, and Context
+
+- The Lifecycle cockpit now includes a Task Center showing running work, recent failures, latest events, and “why this workspace may be waiting”.
+- Workspace scheduler jobs are inspectable in the Lifecycle cockpit and support pause/resume plus “run soon” controls.
+- Agent Memory now distinguishes manual, auto, and candidate memories.
+- Candidate memories are auto-captured from workspace goals, durable `.forge/config.json` rules, and repeated run/check patterns.
+- Candidate memories can be promoted or dismissed from the Memory view with explicit source/scope visibility.
+- Context is now surfaced as Context Health, with token pressure, stale/low-signal state, included vs excluded segments, repo-map health, and rebuild/refresh actions.
 
 ### Safe Iteration
 
@@ -170,13 +186,15 @@ npm run build
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-## Next Planned Roadmap
+## Roadmap Status
 
-1. **Task Center** — first-class task and event inspection in the workspace lifecycle area.
-2. **Scheduler / Automation UI** — inspect and control existing workspace scheduler jobs.
-3. **Memory capture + curation** — promote/dismiss candidate memories with clear scope and origin.
-4. **Hook / Guardrail Inspector** — inspect configured hooks, last outcomes, and safety blocks.
-5. **Context Pressure UX** — explain stale maps, low-signal context, exclusions, and token pressure.
+The April 22, 2026 roadmap phases are now shipped:
+
+1. **Task Center** ✅
+2. **Scheduler / Automation UI** ✅
+3. **Memory capture + curation** ✅
+4. **Hook / Guardrail Inspector** ✅
+5. **Context Pressure UX** ✅
 
 ## Remaining Useful Next Slices
 
