@@ -1,10 +1,10 @@
-import { Circle, CheckCircle2, ExternalLink, GitPullRequest, Loader2 } from 'lucide-react';
+import { AlertCircle, Circle, CheckCircle2, ExternalLink, GitPullRequest, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import type { ForgeWorkspaceConfig } from '../../types/workspace-scripts';
 import type { WorkspaceReadiness } from '../../types/workspace-readiness';
 import type { WorkspacePrDraft, WorkspacePrStatus } from '../../types/pr-draft';
 import type { WorkspaceHealth, WorkspaceSessionRecoveryResult } from '../../types/workspace-health';
-import type { WorkspaceSchedulerJob, WorkspaceTaskSnapshot } from '../../types/task-lifecycle';
+import type { TaskEvent, WorkspaceSchedulerJob, WorkspaceTaskSnapshot } from '../../types/task-lifecycle';
 
 export function CockpitLine({ label, value }: { label: string; value: string }) {
   return (
@@ -13,6 +13,171 @@ export function CockpitLine({ label, value }: { label: string; value: string }) 
       <span className="min-w-0 truncate text-right font-medium text-forge-text/90" title={value}>
         {value}
       </span>
+    </div>
+  );
+}
+
+function humanizeTaskLabel(value: string | null | undefined): string {
+  if (!value) return 'unknown';
+  return value.replace(/[_-]+/g, ' ').trim();
+}
+
+function formatTaskTimestamp(value: string | null | undefined): string {
+  if (!value) return '—';
+  const numeric = Number(value);
+  const date = Number.isFinite(numeric) ? new Date(numeric) : new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+function taskStatusTone(status: string): string {
+  const normalized = status.toLowerCase();
+  if (normalized === 'running' || normalized === 'pending') return 'border-forge-blue/20 bg-forge-blue/10 text-forge-blue';
+  if (normalized === 'failed' || normalized === 'killed') return 'border-forge-red/20 bg-forge-red/10 text-forge-red';
+  if (normalized === 'completed' || normalized === 'succeeded') return 'border-forge-green/20 bg-forge-green/10 text-forge-green';
+  return 'border-forge-border bg-white/5 text-forge-muted';
+}
+
+function summarizeTaskPayload(event: TaskEvent): string | null {
+  const payload = event.payload ?? {};
+  const preferred = ['message', 'reason', 'title', 'status', 'sessionId', 'kind', 'profile', 'action'];
+  for (const key of preferred) {
+    const value = payload[key];
+    if (typeof value === 'string' && value.trim()) return `${key}: ${value}`;
+    if (typeof value === 'number' || typeof value === 'boolean') return `${key}: ${String(value)}`;
+  }
+
+  const entries = Object.entries(payload)
+    .filter(([, value]) => ['string', 'number', 'boolean'].includes(typeof value))
+    .slice(0, 3)
+    .map(([key, value]) => `${key}: ${String(value)}`);
+
+  return entries.length > 0 ? entries.join(' · ') : null;
+}
+
+function latestEventForRun(runId: string, events: TaskEvent[]): TaskEvent | null {
+  return events.find((event) => event.taskRunId === runId) ?? null;
+}
+
+function whyWorkspaceIsWaiting(snapshot: WorkspaceTaskSnapshot | null): string | null {
+  if (!snapshot || snapshot.runs.length === 0) return null;
+  const running = snapshot.runs.filter((run) => run.status === 'running');
+  if (running.length > 0) {
+    const latest = latestEventForRun(running[0].id, snapshot.events);
+    return latest
+      ? `${humanizeTaskLabel(running[0].kind)} is still active · ${humanizeTaskLabel(latest.eventType)}`
+      : `${humanizeTaskLabel(running[0].kind)} is still active`;
+  }
+  const failed = snapshot.runs.find((run) => run.status === 'failed' || run.status === 'killed');
+  if (failed) {
+    const latest = latestEventForRun(failed.id, snapshot.events);
+    const detail = latest ? summarizeTaskPayload(latest) : null;
+    return detail
+      ? `${humanizeTaskLabel(failed.kind)} last failed · ${detail}`
+      : `${humanizeTaskLabel(failed.kind)} last failed`;
+  }
+  const latestEvent = snapshot.events[0];
+  return latestEvent ? `Last task activity: ${humanizeTaskLabel(latestEvent.eventType)}` : null;
+}
+
+function TaskCenterPanel({
+  snapshot,
+}: {
+  snapshot: WorkspaceTaskSnapshot | null;
+}) {
+  if (!snapshot || snapshot.runs.length === 0) {
+    return (
+      <div className="mt-2 rounded border border-forge-border/60 bg-black/10 px-2 py-2">
+        <p className="text-xs font-semibold text-forge-text/85">Task Center</p>
+        <p className="mt-0.5 text-xs text-forge-muted">No task runs recorded for this workspace yet.</p>
+      </div>
+    );
+  }
+
+  const runningCount = snapshot.runs.filter((run) => run.status === 'running').length;
+  const failedCount = snapshot.runs.filter((run) => run.status === 'failed' || run.status === 'killed').length;
+  const latestEvent = snapshot.events[0] ?? null;
+  const waitingReason = whyWorkspaceIsWaiting(snapshot);
+
+  return (
+    <div className="mt-2 rounded border border-forge-border/60 bg-black/10 p-2">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div>
+          <p className="text-xs font-semibold text-forge-text/85">Task Center</p>
+          <p className="mt-0.5 text-xs text-forge-muted">Running work, recent outcomes, and why this workspace may still be waiting.</p>
+        </div>
+        <span className="text-xs text-forge-muted">{snapshot.runs.length} run(s) · {snapshot.events.length} event(s)</span>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 text-xs md:grid-cols-3">
+        <CockpitLine label="Running now" value={`${runningCount}`} />
+        <CockpitLine label="Recent failures" value={`${failedCount}`} />
+        <CockpitLine
+          label="Latest activity"
+          value={latestEvent ? `${humanizeTaskLabel(latestEvent.eventType)} · ${formatTaskTimestamp(latestEvent.ts)}` : 'none'}
+        />
+      </div>
+
+      {waitingReason && (
+        <div className="mt-2 flex items-start gap-2 rounded border border-forge-yellow/20 bg-forge-yellow/10 px-2 py-1.5 text-xs text-forge-yellow">
+          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>{waitingReason}</span>
+        </div>
+      )}
+
+      <div className="mt-2 space-y-1.5">
+        {snapshot.runs.slice(0, 6).map((run) => {
+          const latestRunEvent = latestEventForRun(run.id, snapshot.events);
+          const payloadSummary = latestRunEvent ? summarizeTaskPayload(latestRunEvent) : null;
+          return (
+            <div key={run.id} className="rounded border border-forge-border/50 bg-black/15 px-2 py-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="min-w-0 flex-1 truncate text-xs font-semibold text-forge-text/90">
+                  {humanizeTaskLabel(run.kind)}
+                </span>
+                <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] uppercase ${taskStatusTone(run.status)}`}>
+                  {humanizeTaskLabel(run.status)}
+                </span>
+                {run.sourceId && (
+                  <span className="shrink-0 rounded border border-forge-border/50 bg-white/5 px-1.5 py-0.5 text-[10px] text-forge-muted">
+                    source {run.sourceId}
+                  </span>
+                )}
+              </div>
+              <div className="mt-1 grid grid-cols-1 gap-1 text-[11px] text-forge-muted md:grid-cols-2">
+                <span>Started {formatTaskTimestamp(run.startedAt)}</span>
+                <span>{run.endedAt ? `Ended ${formatTaskTimestamp(run.endedAt)}` : 'Still active or awaiting final status'}</span>
+                <span>{latestRunEvent ? `Latest event ${humanizeTaskLabel(latestRunEvent.eventType)}` : 'No events recorded yet'}</span>
+                <span>{latestRunEvent ? formatTaskTimestamp(latestRunEvent.ts) : '—'}</span>
+              </div>
+              {payloadSummary && (
+                <p className="mt-1 text-[11px] text-forge-text/70">{payloadSummary}</p>
+              )}
+            </div>
+          );
+        })}
+        {snapshot.runs.length > 6 && <p className="text-xs text-forge-muted">+{snapshot.runs.length - 6} more run(s)</p>}
+      </div>
+
+      {snapshot.events.length > 0 && (
+        <div className="mt-2 rounded border border-forge-border/50 bg-black/15 p-2">
+          <p className="text-xs font-semibold text-forge-text/85">Recent task events</p>
+          <div className="mt-1 space-y-1">
+            {snapshot.events.slice(0, 5).map((event) => (
+              <div key={event.id} className="flex items-start justify-between gap-2 text-xs">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-forge-text/85">{humanizeTaskLabel(event.eventType)}</p>
+                  <p className="truncate text-[11px] text-forge-muted">
+                    {event.taskRunId.replace(/^task-/, '')}
+                    {summarizeTaskPayload(event) ? ` · ${summarizeTaskPayload(event)}` : ''}
+                  </p>
+                </div>
+                <span className="shrink-0 text-[11px] text-forge-muted">{formatTaskTimestamp(event.ts)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -377,26 +542,19 @@ export function LifecyclePanel({
             value={`${workspaceSchedulerJobs.length} configured`}
           />
         </div>
-        {(workspaceTaskSnapshot?.runs.length ?? 0) > 0 && (
-          <div className="mt-2 rounded border border-forge-border/60 bg-black/10 p-2">
-            <p className="text-xs font-semibold text-forge-text/85">Recent task runs</p>
-            <div className="mt-1 space-y-1">
-              {workspaceTaskSnapshot?.runs.slice(0, 3).map((run) => (
-                <div key={run.id} className="flex items-center justify-between gap-2 text-xs">
-                  <span className="min-w-0 truncate text-forge-text/85">{run.kind}</span>
-                  <span className="shrink-0 text-forge-muted">{run.status}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <TaskCenterPanel snapshot={workspaceTaskSnapshot} />
         {workspaceSchedulerJobs.length > 0 && (
           <div className="mt-2 rounded border border-forge-border/60 bg-black/10 p-2">
             <p className="text-xs font-semibold text-forge-text/85">Scheduler jobs</p>
             <div className="mt-1 space-y-1">
               {workspaceSchedulerJobs.slice(0, 3).map((job) => (
                 <div key={job.id} className="flex items-center justify-between gap-2 text-xs">
-                  <span className="min-w-0 truncate text-forge-text/85">{job.kind}</span>
+                  <div className="min-w-0">
+                    <p className="truncate text-forge-text/85">{humanizeTaskLabel(job.kind)}</p>
+                    <p className="text-[11px] text-forge-muted">
+                      {job.enabled ? 'enabled' : 'paused'} · jitter {job.jitterPct}% · next {formatTaskTimestamp(String(job.nextRunAt * 1000))}
+                    </p>
+                  </div>
                   <span className="shrink-0 text-forge-muted">{job.intervalSeconds}s</span>
                 </div>
               ))}
