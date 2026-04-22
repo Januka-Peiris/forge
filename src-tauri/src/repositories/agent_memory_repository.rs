@@ -170,3 +170,47 @@ pub fn delete(db: &Database, workspace_id: Option<&str>, key: &str) -> Result<()
         Ok(())
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn metadata_upsert_and_relevant_lookup_work() {
+        let db = crate::db::Database::in_memory().expect("in-memory db");
+        let workspace = "ws-lookup";
+        db.with_connection_mut(|connection| {
+            connection.execute(
+                "INSERT INTO workspaces (
+                    id, name, repo, branch, agent, status, current_step, completed_steps, last_updated,
+                    description, current_task, merge_risk, last_rebase, base_branch, agent_session_id,
+                    agent_session_agent, agent_session_status, agent_session_model, agent_session_estimated_cost,
+                    agent_session_last_message, agent_session_started_at, worktree_path
+                ) VALUES (?1, 'W', 'repo', 'main', 'shell', 'active', 'none', '[]', '0', 'd', 't', 'Low', '0', 'main', 's', 'shell', 'idle', 'none', '0', '', '0', '.')",
+                [workspace],
+            )?;
+            Ok(())
+        }).expect("seed workspace");
+
+        let _ = upsert(
+            &db,
+            Some(workspace),
+            Some("workspace"),
+            "env-pattern",
+            "Use pnpm install before tests",
+            Some("auto"),
+            Some(0.7),
+            Some("task-1"),
+            Some("200"),
+        )
+        .expect("upsert");
+
+        let relevant =
+            list_relevant_for_prompt(&db, workspace, "please run tests after pnpm install", 5)
+                .expect("relevant");
+        assert_eq!(relevant.len(), 1);
+        assert_eq!(relevant[0].origin, "auto");
+        assert_eq!(relevant[0].scope, "workspace");
+        assert_eq!(relevant[0].source_task_run_id.as_deref(), Some("task-1"));
+    }
+}

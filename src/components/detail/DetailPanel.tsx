@@ -82,6 +82,8 @@ export function DetailPanel({
     workspacePortCount,
     workspaceChangedFiles,
     checkpoints,
+    workspaceTaskSnapshot,
+    workspaceSchedulerJobs,
     cockpitLoading,
     timelineItems,
     timelineLoading,
@@ -317,6 +319,8 @@ export function DetailPanel({
               reviewCockpit={reviewCockpit}
               workspaceHealth={workspaceHealth}
               checkpoints={checkpoints}
+              workspaceTaskSnapshot={workspaceTaskSnapshot}
+              workspaceSchedulerJobs={workspaceSchedulerJobs}
               cockpitLoading={cockpitLoading}
               scriptActionBusy={scriptActionBusy}
               prCreating={prCreating}

@@ -136,3 +136,45 @@ pub fn list_events_for_workspace(
         Ok(events)
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn task_run_and_event_round_trip() {
+        let db = crate::db::Database::in_memory().expect("in-memory db");
+        db.with_connection_mut(|connection| {
+            connection.execute(
+                "INSERT INTO workspaces (
+                    id, name, repo, branch, agent, status, current_step, completed_steps, last_updated,
+                    description, current_task, merge_risk, last_rebase, base_branch, agent_session_id,
+                    agent_session_agent, agent_session_status, agent_session_model, agent_session_estimated_cost,
+                    agent_session_last_message, agent_session_started_at, worktree_path
+                ) VALUES ('ws-1', 'W', 'repo', 'main', 'shell', 'active', 'none', '[]', '0', 'd', 't', 'Low', '0', 'main', 's', 'shell', 'idle', 'none', '0', '', '0', '.')",
+                [],
+            )?;
+            Ok(())
+        })
+        .expect("seed workspace");
+        let run_id =
+            start_or_resume_run(&db, "ws-1", "terminal", Some("term-1"), "100").expect("start run");
+        append_event(
+            &db,
+            &run_id,
+            "ws-1",
+            "101",
+            "terminal_started",
+            &serde_json::json!({ "sessionId": "term-1" }),
+        )
+        .expect("append event");
+        mark_run_status(&db, &run_id, "completed", Some("102")).expect("mark complete");
+
+        let runs = list_runs_for_workspace(&db, "ws-1", 10).expect("list runs");
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].status, "completed");
+        let events = list_events_for_workspace(&db, "ws-1", 10).expect("list events");
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "terminal_started");
+    }
+}

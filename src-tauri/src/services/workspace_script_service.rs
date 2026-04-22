@@ -531,7 +531,7 @@ mod tests {
         fs::create_dir_all(dir.join(".forge")).expect("forge dir");
         fs::write(
             dir.join(CONFIG_RELATIVE_PATH),
-            r#"{"setup":[" npm install ", ""],"run":["npm run dev"],"teardown":["kill-port 3000"],"agentProfiles":[{"id":"ollama-qwen","agent":"ollama","provider":"ollama","endpoint":"http://localhost:11434","command":"ollama","args":["run","qwen2.5-coder"],"model":"qwen2.5-coder"}],"mcpServers":{"linear":{"command":"npx","args":["-y","linear-mcp"],"env":{"LINEAR_API_KEY":"test"}}}}"#,
+            r#"{"setup":[" npm install ", ""],"run":["npm run dev"],"teardown":["kill-port 3000"],"hooks":{"preRun":[" echo pre "],"postRun":["echo post"],"preTool":["echo tool"],"postTool":["echo tool-post"],"preShip":["echo ship"],"postShip":["echo ship-post"]},"agentProfiles":[{"id":"ollama-qwen","agent":"ollama","provider":"ollama","endpoint":"http://localhost:11434","command":"ollama","args":["run","qwen2.5-coder"],"model":"qwen2.5-coder"}],"mcpServers":{"linear":{"command":"npx","args":["-y","linear-mcp"],"env":{"LINEAR_API_KEY":"test"}}}}"#,
         )
         .expect("write config");
 
@@ -540,6 +540,12 @@ mod tests {
         assert_eq!(config.setup, vec!["npm install"]);
         assert_eq!(config.run, vec!["npm run dev"]);
         assert_eq!(config.teardown, vec!["kill-port 3000"]);
+        assert_eq!(config.hooks.pre_run, vec!["echo pre"]);
+        assert_eq!(config.hooks.post_run, vec!["echo post"]);
+        assert_eq!(config.hooks.pre_tool, vec!["echo tool"]);
+        assert_eq!(config.hooks.post_tool, vec!["echo tool-post"]);
+        assert_eq!(config.hooks.pre_ship, vec!["echo ship"]);
+        assert_eq!(config.hooks.post_ship, vec!["echo ship-post"]);
         assert_eq!(config.agent_profiles.len(), 1);
         assert_eq!(config.agent_profiles[0].agent, "local_llm");
         assert!(config.agent_profiles[0].local);

@@ -7,6 +7,7 @@ import type { WorkspaceChangedFile } from '../../types/git-review';
 import type { WorkspaceHealth } from '../../types/workspace-health';
 import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
 import type { WorkspaceCheckpoint } from '../../types/checkpoint';
+import type { WorkspaceSchedulerJob, WorkspaceTaskSnapshot } from '../../types/task-lifecycle';
 import { listWorkspaceActivity } from '../../lib/tauri-api/activity';
 import { getWorkspaceForgeConfig } from '../../lib/tauri-api/workspace-scripts';
 import { getWorkspaceReadiness } from '../../lib/tauri-api/workspace-readiness';
@@ -16,6 +17,7 @@ import { getWorkspaceChangedFiles } from '../../lib/tauri-api/git-review';
 import { getWorkspaceHealth } from '../../lib/tauri-api/workspace-health';
 import { getWorkspaceReviewCockpit } from '../../lib/tauri-api/review-cockpit';
 import { listWorkspaceCheckpoints } from '../../lib/tauri-api/checkpoints';
+import { getWorkspaceTaskSnapshot, listWorkspaceSchedulerJobs } from '../../lib/tauri-api/workspace-tasks';
 
 function loadCockpitSummaryData(workspaceId: string) {
   return Promise.allSettled([
@@ -33,6 +35,8 @@ function loadCockpitHeavyData(workspaceId: string) {
     getWorkspacePrDraft(workspaceId),
     getWorkspaceReviewCockpit(workspaceId, null),
     listWorkspaceCheckpoints(workspaceId),
+    getWorkspaceTaskSnapshot(workspaceId),
+    listWorkspaceSchedulerJobs(workspaceId),
   ]);
 }
 
@@ -46,6 +50,8 @@ export function useDetailPanelCockpitState(workspaceId: string | undefined, acti
   const [workspacePortCount, setWorkspacePortCount] = useState<number | null>(null);
   const [workspaceChangedFiles, setWorkspaceChangedFiles] = useState<WorkspaceChangedFile[]>([]);
   const [checkpoints, setCheckpoints] = useState<WorkspaceCheckpoint[]>([]);
+  const [workspaceTaskSnapshot, setWorkspaceTaskSnapshot] = useState<WorkspaceTaskSnapshot | null>(null);
+  const [workspaceSchedulerJobs, setWorkspaceSchedulerJobs] = useState<WorkspaceSchedulerJob[]>([]);
   const [cockpitLoading, setCockpitLoading] = useState(false);
   const [timelineItems, setTimelineItems] = useState<ForgeActivityItem[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
@@ -60,6 +66,8 @@ export function useDetailPanelCockpitState(workspaceId: string | undefined, acti
     setWorkspacePortCount(null);
     setWorkspaceChangedFiles([]);
     setCheckpoints([]);
+    setWorkspaceTaskSnapshot(null);
+    setWorkspaceSchedulerJobs([]);
   }, []);
 
   const applySummaryResults = useCallback((
@@ -72,13 +80,15 @@ export function useDetailPanelCockpitState(workspaceId: string | undefined, acti
   }, []);
 
   const applyHeavyResults = useCallback((
-    [portsResult, prStatusResult, prDraftResult, reviewCockpitResult, checkpointsResult]: Awaited<ReturnType<typeof loadCockpitHeavyData>>,
+    [portsResult, prStatusResult, prDraftResult, reviewCockpitResult, checkpointsResult, taskSnapshotResult, schedulerJobsResult]: Awaited<ReturnType<typeof loadCockpitHeavyData>>,
   ) => {
     setWorkspacePortCount(portsResult.status === 'fulfilled' ? portsResult.value.length : null);
     setWorkspacePrStatus(prStatusResult.status === 'fulfilled' ? prStatusResult.value : null);
     setWorkspacePrDraft(prDraftResult.status === 'fulfilled' ? prDraftResult.value : null);
     setReviewCockpit(reviewCockpitResult.status === 'fulfilled' ? reviewCockpitResult.value : null);
     setCheckpoints(checkpointsResult.status === 'fulfilled' ? checkpointsResult.value : []);
+    setWorkspaceTaskSnapshot(taskSnapshotResult.status === 'fulfilled' ? taskSnapshotResult.value : null);
+    setWorkspaceSchedulerJobs(schedulerJobsResult.status === 'fulfilled' ? schedulerJobsResult.value : []);
   }, []);
 
   const refreshCockpitData = useCallback(async () => {
@@ -143,6 +153,8 @@ export function useDetailPanelCockpitState(workspaceId: string | undefined, acti
     workspacePortCount,
     workspaceChangedFiles,
     checkpoints,
+    workspaceTaskSnapshot,
+    workspaceSchedulerJobs,
     cockpitLoading,
     timelineItems,
     timelineLoading,

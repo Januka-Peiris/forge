@@ -12,6 +12,7 @@ import type { WorkspaceCheckpoint, WorkspaceCheckpointRestorePlan } from '../../
 import type { WorkspaceChangedFile } from '../../types/git-review';
 import type { WorkspaceHealth, WorkspaceSessionRecoveryResult } from '../../types/workspace-health';
 import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
+import type { WorkspaceSchedulerJob, WorkspaceTaskSnapshot } from '../../types/task-lifecycle';
 
 interface DetailPanelStatusTabProps {
   workspace: Workspace;
@@ -26,6 +27,8 @@ interface DetailPanelStatusTabProps {
   reviewCockpit: WorkspaceReviewCockpit | null;
   workspaceHealth: WorkspaceHealth | null;
   checkpoints: WorkspaceCheckpoint[];
+  workspaceTaskSnapshot: WorkspaceTaskSnapshot | null;
+  workspaceSchedulerJobs: WorkspaceSchedulerJob[];
   cockpitLoading: boolean;
   scriptActionBusy: string | null;
   prCreating: boolean;
@@ -88,6 +91,8 @@ export function DetailPanelStatusTab({
   reviewCockpit,
   workspaceHealth,
   checkpoints,
+  workspaceTaskSnapshot,
+  workspaceSchedulerJobs,
   cockpitLoading,
   scriptActionBusy,
   prCreating,
@@ -251,6 +256,8 @@ export function DetailPanelStatusTab({
             isArchived={isArchived}
             terminalHealth={workspaceReadiness?.terminalHealth}
             workspaceHealth={workspaceHealth}
+            workspaceTaskSnapshot={workspaceTaskSnapshot}
+            workspaceSchedulerJobs={workspaceSchedulerJobs}
             recoveryResult={recoveryResult}
             cleanupBusy={cleanupBusy}
             recoveryBusy={recoveryBusy}

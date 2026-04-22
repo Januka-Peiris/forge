@@ -4,6 +4,7 @@ import type { ForgeWorkspaceConfig } from '../../types/workspace-scripts';
 import type { WorkspaceReadiness } from '../../types/workspace-readiness';
 import type { WorkspacePrDraft, WorkspacePrStatus } from '../../types/pr-draft';
 import type { WorkspaceHealth, WorkspaceSessionRecoveryResult } from '../../types/workspace-health';
+import type { WorkspaceSchedulerJob, WorkspaceTaskSnapshot } from '../../types/task-lifecycle';
 
 export function CockpitLine({ label, value }: { label: string; value: string }) {
   return (
@@ -313,6 +314,8 @@ export function LifecyclePanel({
   isArchived,
   terminalHealth,
   workspaceHealth,
+  workspaceTaskSnapshot,
+  workspaceSchedulerJobs,
   recoveryResult,
   cleanupBusy,
   recoveryBusy,
@@ -326,6 +329,8 @@ export function LifecyclePanel({
   isArchived: boolean;
   terminalHealth?: string | null;
   workspaceHealth: WorkspaceHealth | null;
+  workspaceTaskSnapshot: WorkspaceTaskSnapshot | null;
+  workspaceSchedulerJobs: WorkspaceSchedulerJob[];
   recoveryResult: WorkspaceSessionRecoveryResult | null;
   cleanupBusy: boolean;
   recoveryBusy: boolean;
@@ -359,7 +364,45 @@ export function LifecyclePanel({
           <CockpitLine label="Cleanup mode" value="Stop terminals + teardown only; no worktree removal" />
           <CockpitLine label="Recovery" value={unhealthySessions.length > 0 ? `${unhealthySessions.length} session(s) need attention` : 'no stale sessions detected'} />
           <CockpitLine label="History" value="Activity, checkpoints, and context remain inspectable" />
+          <CockpitLine
+            label="Task lifecycle"
+            value={
+              workspaceTaskSnapshot
+                ? `${workspaceTaskSnapshot.runs.filter((run) => run.status === 'running').length} running · ${workspaceTaskSnapshot.events.length} events`
+                : 'not loaded'
+            }
+          />
+          <CockpitLine
+            label="Scheduler jobs"
+            value={`${workspaceSchedulerJobs.length} configured`}
+          />
         </div>
+        {(workspaceTaskSnapshot?.runs.length ?? 0) > 0 && (
+          <div className="mt-2 rounded border border-forge-border/60 bg-black/10 p-2">
+            <p className="text-xs font-semibold text-forge-text/85">Recent task runs</p>
+            <div className="mt-1 space-y-1">
+              {workspaceTaskSnapshot?.runs.slice(0, 3).map((run) => (
+                <div key={run.id} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="min-w-0 truncate text-forge-text/85">{run.kind}</span>
+                  <span className="shrink-0 text-forge-muted">{run.status}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {workspaceSchedulerJobs.length > 0 && (
+          <div className="mt-2 rounded border border-forge-border/60 bg-black/10 p-2">
+            <p className="text-xs font-semibold text-forge-text/85">Scheduler jobs</p>
+            <div className="mt-1 space-y-1">
+              {workspaceSchedulerJobs.slice(0, 3).map((job) => (
+                <div key={job.id} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="min-w-0 truncate text-forge-text/85">{job.kind}</span>
+                  <span className="shrink-0 text-forge-muted">{job.intervalSeconds}s</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {workspaceHealth?.warnings.length ? (
           <div className="mt-2 space-y-1 rounded border border-forge-yellow/20 bg-forge-yellow/10 px-2 py-1.5 text-xs text-forge-yellow">
             {workspaceHealth.warnings.slice(0, 3).map((warning) => (
