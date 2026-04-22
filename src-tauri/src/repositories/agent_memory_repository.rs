@@ -7,8 +7,17 @@ fn memory_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentMemory> {
     Ok(AgentMemory {
         id: row.get("id")?,
         workspace_id: row.get("workspace_id")?,
+        scope: row
+            .get::<_, Option<String>>("scope")?
+            .unwrap_or_else(|| "global".to_string()),
         key: row.get("key")?,
         value: row.get("value")?,
+        origin: row
+            .get::<_, Option<String>>("origin")?
+            .unwrap_or_else(|| "manual".to_string()),
+        confidence: row.get::<_, Option<f64>>("confidence")?.unwrap_or(1.0),
+        source_task_run_id: row.get("source_task_run_id")?,
+        last_used_at: row.get("last_used_at")?,
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
     })
@@ -18,7 +27,7 @@ fn memory_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentMemory> {
 pub fn list_for_workspace(db: &Database, workspace_id: &str) -> Result<Vec<AgentMemory>, String> {
     db.with_connection(|connection| {
         let mut stmt = connection.prepare(
-            "SELECT id, workspace_id, key, value, created_at, updated_at
+            "SELECT id, workspace_id, scope, key, value, origin, confidence, source_task_run_id, last_used_at, created_at, updated_at
              FROM agent_memory WHERE workspace_id = ?1 ORDER BY key ASC",
         )?;
         let rows = stmt
@@ -32,7 +41,7 @@ pub fn list_for_workspace(db: &Database, workspace_id: &str) -> Result<Vec<Agent
 pub fn list_all(db: &Database) -> Result<Vec<AgentMemory>, String> {
     db.with_connection(|connection| {
         let mut stmt = connection.prepare(
-            "SELECT id, workspace_id, key, value, created_at, updated_at
+            "SELECT id, workspace_id, scope, key, value, origin, confidence, source_task_run_id, last_used_at, created_at, updated_at
              FROM agent_memory ORDER BY workspace_id ASC NULLS FIRST, key ASC",
         )?;
         let rows = stmt.query_map([], memory_from_row)?.collect();
@@ -44,8 +53,13 @@ pub fn list_all(db: &Database) -> Result<Vec<AgentMemory>, String> {
 pub fn upsert(
     db: &Database,
     workspace_id: Option<&str>,
+    scope: Option<&str>,
     key: &str,
     value: &str,
+    origin: Option<&str>,
+    confidence: Option<f64>,
+    source_task_run_id: Option<&str>,
+    last_used_at: Option<&str>,
 ) -> Result<AgentMemory, String> {
     use std::time::{SystemTime, UNIX_EPOCH};
     let ts = SystemTime::now()
@@ -56,25 +70,88 @@ pub fn upsert(
         Some(ws) => format!("mem-{ws}-{key}"),
         None => format!("mem-global-{key}"),
     };
+    let scope_value = scope.unwrap_or(if workspace_id.is_some() {
+        "workspace"
+    } else {
+        "global"
+    });
+    let origin_value = origin.unwrap_or("manual");
+    let confidence_value = confidence.unwrap_or(1.0);
     db.with_connection_mut(|connection| {
         connection.execute(
-            r#"INSERT INTO agent_memory (id, workspace_id, key, value, created_at, updated_at)
-               VALUES (?1, ?2, ?3, ?4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            r#"INSERT INTO agent_memory (id, workspace_id, scope, key, value, origin, confidence, source_task_run_id, last_used_at, created_at, updated_at)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                ON CONFLICT(workspace_id, key) DO UPDATE SET
+                   scope = excluded.scope,
                    value = excluded.value,
+                   origin = excluded.origin,
+                   confidence = excluded.confidence,
+                   source_task_run_id = excluded.source_task_run_id,
+                   last_used_at = excluded.last_used_at,
                    updated_at = CURRENT_TIMESTAMP"#,
-            params![id, workspace_id, key, value],
+            params![
+                id,
+                workspace_id,
+                scope_value,
+                key,
+                value,
+                origin_value,
+                confidence_value,
+                source_task_run_id,
+                last_used_at
+            ],
         )?;
         Ok(())
     })?;
     Ok(AgentMemory {
         id,
         workspace_id: workspace_id.map(str::to_string),
+        scope: scope_value.to_string(),
         key: key.to_string(),
         value: value.to_string(),
+        origin: origin_value.to_string(),
+        confidence: confidence_value,
+        source_task_run_id: source_task_run_id.map(str::to_string),
+        last_used_at: last_used_at.map(str::to_string),
         created_at: ts.to_string(),
         updated_at: ts.to_string(),
     })
+}
+
+pub fn list_relevant_for_prompt(
+    db: &Database,
+    workspace_id: &str,
+    prompt: &str,
+    limit: usize,
+) -> Result<Vec<AgentMemory>, String> {
+    let needle = prompt.to_lowercase();
+    let mut all = list_all(db)?;
+    all.retain(|entry| {
+        let key_match = entry
+            .key
+            .to_lowercase()
+            .split(|ch: char| !ch.is_alphanumeric())
+            .filter(|part| !part.is_empty())
+            .any(|part| needle.contains(part));
+        let value_match = entry
+            .value
+            .to_lowercase()
+            .split(|ch: char| !ch.is_alphanumeric())
+            .filter(|part| part.len() >= 4)
+            .take(12)
+            .any(|part| needle.contains(part));
+        (entry.workspace_id.as_deref() == Some(workspace_id) || entry.workspace_id.is_none())
+            && (key_match || value_match)
+    });
+    all.sort_by_key(|entry| {
+        if entry.workspace_id.as_deref() == Some(workspace_id) {
+            0usize
+        } else {
+            1usize
+        }
+    });
+    all.truncate(limit);
+    Ok(all)
 }
 
 /// Delete a memory entry by workspace + key.

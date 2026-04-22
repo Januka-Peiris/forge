@@ -319,6 +319,7 @@ export function LifecyclePanel({
   message,
   onCleanup,
   onRecover,
+  onApplyRecoveryAction,
   onArchive,
   onDelete,
 }: {
@@ -331,6 +332,7 @@ export function LifecyclePanel({
   message: string | null;
   onCleanup: () => void;
   onRecover: () => void;
+  onApplyRecoveryAction: (sessionId: string, action: 'resume_tracking' | 'mark_interrupted' | 'close_session') => void;
   onArchive?: () => void;
   onDelete?: () => void;
 }) {
@@ -369,9 +371,25 @@ export function LifecyclePanel({
         {unhealthySessions.length > 0 && (
           <div className="mt-2 space-y-1 rounded border border-forge-border/60 bg-black/10 p-2">
             {unhealthySessions.slice(0, 3).map((terminal) => (
-              <div key={terminal.sessionId} className="flex items-center justify-between gap-2 text-xs">
-                <span className="min-w-0 truncate text-forge-text/85" title={terminal.title}>{terminal.title}</span>
-                <span className="shrink-0 text-forge-muted">{terminal.recommendedAction}</span>
+              <div key={terminal.sessionId} className="rounded border border-forge-border/50 bg-black/15 px-2 py-1.5 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 truncate text-forge-text/85" title={terminal.title}>{terminal.title}</span>
+                  <span className="shrink-0 text-forge-muted">{terminal.recommendedAction}</span>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  <span className="rounded border border-forge-border/50 bg-white/5 px-1 py-0.5 text-[10px] uppercase text-forge-muted">
+                    {terminal.recoveryStatus.replace(/_/g, ' ')}
+                  </span>
+                  <Button variant="secondary" size="xs" disabled={recoveryBusy} onClick={() => onApplyRecoveryAction(terminal.sessionId, 'resume_tracking')}>
+                    Resume tracking
+                  </Button>
+                  <Button variant="secondary" size="xs" disabled={recoveryBusy} onClick={() => onApplyRecoveryAction(terminal.sessionId, 'mark_interrupted')}>
+                    Mark interrupted
+                  </Button>
+                  <Button variant="secondary" size="xs" disabled={recoveryBusy} onClick={() => onApplyRecoveryAction(terminal.sessionId, 'close_session')}>
+                    Close session
+                  </Button>
+                </div>
               </div>
             ))}
             {unhealthySessions.length > 3 && <p className="text-xs text-forge-muted">+{unhealthySessions.length - 3} more session(s)</p>}
@@ -431,4 +449,3 @@ export function LifecyclePanel({
     </div>
   );
 }
-

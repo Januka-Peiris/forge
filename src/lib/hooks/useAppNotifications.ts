@@ -2,12 +2,31 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { forgeWarn } from '../forge-log';
 import type { TerminalOutputEvent, Workspace } from '../../types';
+import { getSetting } from '../tauri-api/settings';
 
 export interface AttentionToast {
   id: string;
   workspaceId: string;
   workspaceName: string;
   text: string;
+}
+
+type NotificationSeverity = 'info' | 'warn' | 'error';
+type NotificationSource = 'orchestrator' | 'coordinator' | 'rebase' | 'terminal' | 'approval' | 'budget' | 'system';
+
+interface ForgeNotificationEnvelope {
+  source: NotificationSource;
+  severity: NotificationSeverity;
+  workspaceId: string;
+  dedupeKey: string;
+  message: string;
+  actionable?: boolean;
+}
+
+interface DedupeState {
+  count: number;
+  lastAt: number;
+  toastId: string;
 }
 
 interface UseAppNotificationsInput {
@@ -40,9 +59,12 @@ export function useAppNotifications({
   onScheduleMarkAttentionRead,
 }: UseAppNotificationsInput) {
   const [attentionToasts, setAttentionToasts] = useState<AttentionToast[]>([]);
+  const [minLevel, setMinLevel] = useState<NotificationSeverity>('info');
+  const [dedupeSeconds, setDedupeSeconds] = useState<number>(30);
   const selectedWorkspaceIdRef = useRef<string | null>(selectedWorkspaceId);
   const viewRef = useRef(view);
   const workspacesRef = useRef<Workspace[]>(workspaces);
+  const dedupeRef = useRef<Map<string, DedupeState>>(new Map());
 
   useEffect(() => { selectedWorkspaceIdRef.current = selectedWorkspaceId; }, [selectedWorkspaceId]);
   useEffect(() => { viewRef.current = view; }, [view]);
@@ -50,6 +72,52 @@ export function useAppNotifications({
 
   const dismissAttentionToast = useCallback((id: string) => {
     setAttentionToasts((current) => current.filter((item) => item.id !== id));
+  }, []);
+
+  const shouldPassMinLevel = useCallback((severity: NotificationSeverity) => {
+    const rank = (value: NotificationSeverity) => (value === 'error' ? 3 : value === 'warn' ? 2 : 1);
+    return rank(severity) >= rank(minLevel);
+  }, [minLevel]);
+
+  const routeEnvelope = useCallback((envelope: ForgeNotificationEnvelope) => {
+    if (!shouldPassMinLevel(envelope.severity)) return;
+    const workspace = workspacesRef.current.find((item) => item.id === envelope.workspaceId);
+    const workspaceName = workspace?.name ?? envelope.workspaceId;
+    const now = Date.now();
+    const key = `${envelope.workspaceId}:${envelope.source}:${envelope.dedupeKey}`;
+    const existing = dedupeRef.current.get(key);
+    const withinWindow = existing && (now - existing.lastAt) < dedupeSeconds * 1000;
+    const isForeground = document.visibilityState === 'visible' && viewRef.current === 'workspaces';
+    const shouldShowInForeground = envelope.severity !== 'info' || envelope.actionable === true;
+    const shouldShow = !isForeground || shouldShowInForeground;
+    const nextCount = withinWindow ? existing.count + 1 : 1;
+    const toastId = withinWindow ? existing.toastId : `${key}-${now}`;
+    dedupeRef.current.set(key, { count: nextCount, lastAt: now, toastId });
+    if (shouldShow) {
+      const text = nextCount > 1 ? `${envelope.message} (x${nextCount})` : envelope.message;
+      setAttentionToasts((current) => {
+        const filtered = current.filter((item) => item.id !== toastId);
+        return [{ id: toastId, workspaceId: envelope.workspaceId, workspaceName, text }, ...filtered].slice(0, 3);
+      });
+      window.setTimeout(() => dismissAttentionToast(toastId), 8000);
+    }
+    if (!isForeground || envelope.severity !== 'info') {
+      void sendForgeNotification(envelope.source[0].toUpperCase() + envelope.source.slice(1), envelope.message);
+    }
+  }, [dedupeSeconds, dismissAttentionToast, shouldPassMinLevel]);
+
+  useEffect(() => {
+    void getSetting('notifications_min_level')
+      .then((value) => {
+        if (value === 'warn' || value === 'error' || value === 'info') setMinLevel(value);
+      })
+      .catch(() => undefined);
+    void getSetting('notifications_dedupe_seconds')
+      .then((value) => {
+        const parsed = Number(value ?? '');
+        if (Number.isFinite(parsed) && parsed > 0) setDedupeSeconds(parsed);
+      })
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -60,19 +128,19 @@ export function useAppNotifications({
       (event) => {
         if (disposed) return;
         const { workspaceId, message } = event.payload;
-        const workspace = workspacesRef.current.find((item) => item.id === workspaceId);
-        const id = `orch-notify-${workspaceId}-${Date.now()}`;
-        setAttentionToasts((current) => [
-          { id, workspaceId, workspaceName: workspace?.name ?? workspaceId, text: `Orchestrator: ${message}` },
-          ...current.slice(0, 2),
-        ]);
-        window.setTimeout(() => dismissAttentionToast(id), 8000);
-        void sendForgeNotification('Orchestrator', message);
+        routeEnvelope({
+          source: 'orchestrator',
+          severity: 'warn',
+          workspaceId,
+          dedupeKey: message,
+          message: `Orchestrator: ${message}`,
+          actionable: true,
+        });
       },
     ).then((fn) => { if (disposed) fn(); else unlisten = fn; })
       .catch(() => undefined);
     return () => { disposed = true; if (unlisten) unlisten(); };
-  }, [dismissAttentionToast]);
+  }, [routeEnvelope]);
 
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
@@ -82,19 +150,20 @@ export function useAppNotifications({
       (event) => {
         if (disposed) return;
         const { workspaceId, workspaceName, branch, baseBranch } = event.payload;
-        const id = `rebase-conflict-${workspaceId}-${Date.now()}`;
-        setAttentionToasts((current) => [
-          { id, workspaceId, workspaceName, text: `Rebase conflict: ${branch} → origin/${baseBranch}` },
-          ...current.slice(0, 2),
-        ]);
-        window.setTimeout(() => dismissAttentionToast(id), 8000);
-        void sendForgeNotification('Rebase Conflict', `Conflict in ${branch} (${workspaceName})`);
+        routeEnvelope({
+          source: 'rebase',
+          severity: 'error',
+          workspaceId,
+          dedupeKey: `rebase:${branch}:${baseBranch}`,
+          message: `Rebase conflict: ${branch} → origin/${baseBranch} (${workspaceName})`,
+          actionable: true,
+        });
       },
     ).then((fn) => {
       if (disposed) fn(); else unlisten = fn;
     }).catch(() => undefined);
     return () => { disposed = true; if (unlisten) unlisten(); };
-  }, [dismissAttentionToast]);
+  }, [routeEnvelope]);
 
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
@@ -112,12 +181,14 @@ export function useAppNotifications({
         onScheduleAttentionLoad();
         return;
       }
-      const id = `${workspaceId}-${event.payload.chunk.sessionId}-${event.payload.chunk.seq}`;
-      setAttentionToasts((current) => [
-        { id, workspaceId, workspaceName: workspace.name, text: text.slice(0, 120) },
-        ...current.filter((toast) => toast.workspaceId !== workspaceId).slice(0, 2),
-      ]);
-      window.setTimeout(() => dismissAttentionToast(id), 5000);
+      routeEnvelope({
+        source: 'terminal',
+        severity: 'info',
+        workspaceId,
+        dedupeKey: `${event.payload.chunk.sessionId}:${event.payload.chunk.streamType}`,
+        message: text.slice(0, 120),
+        actionable: false,
+      });
       onScheduleAttentionLoad();
     }).then((fn) => {
       if (disposed) fn(); else unlisten = fn;
@@ -126,7 +197,7 @@ export function useAppNotifications({
       disposed = true;
       if (unlisten) unlisten();
     };
-  }, [dismissAttentionToast, onScheduleAttentionLoad, onScheduleMarkAttentionRead]);
+  }, [onScheduleAttentionLoad, onScheduleMarkAttentionRead, routeEnvelope]);
 
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
@@ -135,12 +206,19 @@ export function useAppNotifications({
       'forge://terminal-stuck',
       (event) => {
         if (disposed) return;
-        const { workspaceName, stuckFor } = event.payload;
-        void sendForgeNotification('Agent Stuck', `${workspaceName} has been stuck for ${stuckFor}min`);
+        const { workspaceId, workspaceName, stuckFor } = event.payload;
+        routeEnvelope({
+          source: 'terminal',
+          severity: 'warn',
+          workspaceId,
+          dedupeKey: 'terminal-stuck',
+          message: `${workspaceName} has been stuck for ${stuckFor}min`,
+          actionable: true,
+        });
       },
     ).then((fn) => { if (disposed) fn(); else unlisten = fn; }).catch(() => undefined);
     return () => { disposed = true; if (unlisten) unlisten(); };
-  }, []);
+  }, [routeEnvelope]);
 
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
@@ -149,13 +227,18 @@ export function useAppNotifications({
       'forge://command-approval-required',
       (event) => {
         if (disposed) return;
-        const workspace = workspacesRef.current.find((item) => item.id === event.payload.workspaceId);
-        const workspaceName = workspace?.name ?? event.payload.workspaceId;
-        void sendForgeNotification('Approval Needed', `Agent wants to run a command in ${workspaceName}`);
+        routeEnvelope({
+          source: 'approval',
+          severity: 'warn',
+          workspaceId: event.payload.workspaceId,
+          dedupeKey: event.payload.command,
+          message: `Approval needed for command: ${event.payload.command}`,
+          actionable: true,
+        });
       },
     ).then((fn) => { if (disposed) fn(); else unlisten = fn; }).catch(() => undefined);
     return () => { disposed = true; if (unlisten) unlisten(); };
-  }, []);
+  }, [routeEnvelope]);
 
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
@@ -164,19 +247,18 @@ export function useAppNotifications({
       'forge://workspace-budget-exceeded',
       (event) => {
         if (disposed) return;
-        const { cost } = event.payload;
-        void sendForgeNotification('Budget exceeded', `Workspace spend reached $${cost}`);
-        const workspace = workspacesRef.current.find((item) => item.id === event.payload.workspaceId);
-        const id = `budget-${event.payload.workspaceId}-${Date.now()}`;
-        setAttentionToasts((current) => [
-          { id, workspaceId: event.payload.workspaceId, workspaceName: workspace?.name ?? event.payload.workspaceId, text: `Budget cap reached: $${cost}` },
-          ...current.slice(0, 2),
-        ]);
-        window.setTimeout(() => dismissAttentionToast(id), 8000);
+        routeEnvelope({
+          source: 'budget',
+          severity: 'error',
+          workspaceId: event.payload.workspaceId,
+          dedupeKey: 'workspace-budget',
+          message: `Budget cap reached: $${event.payload.cost}`,
+          actionable: true,
+        });
       },
     ).then((fn) => { if (disposed) fn(); else unlisten = fn; }).catch(() => undefined);
     return () => { disposed = true; if (unlisten) unlisten(); };
-  }, [dismissAttentionToast]);
+  }, [routeEnvelope]);
 
   return { attentionToasts, dismissAttentionToast };
 }

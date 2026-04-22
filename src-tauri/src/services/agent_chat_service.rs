@@ -13,7 +13,8 @@ use crate::models::{
 };
 use crate::repositories::{agent_chat_repository, workspace_repository};
 use crate::services::{
-    agent_profile_service, checkpoint_service, environment_service, terminal_service,
+    agent_profile_service, checkpoint_service, environment_service, task_lifecycle_service,
+    terminal_service,
 };
 use crate::state::AppState;
 
@@ -56,6 +57,20 @@ pub fn create_agent_chat_session(
         closed_at: None,
     };
     agent_chat_repository::insert_session(&state.db, &session)?;
+    if let Ok(task_run_id) = task_lifecycle_service::start_task_run(
+        state,
+        &session.workspace_id,
+        "agent_chat",
+        Some(&session.id),
+    ) {
+        task_lifecycle_service::append_task_event(
+            state,
+            &task_run_id,
+            &session.workspace_id,
+            "agent_chat_session_created",
+            serde_json::json!({ "sessionId": session.id, "provider": session.provider }),
+        );
+    }
     Ok(session)
 }
 
@@ -480,6 +495,19 @@ fn wait_for_process(
     } else {
         "failed"
     };
+    let task_run_id = format!("task-{}-agent_chat-{}", session.workspace_id, session.id);
+    task_lifecycle_service::append_task_event(
+        &state,
+        &task_run_id,
+        &session.workspace_id,
+        if status.success() {
+            "agent_chat_completed"
+        } else {
+            "agent_chat_failed"
+        },
+        serde_json::json!({ "exitCode": status.code() }),
+    );
+    let _ = task_lifecycle_service::mark_task_run_completed(&state, &task_run_id, final_status);
     let ended = timestamp();
     let _ = agent_chat_repository::update_session_status(
         &state.db,

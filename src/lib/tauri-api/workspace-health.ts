@@ -1,6 +1,8 @@
 import type {
+  ApplyWorkspaceSessionRecoveryInput,
   WorkspaceConflicts,
   WorkspaceHealth,
+  WorkspaceSessionRecoveryAction,
   WorkspaceSessionRecoveryResult,
 } from '../../types/workspace-health';
 import { invokeCommand } from './client';
@@ -15,4 +17,10 @@ export function getWorkspaceConflicts(): Promise<WorkspaceConflicts> {
 
 export function recoverWorkspaceSessions(workspaceId: string): Promise<WorkspaceSessionRecoveryResult> {
   return invokeCommand<WorkspaceSessionRecoveryResult>('recover_workspace_sessions', { workspaceId });
+}
+
+export function applyWorkspaceSessionRecoveryAction(
+  input: ApplyWorkspaceSessionRecoveryInput,
+): Promise<WorkspaceSessionRecoveryAction> {
+  return invokeCommand<WorkspaceSessionRecoveryAction>('apply_workspace_session_recovery_action', { input });
 }

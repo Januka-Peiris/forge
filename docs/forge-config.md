@@ -16,7 +16,11 @@ Forge does **not** treat this as a cloud/platform config. It should stay practic
 {
   "setup": ["npm install"],
   "run": ["npm run typecheck", "npm run lint", "npm test"],
-  "teardown": ["pkill -f 'vite --host 127.0.0.1'"]
+  "teardown": ["pkill -f 'vite --host 127.0.0.1'"],
+  "hooks": {
+    "preRun": ["echo pre-run"],
+    "postRun": ["echo post-run"]
+  }
 }
 ```
 
@@ -68,6 +72,30 @@ Notes:
 
 - Safe cleanup starts teardown commands but does not remove worktrees or kill ports by default.
 - Risky teardown commands are blocked unless explicitly allowed in Settings.
+
+### `hooks`
+
+Optional lifecycle hooks for run/tool/ship actions.
+
+```json
+{
+  "hooks": {
+    "preRun": ["./scripts/check-pre-run.sh"],
+    "postRun": ["./scripts/report-run.sh"],
+    "preTool": ["./scripts/check-agent-tool.sh"],
+    "postTool": ["./scripts/log-agent-tool.sh"],
+    "preShip": ["./scripts/check-ship.sh"],
+    "postShip": ["./scripts/notify-ship.sh"]
+  }
+}
+```
+
+Hook behavior:
+
+- `pre*` hooks are blocking (non-zero exit blocks the action).
+- `post*` hooks are non-blocking (failures are logged as warnings).
+- Hook commands receive `FORGE_HOOK_CONTEXT` (JSON payload with workspace/action metadata).
+- Risky hooks follow the same risk policy as setup/run/teardown scripts.
 
 ## Agent Profiles
 

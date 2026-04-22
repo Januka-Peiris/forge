@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { runWorkspaceSetup, startWorkspaceRunCommand, stopWorkspaceRunCommands } from '../../lib/tauri-api/workspace-scripts';
 import { refreshWorkspacePrDraft } from '../../lib/tauri-api/pr-draft';
 import { cleanupWorkspace } from '../../lib/tauri-api/workspace-cleanup';
-import { recoverWorkspaceSessions } from '../../lib/tauri-api/workspace-health';
+import { applyWorkspaceSessionRecoveryAction, recoverWorkspaceSessions } from '../../lib/tauri-api/workspace-health';
 import { refreshWorkspacePrComments } from '../../lib/tauri-api/review-cockpit';
 import { pullWorkspaceBranch } from '../../lib/tauri-api/workspaces';
 import type { WorkspaceSessionRecoveryResult } from '../../types/workspace-health';
@@ -241,6 +241,20 @@ export function useDetailPanelWorkflowActions({
     }
   };
 
+  const applyRecoveryActionFromCockpit = async (sessionId: string, action: 'resume_tracking' | 'mark_interrupted' | 'close_session') => {
+    if (!workspaceId) return;
+    setRecoveryBusy(true);
+    try {
+      await applyWorkspaceSessionRecoveryAction({ workspaceId, sessionId, action });
+      await refreshCockpitData();
+      onRefreshWorkspaceState?.();
+    } catch (err) {
+      setShippingMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRecoveryBusy(false);
+    }
+  };
+
   return {
     prCreating,
     prError,
@@ -264,5 +278,6 @@ export function useDetailPanelWorkflowActions({
     cleanupFromCockpit,
     archiveFromCockpit,
     recoverSessionsFromCockpit,
+    applyRecoveryActionFromCockpit,
   };
 }

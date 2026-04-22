@@ -13,6 +13,7 @@ pub mod repository_repository;
 pub mod review_cockpit_repository;
 pub mod review_summary_repository;
 pub mod settings_repository;
+pub mod task_lifecycle_repository;
 
 pub mod terminal_repository;
 pub mod workspace_template_repository;

@@ -6,7 +6,7 @@ use crate::models::{WorkspacePrCheck, WorkspacePrDraft, WorkspacePrResult, Works
 use crate::repositories::{
     activity_repository, agent_run_repository, pr_draft_repository, workspace_repository,
 };
-use crate::services::{git_review_service, review_summary_service};
+use crate::services::{git_review_service, hook_service, review_summary_service};
 use crate::state::AppState;
 
 pub fn get_workspace_pr_draft(
@@ -160,6 +160,18 @@ pub fn create_workspace_pr(
         "## Summary\n{}\n\n## Key Changes\n{}\n\n## Risks\n{}\n\n## Testing\n{}\n\n🤖 Generated with Forge",
         draft.summary, key_changes_md, risks_md, testing_md
     );
+    let hook_context = serde_json::json!({
+        "workspaceId": workspace_id,
+        "actionKind": "create_pr",
+        "title": draft.title,
+    });
+    hook_service::run_workspace_hooks(
+        state,
+        workspace_id,
+        "ship",
+        hook_service::HookPhase::Pre,
+        &hook_context,
+    )?;
 
     let work_dir = if !workspace.worktree_path.is_empty() {
         workspace.worktree_path.clone()
@@ -200,12 +212,20 @@ pub fn create_workspace_pr(
         Some(&format!("#{pr_number} — {}", draft.title)),
     );
 
-    Ok(WorkspacePrResult {
+    let result = WorkspacePrResult {
         workspace_id: workspace_id.to_string(),
         pr_url,
         pr_number,
         title: draft.title,
-    })
+    };
+    let _ = hook_service::run_workspace_hooks(
+        state,
+        workspace_id,
+        "ship",
+        hook_service::HookPhase::Post,
+        &hook_context,
+    );
+    Ok(result)
 }
 
 pub fn get_workspace_pr_status(

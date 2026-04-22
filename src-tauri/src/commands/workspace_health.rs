@@ -1,6 +1,9 @@
 use tauri::State;
 
-use crate::models::{WorkspaceConflicts, WorkspaceHealth, WorkspaceSessionRecoveryResult};
+use crate::models::{
+    ApplyWorkspaceSessionRecoveryInput, WorkspaceConflicts, WorkspaceHealth,
+    WorkspaceSessionRecoveryAction, WorkspaceSessionRecoveryResult,
+};
 use crate::services::{conflict_detection_service, workspace_health_service};
 use crate::state::AppState;
 
@@ -23,4 +26,12 @@ pub fn recover_workspace_sessions(
     workspace_id: String,
 ) -> Result<WorkspaceSessionRecoveryResult, String> {
     workspace_health_service::recover_workspace_sessions(&state, &workspace_id)
+}
+
+#[tauri::command]
+pub fn apply_workspace_session_recovery_action(
+    state: State<'_, AppState>,
+    input: ApplyWorkspaceSessionRecoveryInput,
+) -> Result<WorkspaceSessionRecoveryAction, String> {
+    workspace_health_service::apply_workspace_session_recovery_action(&state, input)
 }

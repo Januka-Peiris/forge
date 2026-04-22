@@ -1,6 +1,7 @@
 use crate::models::WorkspaceReadiness;
 use crate::repositories::{
-    agent_run_repository, review_cockpit_repository, terminal_repository, workspace_repository,
+    agent_run_repository, review_cockpit_repository, task_lifecycle_repository,
+    terminal_repository, workspace_repository,
 };
 use crate::services::{git_review_service, workspace_health_service};
 use crate::state::AppState;
@@ -72,8 +73,14 @@ pub fn get_workspace_readiness(
         "review"
     }
     .to_string();
+    let task_runs = task_lifecycle_repository::list_runs_for_workspace(&state.db, workspace_id, 10)
+        .unwrap_or_default();
+    let active_tasks = task_runs
+        .iter()
+        .filter(|run| run.status == "running")
+        .count();
     let summary = format!(
-        "Agent {} · {} files · {}/{} accepted · tests {} · {} PR comment{}",
+        "Agent {} · {} files · {}/{} accepted · tests {} · {} PR comment{} · {} task{} active",
         agent_status,
         changed_files.len(),
         reviewed_files,
@@ -81,6 +88,8 @@ pub fn get_workspace_readiness(
         test_status,
         pr_comment_count,
         if pr_comment_count == 1 { "" } else { "s" },
+        active_tasks,
+        if active_tasks == 1 { "" } else { "s" },
     );
     Ok(WorkspaceReadiness {
         workspace_id: workspace_id.to_string(),
@@ -101,8 +110,8 @@ mod tests {
     #[test]
     fn readiness_summary_shape_is_stable() {
         let summary = format!(
-            "Agent {} · {} files · {}/{} accepted · tests {} · {} PR comment{}",
-            "idle", 2, 1, 2, "unknown", 0, "s",
+            "Agent {} · {} files · {}/{} accepted · tests {} · {} PR comment{} · {} task{} active",
+            "idle", 2, 1, 2, "unknown", 0, "s", 0, "s",
         );
         assert!(summary.contains("1/2 accepted"));
     }

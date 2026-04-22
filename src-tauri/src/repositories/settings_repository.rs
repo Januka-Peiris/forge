@@ -29,6 +29,18 @@ pub fn set_value(db: &Database, key: &str, value: &str) -> Result<(), String> {
     })
 }
 
+pub fn ensure_default_value(db: &Database, key: &str, value: &str) -> Result<(), String> {
+    db.with_connection(|connection| {
+        connection.execute(
+            "INSERT INTO settings (key, value, updated_at)
+             SELECT ?1, ?2, CURRENT_TIMESTAMP
+             WHERE NOT EXISTS (SELECT 1 FROM settings WHERE key = ?1)",
+            params![key, value],
+        )?;
+        Ok(())
+    })
+}
+
 pub fn get_repo_roots(db: &Database) -> Result<Vec<String>, String> {
     db.with_connection(|connection| {
         let value: Option<String> = connection

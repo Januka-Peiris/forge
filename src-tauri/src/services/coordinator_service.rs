@@ -11,7 +11,9 @@ use crate::repositories::{
     activity_repository, coordinator_repository, settings_repository, terminal_repository,
     workspace_repository,
 };
-use crate::services::{agent_profile_service, environment_service, terminal_service};
+use crate::services::{
+    agent_profile_service, environment_service, task_lifecycle_service, terminal_service,
+};
 use crate::state::AppState;
 
 const COORDINATOR_STEP_IN_PROGRESS_ERROR: &str =
@@ -115,6 +117,24 @@ pub fn start_workspace_coordinator(
         &coder.id,
         goal,
     )?;
+    if let Ok(task_run_id) = task_lifecycle_service::start_task_run(
+        state,
+        &input.workspace_id,
+        "coordinator",
+        Some(&run_id),
+    ) {
+        task_lifecycle_service::append_task_event(
+            state,
+            &task_run_id,
+            &input.workspace_id,
+            "coordinator_started",
+            serde_json::json!({
+                "runId": run_id,
+                "brainProfileId": brain.id,
+                "coderProfileId": coder.id,
+            }),
+        );
+    }
     let details = format!(
         "Coordinator started in {} with brain={} and coder={}",
         workspace.summary.name, brain.label, coder.label
@@ -138,6 +158,15 @@ pub fn stop_workspace_coordinator(
     let run = coordinator_repository::active_run_for_workspace(&state.db, workspace_id)?;
     if let Some(run) = run {
         coordinator_repository::finish_run(&state.db, &run.id, "stopped")?;
+        let task_run_id = format!("task-{workspace_id}-coordinator-{}", run.id);
+        task_lifecycle_service::append_task_event(
+            state,
+            &task_run_id,
+            workspace_id,
+            "coordinator_stopped",
+            serde_json::json!({ "runId": run.id }),
+        );
+        let _ = task_lifecycle_service::mark_task_run_completed(state, &task_run_id, "stopped");
         let _ = activity_repository::record(
             &state.db,
             workspace_id,
@@ -540,6 +569,19 @@ pub fn step_workspace_coordinator(
             }
             "complete" => {
                 coordinator_repository::finish_run(&state.db, &run.id, "completed")?;
+                let task_run_id = format!("task-{}-coordinator-{}", input.workspace_id, run.id);
+                task_lifecycle_service::append_task_event(
+                    state,
+                    &task_run_id,
+                    &input.workspace_id,
+                    "coordinator_completed",
+                    serde_json::json!({ "runId": run.id }),
+                );
+                let _ = task_lifecycle_service::mark_task_run_completed(
+                    state,
+                    &task_run_id,
+                    "completed",
+                );
                 coordinator_repository::insert_action(
                     &state.db,
                     &run.id,

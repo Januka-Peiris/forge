@@ -31,4 +31,5 @@ pub mod workspace_health;
 pub mod workspace_ports;
 pub mod workspace_readiness;
 pub mod workspace_scripts;
+pub mod workspace_tasks;
 pub mod workspace_templates;

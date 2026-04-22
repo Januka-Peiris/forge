@@ -14,7 +14,8 @@ use commands::{
     merge_readiness, orchestrator as orchestrator_commands, pr_draft, prompt_templates,
     repositories as repository_commands, review_cockpit, review_summary, reviews, settings,
     terminal, workspace_attention, workspace_cleanup, workspace_file_tree, workspace_health,
-    workspace_ports, workspace_readiness, workspace_scripts, workspace_templates, workspaces,
+    workspace_ports, workspace_readiness, workspace_scripts, workspace_tasks, workspace_templates,
+    workspaces,
 };
 use services::{coordinator_service, orchestrator_service, rebase_service};
 use state::AppState;
@@ -184,6 +185,7 @@ pub fn run() {
             workspace_health::get_workspace_health,
             workspace_health::get_workspace_conflicts,
             workspace_health::recover_workspace_sessions,
+            workspace_health::apply_workspace_session_recovery_action,
             workspace_readiness::get_workspace_readiness,
             workspace_cleanup::cleanup_workspace,
             workspace_file_tree::list_workspace_file_tree,
@@ -206,11 +208,13 @@ pub fn run() {
             orchestrator_commands::get_orchestrator_status,
             orchestrator_commands::set_orchestrator_enabled,
             orchestrator_commands::set_orchestrator_model,
+            orchestrator_commands::list_workspace_scheduler_jobs,
             workspaces::set_workspace_cost_limit,
             terminal::search_terminal_output,
             workspace_templates::list_workspace_templates,
             workspace_templates::create_workspace_template,
             workspace_templates::delete_workspace_template,
+            workspace_tasks::get_workspace_task_snapshot,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Forge Tauri application");

@@ -8,6 +8,7 @@ pub mod command_safety_service;
 pub mod coordinator_service;
 pub mod deep_link_service;
 pub mod environment_service;
+pub mod hook_service;
 pub mod review_service;
 pub mod workspace_service;
 
@@ -21,6 +22,7 @@ pub mod repo_scanner_service;
 pub mod review_cockpit_service;
 pub mod review_summary_service;
 pub mod settings_service;
+pub mod task_lifecycle_service;
 pub mod worktree_discovery_service;
 
 pub mod conflict_detection_service;

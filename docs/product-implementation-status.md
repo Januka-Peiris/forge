@@ -15,6 +15,7 @@ Forge is being shaped as a **local-first agent conductor**: simple by default, i
 ## Latest Research Findings (as of 2026-04-22)
 
 - Latest synthesized findings: [`docs/research-findings-2026-04-22.md`](./research-findings-2026-04-22.md)
+- Milestone A implementation started on **2026-04-22**: hook/event pipeline, notification routing, session recovery deepening.
 - Current tracked adoption slices from that review:
   - coordinator/profile rationalization (explicit profiles only, OpenAI profile support)
   - hook/event pipeline exploration

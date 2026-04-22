@@ -58,6 +58,7 @@ interface DetailPanelStatusTabProps {
   onRefreshDraft: () => void;
   onCopyDraft: () => void;
   onRecover: () => void;
+  onApplyRecoveryAction: (sessionId: string, action: 'resume_tracking' | 'mark_interrupted' | 'close_session') => void;
   onCreatePr: () => void;
   onCleanup: () => void;
   onRunSetup: () => void;
@@ -119,6 +120,7 @@ export function DetailPanelStatusTab({
   onRefreshDraft,
   onCopyDraft,
   onRecover,
+  onApplyRecoveryAction,
   onCreatePr,
   onCleanup,
   onRunSetup,
@@ -255,6 +257,7 @@ export function DetailPanelStatusTab({
             message={shippingMessage}
             onCleanup={onCleanup}
             onRecover={onRecover}
+            onApplyRecoveryAction={onApplyRecoveryAction}
             onArchive={onArchive}
             onDelete={onDelete}
           />

@@ -2,8 +2,9 @@ use std::sync::atomic::Ordering;
 
 use tauri::State;
 
-use crate::models::{OrchestratorAction, OrchestratorStatus};
+use crate::models::{OrchestratorAction, OrchestratorStatus, WorkspaceSchedulerJob};
 use crate::repositories::orchestrator_repository;
+use crate::services::orchestrator_service;
 use crate::state::AppState;
 
 #[tauri::command]
@@ -65,4 +66,12 @@ pub fn set_orchestrator_model(state: State<'_, AppState>, model: String) -> Resu
         *guard = model.clone();
     }
     orchestrator_repository::save_setting(&state.db, "orchestrator_model", &model)
+}
+
+#[tauri::command]
+pub fn list_workspace_scheduler_jobs(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> Result<Vec<WorkspaceSchedulerJob>, String> {
+    orchestrator_service::list_workspace_scheduler_jobs(&state, &workspace_id)
 }

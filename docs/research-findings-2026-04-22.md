@@ -10,8 +10,8 @@ Reviewed focus areas included hook/event systems, coordinator/task orchestration
 
 | Priority | Theme | Recommendation | Rationale | Effort | Risk | Owner | Status |
 |---|---|---|---|---|---|---|---|
-| Now | Coordinator + profile rationalization | Remove generic built-in coding profiles, require explicit configured coordinator profiles, add explicit OpenAI profile support | Reduces hidden defaults, makes behavior predictable, aligns selection with real configured agents | M | M | Forge | In progress |
-| Now | Findings visibility | Keep a dated research findings doc and link it from implementation status | Makes roadmap and decision history auditable and trackable | S | L | Forge | In progress |
+| Now | Coordinator + profile rationalization | Remove generic built-in coding profiles, require explicit configured coordinator profiles, add explicit OpenAI profile support | Reduces hidden defaults, makes behavior predictable, aligns selection with real configured agents | M | M | Forge | Done |
+| Now | Findings visibility | Keep a dated research findings doc and link it from implementation status | Makes roadmap and decision history auditable and trackable | S | L | Forge | Done |
 | Next | Hook/event pipeline | Add configurable lifecycle hooks (pre/post tool/run/ship) with clear allow/block semantics | Improves policy enforcement and extensibility without cloud coupling | M-L | M | Forge | Planned |
 | Next | Notification routing | Add notification priority, dedupe/fold, and background vs foreground routing rules | Improves signal quality and reduces noise in active multi-workspace sessions | M | M | Forge | Planned |
 | Next | Session recovery deepening | Add richer interrupted-turn recovery semantics and clearer continuation behavior | Improves trust in long-running sessions and restart safety | M | M | Forge | Planned |

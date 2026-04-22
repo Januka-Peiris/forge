@@ -13,6 +13,7 @@ export function MemoryView() {
   const [editKey, setEditKey] = useState('');
   const [editValue, setEditValue] = useState('');
   const [saving, setSaving] = useState(false);
+  const [originFilter, setOriginFilter] = useState<'all' | 'manual' | 'auto'>('all');
 
   const load = async () => {
     setLoading(true);
@@ -32,7 +33,14 @@ export function MemoryView() {
     if (!editKey.trim() || !editValue.trim()) return;
     setSaving(true);
     try {
-      const entry = await setAgentMemory({ workspaceId: null, key: editKey.trim(), value: editValue.trim() });
+      const entry = await setAgentMemory({
+        workspaceId: null,
+        scope: 'global',
+        key: editKey.trim(),
+        value: editValue.trim(),
+        origin: 'manual',
+        confidence: 1,
+      });
       setMemories((prev) => {
         const idx = prev.findIndex((m) => m.key === entry.key && m.workspaceId == null);
         if (idx >= 0) { const next = [...prev]; next[idx] = entry; return next; }
@@ -46,6 +54,25 @@ export function MemoryView() {
       setSaving(false);
     }
   };
+
+  const promoteAutoMemory = async (memory: AgentMemory) => {
+    try {
+      const entry = await setAgentMemory({
+        workspaceId: memory.workspaceId,
+        scope: memory.scope,
+        key: memory.key,
+        value: memory.value,
+        origin: 'manual',
+        confidence: 1,
+        sourceTaskRunId: memory.sourceTaskRunId ?? null,
+      });
+      setMemories((prev) => prev.map((item) => (item.id === memory.id ? entry : item)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const filtered = memories.filter((memory) => originFilter === 'all' || memory.origin === originFilter);
 
   const handleDelete = async (key: string, workspaceId: string | null) => {
     try {
@@ -95,23 +122,52 @@ export function MemoryView() {
         <div className="rounded-xl border border-forge-border bg-forge-card p-4">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-ui-body font-bold text-forge-text">Stored Memories</h2>
-            <Badge variant="info">{memories.length} entries</Badge>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className={`rounded border px-2 py-0.5 text-[11px] ${originFilter === 'all' ? 'border-forge-blue/30 text-forge-blue bg-forge-blue/10' : 'border-forge-border text-forge-muted'}`}
+                onClick={() => setOriginFilter('all')}
+              >
+                all
+              </button>
+              <button
+                type="button"
+                className={`rounded border px-2 py-0.5 text-[11px] ${originFilter === 'manual' ? 'border-forge-blue/30 text-forge-blue bg-forge-blue/10' : 'border-forge-border text-forge-muted'}`}
+                onClick={() => setOriginFilter('manual')}
+              >
+                manual
+              </button>
+              <button
+                type="button"
+                className={`rounded border px-2 py-0.5 text-[11px] ${originFilter === 'auto' ? 'border-forge-blue/30 text-forge-blue bg-forge-blue/10' : 'border-forge-border text-forge-muted'}`}
+                onClick={() => setOriginFilter('auto')}
+              >
+                auto
+              </button>
+              <Badge variant="info">{filtered.length} entries</Badge>
+            </div>
           </div>
           {loading ? (
             <p className="text-ui-label text-forge-muted">Loading…</p>
-          ) : memories.length === 0 ? (
+          ) : filtered.length === 0 ? (
             <div className="rounded-lg border border-dashed border-forge-border p-6 text-center">
               <p className="text-ui-body text-forge-muted">No memories stored yet</p>
               <p className="text-ui-label text-forge-muted mt-1">Add entries above to share knowledge across workspaces.</p>
             </div>
           ) : (
             <div className="space-y-2">
-              {memories.map((m) => (
+              {filtered.map((m) => (
                 <div key={`${m.workspaceId}-${m.key}`} className="rounded-lg border border-forge-border/80 bg-forge-surface/60 p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-ui-label font-mono font-bold text-forge-text">{m.key}</span>
+                        <span className={`text-ui-caption px-1.5 py-0.5 rounded border ${m.origin === 'auto' ? 'border-forge-yellow/20 bg-forge-yellow/10 text-forge-yellow' : 'border-forge-green/20 bg-forge-green/10 text-forge-green'}`}>
+                          {m.origin}
+                        </span>
+                        <span className="text-ui-caption px-1.5 py-0.5 rounded border border-forge-border text-forge-muted">
+                          confidence {Math.round((m.confidence ?? 0) * 100)}%
+                        </span>
                         {m.workspaceId && (
                           <span className="text-ui-caption px-1.5 py-0.5 rounded bg-forge-blue/15 text-forge-blue border border-forge-blue/20">{m.workspaceId}</span>
                         )}
@@ -127,6 +183,16 @@ export function MemoryView() {
                       ✕
                     </Button>
                   </div>
+                  {m.origin === 'auto' && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <Button variant="secondary" size="xs" onClick={() => void promoteAutoMemory(m)}>
+                        Promote
+                      </Button>
+                      <Button variant="secondary" size="xs" onClick={() => void handleDelete(m.key, m.workspaceId)}>
+                        Dismiss
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

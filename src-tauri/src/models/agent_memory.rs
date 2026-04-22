@@ -5,8 +5,13 @@ use serde::{Deserialize, Serialize};
 pub struct AgentMemory {
     pub id: String,
     pub workspace_id: Option<String>,
+    pub scope: String,
     pub key: String,
     pub value: String,
+    pub origin: String,
+    pub confidence: f64,
+    pub source_task_run_id: Option<String>,
+    pub last_used_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -15,6 +20,11 @@ pub struct AgentMemory {
 #[serde(rename_all = "camelCase")]
 pub struct SetAgentMemoryInput {
     pub workspace_id: Option<String>,
+    pub scope: Option<String>,
     pub key: String,
     pub value: String,
+    pub origin: Option<String>,
+    pub confidence: Option<f64>,
+    pub source_task_run_id: Option<String>,
+    pub last_used_at: Option<String>,
 }

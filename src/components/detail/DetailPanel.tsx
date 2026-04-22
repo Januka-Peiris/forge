@@ -113,6 +113,7 @@ export function DetailPanel({
     cleanupFromCockpit,
     archiveFromCockpit,
     recoverSessionsFromCockpit,
+    applyRecoveryActionFromCockpit,
   } = useDetailPanelWorkflowActions({
     workspaceId,
     isArchived,
@@ -348,6 +349,7 @@ export function DetailPanel({
               onRefreshDraft={() => void refreshPrDraftFromCockpit()}
               onCopyDraft={() => void copyPrDraftFromCockpit()}
               onRecover={() => void recoverSessionsFromCockpit()}
+              onApplyRecoveryAction={(sessionId, action) => void applyRecoveryActionFromCockpit(sessionId, action)}
               onCreatePr={() => void createPrFromCockpit()}
               onCleanup={() => void cleanupFromCockpit()}
               onRunSetup={() => void runSetupFromCockpit()}

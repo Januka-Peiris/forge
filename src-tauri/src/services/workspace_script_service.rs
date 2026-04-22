@@ -8,7 +8,9 @@ use crate::models::{
 use crate::repositories::{
     activity_repository, settings_repository, terminal_repository, workspace_repository,
 };
-use crate::services::{agent_profile_service, command_safety_service, terminal_service};
+use crate::services::{
+    agent_profile_service, command_safety_service, hook_service, terminal_service,
+};
 use crate::state::AppState;
 
 const CONFIG_RELATIVE_PATH: &str = ".forge/config.json";
@@ -91,7 +93,29 @@ pub fn start_workspace_run_command(
         "info",
         &format!("{title} · {command}"),
     );
-    start_command_terminal(state, workspace_id, "run", &title, command)
+    let hook_context = serde_json::json!({
+        "workspaceId": workspace_id,
+        "actionKind": "run_command",
+        "runIndex": command_index,
+        "title": title,
+        "command": command,
+    });
+    hook_service::run_workspace_hooks(
+        state,
+        workspace_id,
+        "run",
+        hook_service::HookPhase::Pre,
+        &hook_context,
+    )?;
+    let result = start_command_terminal(state, workspace_id, "run", &title, command);
+    let _ = hook_service::run_workspace_hooks(
+        state,
+        workspace_id,
+        "run",
+        hook_service::HookPhase::Post,
+        &hook_context,
+    );
+    result
 }
 
 pub fn restart_workspace_run_command(
@@ -121,7 +145,29 @@ pub fn restart_workspace_run_command(
         "info",
         &format!("{title} · {command}"),
     );
-    start_command_terminal(state, workspace_id, "run", &title, command)
+    let hook_context = serde_json::json!({
+        "workspaceId": workspace_id,
+        "actionKind": "restart_run_command",
+        "runIndex": command_index,
+        "title": title,
+        "command": command,
+    });
+    hook_service::run_workspace_hooks(
+        state,
+        workspace_id,
+        "run",
+        hook_service::HookPhase::Pre,
+        &hook_context,
+    )?;
+    let result = start_command_terminal(state, workspace_id, "run", &title, command);
+    let _ = hook_service::run_workspace_hooks(
+        state,
+        workspace_id,
+        "run",
+        hook_service::HookPhase::Post,
+        &hook_context,
+    );
+    result
 }
 
 pub fn stop_workspace_run_commands(
@@ -225,6 +271,7 @@ pub fn load_config_from_root(root: &Path) -> ForgeWorkspaceConfig {
                 setup: sanitize_commands(raw.setup),
                 run: sanitize_commands(raw.run),
                 teardown: sanitize_commands(raw.teardown),
+                hooks: sanitize_hooks(raw.hooks),
                 agent_profiles: raw
                     .agent_profiles
                     .into_iter()
@@ -274,6 +321,19 @@ fn sanitize_commands(commands: Vec<String>) -> Vec<String> {
         .map(|command| command.trim().to_string())
         .filter(|command| !command.is_empty())
         .collect()
+}
+
+fn sanitize_hooks(
+    raw: crate::models::workspace_script::RawForgeWorkspaceHooks,
+) -> crate::models::ForgeWorkspaceHooks {
+    crate::models::ForgeWorkspaceHooks {
+        pre_run: sanitize_commands(raw.pre_run),
+        post_run: sanitize_commands(raw.post_run),
+        pre_tool: sanitize_commands(raw.pre_tool),
+        post_tool: sanitize_commands(raw.post_tool),
+        pre_ship: sanitize_commands(raw.pre_ship),
+        post_ship: sanitize_commands(raw.post_ship),
+    }
 }
 
 fn parse_mcp_servers(value: serde_json::Value) -> (Vec<ForgeMcpServerConfig>, Vec<String>) {
@@ -392,7 +452,7 @@ fn mcp_from_value(
     })
 }
 
-fn risky_workspace_scripts_enabled(state: &AppState) -> bool {
+pub(crate) fn risky_workspace_scripts_enabled(state: &AppState) -> bool {
     settings_repository::get_value(&state.db, "allow_risky_workspace_scripts")
         .ok()
         .flatten()
@@ -400,7 +460,7 @@ fn risky_workspace_scripts_enabled(state: &AppState) -> bool {
         == Some("true")
 }
 
-fn workspace_root_path(state: &AppState, workspace_id: &str) -> Result<PathBuf, String> {
+pub(crate) fn workspace_root_path(state: &AppState, workspace_id: &str) -> Result<PathBuf, String> {
     let workspace = workspace_repository::get_detail(&state.db, workspace_id)?
         .ok_or_else(|| format!("Workspace {workspace_id} was not found"))?;
     let path = workspace

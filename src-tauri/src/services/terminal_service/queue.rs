@@ -2,9 +2,10 @@ use std::io::Write;
 use std::sync::atomic::AtomicU64;
 
 use crate::models::{AgentPromptEntry, QueueAgentPromptInput};
-use crate::repositories::terminal_repository;
+use crate::repositories::{agent_memory_repository, terminal_repository};
 use crate::services::{
-    agent_context_service, agent_profile_service, checkpoint_service, terminal_service,
+    agent_context_service, agent_profile_service, checkpoint_service, hook_service,
+    terminal_service,
 };
 use crate::state::AppState;
 
@@ -62,6 +63,38 @@ pub(super) fn queue_workspace_agent_prompt(
         }
     }
 
+    if !prompt.contains("Forge memory recall:") {
+        let relevant_memories = agent_memory_repository::list_relevant_for_prompt(
+            &state.db,
+            &input.workspace_id,
+            &prompt,
+            5,
+        )
+        .unwrap_or_default();
+        if !relevant_memories.is_empty() {
+            let lines = relevant_memories
+                .iter()
+                .map(|memory| format!("- {}: {}", memory.key, memory.value))
+                .collect::<Vec<_>>()
+                .join("\n");
+            prompt = format!("Forge memory recall:\n{lines}\n\n{prompt}");
+            let now = terminal_service::timestamp();
+            for memory in relevant_memories {
+                let _ = agent_memory_repository::upsert(
+                    &state.db,
+                    memory.workspace_id.as_deref(),
+                    Some(memory.scope.as_str()),
+                    &memory.key,
+                    &memory.value,
+                    Some(memory.origin.as_str()),
+                    Some(memory.confidence),
+                    memory.source_task_run_id.as_deref(),
+                    Some(&now),
+                );
+            }
+        }
+    }
+
     let resolved_profile = agent_profile_service::resolve_agent_profile(
         state,
         Some(&input.workspace_id),
@@ -114,7 +147,27 @@ pub(super) fn queue_workspace_agent_prompt(
 
     let mode = input.mode.unwrap_or_else(|| "send_now".to_string());
     if mode == "send_now" {
+        let hook_context = serde_json::json!({
+            "workspaceId": input.workspace_id,
+            "actionKind": "queue_agent_prompt",
+            "profileId": entry.profile,
+            "taskMode": input.task_mode,
+        });
+        hook_service::run_workspace_hooks(
+            state,
+            &entry.workspace_id,
+            "tool",
+            hook_service::HookPhase::Pre,
+            &hook_context,
+        )?;
         dispatch_prompt_entry(state, &mut entry)?;
+        let _ = hook_service::run_workspace_hooks(
+            state,
+            &entry.workspace_id,
+            "tool",
+            hook_service::HookPhase::Post,
+            &hook_context,
+        );
     }
     Ok(entry)
 }

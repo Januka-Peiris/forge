@@ -23,8 +23,13 @@ pub fn set_agent_memory(
     agent_memory_repository::upsert(
         &state.db,
         input.workspace_id.as_deref(),
+        input.scope.as_deref(),
         &input.key,
         &input.value,
+        input.origin.as_deref(),
+        input.confidence,
+        input.source_task_run_id.as_deref(),
+        input.last_used_at.as_deref(),
     )
 }
 

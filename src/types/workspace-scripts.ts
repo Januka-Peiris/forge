@@ -8,10 +8,20 @@ export interface ForgeWorkspaceConfig {
   setup: string[];
   run: string[];
   teardown: string[];
+  hooks: ForgeWorkspaceHooks;
   agentProfiles: AgentProfile[];
   mcpServers: ForgeMcpServerConfig[];
   mcpWarnings: string[];
   warning?: string | null;
+}
+
+export interface ForgeWorkspaceHooks {
+  preRun: string[];
+  postRun: string[];
+  preTool: string[];
+  postTool: string[];
+  preShip: string[];
+  postShip: string[];
 }
 
 export interface ForgeMcpServerConfig {

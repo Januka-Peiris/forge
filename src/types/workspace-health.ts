@@ -21,6 +21,7 @@ export interface WorkspaceTerminalHealth {
   backend: string;
   attached: boolean;
   stale: boolean;
+  recoveryStatus: 'recoverable_running' | 'orphaned' | 'stale_silent' | 'interrupted' | 'closed' | string;
   lastOutputAt?: string | null;
   recommendedAction: string;
   /** Unix timestamp (seconds) when silence crossed the stuck threshold. Only set for running agent sessions. */
@@ -46,6 +47,13 @@ export interface WorkspaceSessionRecoveryResult {
 export interface WorkspaceSessionRecoveryAction {
   sessionId: string;
   title: string;
-  action: 'closed' | 'skipped' | 'failed' | string;
+  action: 'closed' | 'skipped' | 'failed' | 'resumed' | 'marked_interrupted' | string;
   reason: string;
+}
+
+export interface ApplyWorkspaceSessionRecoveryInput {
+  workspaceId: string;
+  sessionId: string;
+  action: 'resume_tracking' | 'mark_interrupted' | 'close_session' | string;
+  reason?: string | null;
 }

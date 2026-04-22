@@ -10,8 +10,8 @@ use crate::models::{
     TerminalOutputResponse, TerminalSession, TerminalSessionState,
 };
 use crate::repositories::settings_repository;
-use crate::repositories::{activity_repository, terminal_repository};
-use crate::services::{agent_profile_service, command_safety_service};
+use crate::repositories::{activity_repository, agent_memory_repository, terminal_repository};
+use crate::services::{agent_profile_service, command_safety_service, task_lifecycle_service};
 use crate::state::{ActiveTerminal, AppState};
 use tauri::Emitter;
 
@@ -217,6 +217,41 @@ pub fn create_workspace_terminal(
         last_captured_seq: 0,
     };
     terminal_repository::insert_session(&state.db, &session)?;
+    if let Ok(task_run_id) = task_lifecycle_service::start_task_run(
+        state,
+        &session.workspace_id,
+        "terminal",
+        Some(&session.id),
+    ) {
+        task_lifecycle_service::append_task_event(
+            state,
+            &task_run_id,
+            &session.workspace_id,
+            "terminal_started",
+            serde_json::json!({
+                "sessionId": session.id,
+                "kind": session.terminal_kind,
+                "profile": session.profile,
+            }),
+        );
+        if session.terminal_kind == "run" {
+            let memory_key = format!("run-command-{}", session.id);
+            let memory_value = format!("{} {}", session.command, session.args.join(" "))
+                .trim()
+                .to_string();
+            let _ = agent_memory_repository::upsert(
+                &state.db,
+                Some(&session.workspace_id),
+                Some("workspace"),
+                &memory_key,
+                &memory_value,
+                Some("auto"),
+                Some(0.6),
+                Some(&task_run_id),
+                Some(&timestamp()),
+            );
+        }
+    }
     record_terminal_start_activity(
         state,
         &session,
@@ -540,6 +575,15 @@ pub fn stop_workspace_terminal_session_by_id(
     detach_active_terminal(state, session_id);
     let ended_at = timestamp();
     terminal_repository::mark_finished(&state.db, session_id, "stopped", &ended_at, false)?;
+    let task_run_id = format!("task-{}-terminal-{}", session.workspace_id, session_id);
+    task_lifecycle_service::append_task_event(
+        state,
+        &task_run_id,
+        &session.workspace_id,
+        "terminal_stopped",
+        serde_json::json!({ "sessionId": session_id }),
+    );
+    let _ = task_lifecycle_service::mark_task_run_completed(state, &task_run_id, "stopped");
     record_terminal_lifecycle_activity(state, &session, "Terminal session stopped");
     append_log_line(
         state,
@@ -563,6 +607,15 @@ pub fn close_workspace_terminal_session_by_id(
     }
     let closed_at = timestamp();
     terminal_repository::mark_closed(&state.db, session_id, &closed_at)?;
+    let task_run_id = format!("task-{}-terminal-{}", session.workspace_id, session_id);
+    task_lifecycle_service::append_task_event(
+        state,
+        &task_run_id,
+        &session.workspace_id,
+        "terminal_closed",
+        serde_json::json!({ "sessionId": session_id }),
+    );
+    let _ = task_lifecycle_service::mark_task_run_completed(state, &task_run_id, "closed");
     record_terminal_lifecycle_activity(state, &session, "Terminal session closed");
     append_log_line(
         state,

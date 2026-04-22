@@ -4,8 +4,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use rusqlite::{params, OptionalExtension};
 
 use crate::models::{
-    TerminalSession, WorkspaceHealth, WorkspaceSessionRecoveryAction,
-    WorkspaceSessionRecoveryResult, WorkspaceTerminalHealth,
+    ApplyWorkspaceSessionRecoveryInput, TerminalSession, WorkspaceHealth,
+    WorkspaceSessionRecoveryAction, WorkspaceSessionRecoveryResult, WorkspaceTerminalHealth,
 };
 use crate::repositories::{activity_repository, terminal_repository, workspace_repository};
 use crate::services::terminal_service;
@@ -52,6 +52,8 @@ pub fn get_workspace_health(
                 terminal_label(&session)
             ));
         }
+        let recovery_status =
+            classify_recovery_status(&session, attached, stale, stuck_since.is_some());
         terminals.push(WorkspaceTerminalHealth {
             session_id: session.id,
             title: session.title,
@@ -61,6 +63,7 @@ pub fn get_workspace_health(
             backend: session.backend,
             attached,
             stale,
+            recovery_status,
             last_output_at,
             recommended_action,
             stuck_since,
@@ -107,8 +110,15 @@ pub fn recover_workspace_sessions(
             continue;
         }
         let reason = recovery_reason.unwrap_or_else(|| "Session is unhealthy.".to_string());
-        match terminal_service::close_workspace_terminal_session_by_id(state, &terminal.session_id)
-        {
+        match apply_workspace_session_recovery_action(
+            state,
+            ApplyWorkspaceSessionRecoveryInput {
+                workspace_id: workspace_id.to_string(),
+                session_id: terminal.session_id.clone(),
+                action: "close_session".to_string(),
+                reason: Some(reason.clone()),
+            },
+        ) {
             Ok(_) => {
                 closed_sessions += 1;
                 actions.push(WorkspaceSessionRecoveryAction {
@@ -161,6 +171,84 @@ pub fn recover_workspace_sessions(
     })
 }
 
+pub fn apply_workspace_session_recovery_action(
+    state: &AppState,
+    input: ApplyWorkspaceSessionRecoveryInput,
+) -> Result<WorkspaceSessionRecoveryAction, String> {
+    let workspace = workspace_repository::get_detail(&state.db, &input.workspace_id)?
+        .ok_or_else(|| format!("Workspace {} was not found", input.workspace_id))?;
+    let session = terminal_repository::get_session(&state.db, &input.session_id)?
+        .ok_or_else(|| format!("Terminal session {} was not found", input.session_id))?;
+
+    let (action, reason) = match input.action.as_str() {
+        "resume_tracking" => {
+            terminal_repository::update_recovery_state(
+                &state.db,
+                &input.session_id,
+                None,
+                Some(false),
+            )?;
+            (
+                "resumed".to_string(),
+                input.reason.unwrap_or_else(|| {
+                    "Session marked recoverable and tracking resumed.".to_string()
+                }),
+            )
+        }
+        "mark_interrupted" => {
+            let ended_at = terminal_service::timestamp();
+            terminal_repository::mark_finished(
+                &state.db,
+                &input.session_id,
+                "interrupted",
+                &ended_at,
+                false,
+            )?;
+            (
+                "marked_interrupted".to_string(),
+                input
+                    .reason
+                    .unwrap_or_else(|| "Session status set to interrupted.".to_string()),
+            )
+        }
+        "close_session" => {
+            let _ =
+                terminal_service::close_workspace_terminal_session_by_id(state, &input.session_id)?;
+            (
+                "closed".to_string(),
+                input
+                    .reason
+                    .unwrap_or_else(|| "Session closed and hidden from active view.".to_string()),
+            )
+        }
+        other => return Err(format!("Unsupported recovery action: {other}")),
+    };
+
+    let _ = activity_repository::record(
+        &state.db,
+        &input.workspace_id,
+        &workspace.summary.repo,
+        Some(&workspace.summary.branch),
+        "Workspace session recovery action",
+        if action == "closed" {
+            "info"
+        } else {
+            "success"
+        },
+        Some(&format!(
+            "session={} action={} reason={}",
+            input.session_id, action, reason
+        )),
+    );
+
+    Ok(WorkspaceSessionRecoveryAction {
+        session_id: session.id,
+        title: session.title,
+        action,
+        reason,
+    })
+}
+
 fn terminal_recovery_reason(terminal: &WorkspaceTerminalHealth) -> Option<String> {
     if terminal.stale {
         return Some(
@@ -180,6 +268,33 @@ fn terminal_recovery_reason(terminal: &WorkspaceTerminalHealth) -> Option<String
         return Some("Session was running but not attached to an active PTY.".to_string());
     }
     None
+}
+
+fn classify_recovery_status(
+    session: &TerminalSession,
+    attached: bool,
+    stale: bool,
+    stuck: bool,
+) -> String {
+    if session.closed_at.is_some() {
+        return "closed".to_string();
+    }
+    if session.status == "running" && attached && !stale && !stuck {
+        return "recoverable_running".to_string();
+    }
+    if stale && stuck {
+        return "stale_silent".to_string();
+    }
+    if session.status == "interrupted" || session.status == "failed" {
+        return "interrupted".to_string();
+    }
+    if session.status == "running" && !attached {
+        return "orphaned".to_string();
+    }
+    if stale {
+        return "stale_silent".to_string();
+    }
+    "recoverable_running".to_string()
 }
 
 fn is_attached(state: &AppState, session_id: &str) -> bool {
@@ -335,6 +450,7 @@ mod tests {
             backend: "pty".to_string(),
             attached: false,
             stale: true,
+            recovery_status: "stale_silent".to_string(),
             last_output_at: None,
             recommended_action: "close it or start a fresh terminal".to_string(),
             stuck_since: None,
@@ -356,6 +472,7 @@ mod tests {
             backend: "pty".to_string(),
             attached: true,
             stale: false,
+            recovery_status: "recoverable_running".to_string(),
             last_output_at: None,
             recommended_action: "healthy".to_string(),
             stuck_since: None,

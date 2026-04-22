@@ -403,6 +403,54 @@ pub fn run(connection: &Connection) -> Result<(), String> {
             CREATE INDEX IF NOT EXISTS idx_orchestrator_log_run_at
                 ON orchestrator_log(run_at DESC);
 
+            CREATE TABLE IF NOT EXISTS task_runs (
+                id TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                status TEXT NOT NULL,
+                source_id TEXT,
+                started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                ended_at TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_task_runs_workspace_status
+                ON task_runs(workspace_id, status, updated_at DESC);
+
+            CREATE TABLE IF NOT EXISTS task_events (
+                id TEXT PRIMARY KEY,
+                task_run_id TEXT NOT NULL,
+                workspace_id TEXT NOT NULL,
+                ts TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                event_type TEXT NOT NULL,
+                payload TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (task_run_id) REFERENCES task_runs(id) ON DELETE CASCADE,
+                FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_task_events_workspace_ts
+                ON task_events(workspace_id, ts DESC);
+
+            CREATE TABLE IF NOT EXISTS workspace_scheduler_jobs (
+                id TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                interval_seconds INTEGER NOT NULL,
+                next_run_at INTEGER NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                jitter_pct INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(workspace_id, kind),
+                FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_workspace_scheduler_jobs_due
+                ON workspace_scheduler_jobs(enabled, next_run_at);
+
             CREATE TABLE IF NOT EXISTS workspace_coordinator_runs (
                 id TEXT PRIMARY KEY,
                 workspace_id TEXT NOT NULL,
@@ -602,6 +650,26 @@ pub fn run(connection: &Connection) -> Result<(), String> {
         "pre_flight_checks",
         "TEXT NOT NULL DEFAULT '[]'",
     )?;
+    add_column_if_missing(
+        connection,
+        "agent_memory",
+        "scope",
+        "TEXT NOT NULL DEFAULT 'global'",
+    )?;
+    add_column_if_missing(
+        connection,
+        "agent_memory",
+        "origin",
+        "TEXT NOT NULL DEFAULT 'manual'",
+    )?;
+    add_column_if_missing(
+        connection,
+        "agent_memory",
+        "confidence",
+        "REAL NOT NULL DEFAULT 1.0",
+    )?;
+    add_column_if_missing(connection, "agent_memory", "source_task_run_id", "TEXT")?;
+    add_column_if_missing(connection, "agent_memory", "last_used_at", "TEXT")?;
 
     // Workspace templates table
     connection

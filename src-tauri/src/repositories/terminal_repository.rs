@@ -260,6 +260,27 @@ pub fn mark_closed(db: &Database, session_id: &str, closed_at: &str) -> Result<(
     })
 }
 
+pub fn update_recovery_state(
+    db: &Database,
+    session_id: &str,
+    status: Option<&str>,
+    stale: Option<bool>,
+) -> Result<(), String> {
+    db.with_connection(|connection| {
+        connection.execute(
+            r#"
+            UPDATE terminal_sessions
+            SET status = COALESCE(?2, status),
+                stale = COALESCE(?3, stale),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?1
+            "#,
+            params![session_id, status, stale.map(|value| value as i64)],
+        )?;
+        Ok(())
+    })
+}
+
 pub fn mark_stale_running_sessions(db: &Database, timestamp: &str) -> Result<(), String> {
     db.with_connection(|connection| {
         connection.execute(

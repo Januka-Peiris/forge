@@ -18,7 +18,9 @@ pub mod repository;
 pub mod review;
 pub mod review_cockpit;
 pub mod review_summary;
+pub mod scheduler;
 pub mod settings;
+pub mod task_lifecycle;
 pub mod terminal;
 pub mod workspace;
 pub mod workspace_attention;
@@ -66,7 +68,9 @@ pub use review_cockpit::{
     WorkspaceFileReviewState, WorkspacePrComment, WorkspaceReviewCockpit,
 };
 pub use review_summary::{FileReviewInsight, WorkspaceReviewSummary};
+pub use scheduler::WorkspaceSchedulerJob;
 pub use settings::{AiModelSettings, AppSettings, SaveAiModelSettingsInput, SaveRepoRootsInput};
+pub use task_lifecycle::{TaskEvent, TaskRun, WorkspaceTaskSnapshot};
 pub use terminal::{
     AgentPromptEntry, AttachWorkspaceTerminalInput, BatchDispatchPromptInput, CommandApprovalEvent,
     CreateWorkspaceTerminalInput, QueueAgentPromptInput, StartTerminalSessionInput,
@@ -83,10 +87,10 @@ pub use workspace_cleanup::{CleanupWorkspaceInput, CleanupWorkspaceResult};
 pub use workspace_conflict::{WorkspaceConflict, WorkspaceConflicts};
 pub use workspace_file_tree::WorkspaceFileTreeNode;
 pub use workspace_health::{
-    WorkspaceHealth, WorkspaceSessionRecoveryAction, WorkspaceSessionRecoveryResult,
-    WorkspaceTerminalHealth,
+    ApplyWorkspaceSessionRecoveryInput, WorkspaceHealth, WorkspaceSessionRecoveryAction,
+    WorkspaceSessionRecoveryResult, WorkspaceTerminalHealth,
 };
 pub use workspace_port::WorkspacePort;
 pub use workspace_readiness::WorkspaceReadiness;
-pub use workspace_script::{ForgeMcpServerConfig, ForgeWorkspaceConfig};
+pub use workspace_script::{ForgeMcpServerConfig, ForgeWorkspaceConfig, ForgeWorkspaceHooks};
 pub use workspace_template::WorkspaceTemplate;

@@ -10,7 +10,8 @@ use tauri::AppHandle;
 use crate::db::Database;
 use crate::models::OrchestratorAction;
 use crate::repositories::{
-    activity_repository, agent_chat_repository, agent_run_repository, terminal_repository,
+    activity_repository, agent_chat_repository, agent_run_repository, settings_repository,
+    terminal_repository,
 };
 
 pub type ProcessRegistry = Arc<Mutex<HashMap<String, Arc<Mutex<Option<Child>>>>>>;
@@ -18,6 +19,7 @@ pub type TerminalRegistry = Arc<Mutex<HashMap<String, Arc<ActiveTerminal>>>>;
 /// Maps session_id → raw PTY input bytes that are pending user approval.
 pub type PendingCommandRegistry = Arc<Mutex<HashMap<String, String>>>;
 pub type CoordinatorStepRegistry = Arc<Mutex<HashSet<String>>>;
+pub type SchedulerJobRegistry = Arc<Mutex<HashSet<String>>>;
 
 pub struct ActiveTerminal {
     pub session_id: String,
@@ -46,6 +48,8 @@ pub struct AppState {
     pub orchestrator_last_actions: Arc<Mutex<Vec<OrchestratorAction>>>,
     /// Workspace ids with an in-flight coordinator step.
     pub coordinator_step_inflight: CoordinatorStepRegistry,
+    /// Single-flight key set for scheduler jobs (`workspace_id:job_kind`).
+    pub scheduler_job_inflight: SchedulerJobRegistry,
 }
 
 impl AppState {
@@ -120,7 +124,15 @@ impl AppState {
             orchestrator_last_run: Arc::new(Mutex::new(None)),
             orchestrator_last_actions: Arc::new(Mutex::new(Vec::new())),
             coordinator_step_inflight: Arc::new(Mutex::new(HashSet::new())),
+            scheduler_job_inflight: Arc::new(Mutex::new(HashSet::new())),
         };
+        let _ =
+            settings_repository::ensure_default_value(&state.db, "notifications_min_level", "info");
+        let _ = settings_repository::ensure_default_value(
+            &state.db,
+            "notifications_dedupe_seconds",
+            "30",
+        );
         Ok(state)
     }
 }
