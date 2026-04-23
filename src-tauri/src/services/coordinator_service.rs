@@ -3,7 +3,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
 
 use crate::models::{
-    CoordinatorAction, CoordinatorWorker, QueueAgentPromptInput,
+    CoordinatorAction, CoordinatorResultArtifact, CoordinatorResultPayload, CoordinatorWorker,
+    QueueAgentPromptInput,
     ReplayWorkspaceCoordinatorActionInput, StartWorkspaceCoordinatorInput,
     StepWorkspaceCoordinatorInput, WorkspaceCoordinatorStatus,
 };
@@ -76,6 +77,280 @@ fn normalize_prompt_override(value: Option<String>) -> Result<Option<String>, St
     Ok(Some(trimmed.to_string()))
 }
 
+fn trim_non_empty(input: Option<&str>) -> Option<String> {
+    input
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string())
+}
+
+fn normalize_coordinator_provider(input: Option<&str>) -> Option<String> {
+    let value = input?.trim().to_ascii_lowercase();
+    if value.is_empty() {
+        return None;
+    }
+    if let Some(rest) = value.strip_prefix("builtin-brain-") {
+        return normalize_coordinator_provider(Some(rest));
+    }
+    if let Some(rest) = value.strip_prefix("builtin-coder-") {
+        return normalize_coordinator_provider(Some(rest));
+    }
+    match value.as_str() {
+        "claude" | "claude_code" | "claude-code" => Some("claude_code".to_string()),
+        "codex" => Some("codex".to_string()),
+        "kimi" | "kimi_code" | "kimi-code" => Some("kimi_code".to_string()),
+        "openai" | "openai_api" | "openai-api" => Some("openai".to_string()),
+        "local" | "local_llm" | "local-llm" | "ollama" => Some("local_llm".to_string()),
+        _ => None,
+    }
+}
+
+fn provider_label(provider: &str) -> &'static str {
+    match provider {
+        "claude_code" => "Claude",
+        "codex" => "Codex",
+        "kimi_code" => "Kimi",
+        "openai" => "OpenAI",
+        "local_llm" => "Local",
+        _ => "Provider",
+    }
+}
+
+fn normalize_scale(value: &str) -> String {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "low" | "medium" | "high" => value.trim().to_ascii_lowercase(),
+        _ => "medium".to_string(),
+    }
+}
+
+fn serialize_result_payload(
+    payload: CoordinatorResultPayload,
+    llm_raw_snippet: Option<&str>,
+) -> Option<String> {
+    let mut envelope = serde_json::json!({ "result": payload });
+    if let Some(snippet) = llm_raw_snippet {
+        if !snippet.trim().is_empty() {
+            envelope["llmRawSnippet"] = serde_json::Value::String(snippet.to_string());
+        }
+    }
+    serde_json::to_string(&envelope).ok()
+}
+
+fn default_result_for_action(
+    run_goal: &str,
+    action_kind: &str,
+    decision: &str,
+    next_action: Option<&str>,
+    confidence: &str,
+    impact: &str,
+    status: &str,
+    evidence: Vec<String>,
+    risks: Vec<String>,
+    artifacts: Vec<CoordinatorResultArtifact>,
+) -> CoordinatorResultPayload {
+    CoordinatorResultPayload {
+        goal: run_goal.to_string(),
+        decision: decision.trim().to_string(),
+        evidence,
+        risks,
+        next_action: next_action.map(|value| value.to_string()),
+        confidence: normalize_scale(confidence),
+        impact: normalize_scale(impact),
+        status: if status.trim().is_empty() {
+            action_kind.to_string()
+        } else {
+            status.to_string()
+        },
+        artifacts,
+    }
+}
+
+fn planner_result_payload(
+    run_goal: &str,
+    planner_message: &str,
+    planned_actions: &[CoordinatorAction],
+    planner_error: Option<&str>,
+    llm_raw_snippet: Option<&str>,
+) -> Option<String> {
+    let mut evidence = vec![
+        format!("Planner summary: {planner_message}"),
+        format!("Planned actions: {}", planned_actions.len()),
+    ];
+    if let Some(snippet) = llm_raw_snippet {
+        if !snippet.trim().is_empty() {
+            evidence.push("LLM raw snippet captured in metadata.".to_string());
+        }
+    }
+    let mut risks = vec![];
+    if let Some(error) = planner_error {
+        risks.push(error.to_string());
+    }
+    let next_action = if planned_actions
+        .iter()
+        .any(|item| matches!(item.action.as_str(), "spawn_worker" | "message_worker"))
+    {
+        Some("review_diff")
+    } else if planned_actions
+        .iter()
+        .any(|item| item.action.as_str() == "complete")
+    {
+        Some("create_pr")
+    } else {
+        Some("review_diff")
+    };
+    let payload = default_result_for_action(
+        run_goal,
+        "planner",
+        "Planner evaluated coordinator instruction and produced next actions.",
+        next_action,
+        if planner_error.is_some() { "low" } else { "medium" },
+        "medium",
+        "planned",
+        evidence,
+        risks,
+        vec![],
+    );
+    serialize_result_payload(payload, llm_raw_snippet)
+}
+
+fn notify_result_payload(run_goal: &str, message: &str) -> Option<String> {
+    let payload = default_result_for_action(
+        run_goal,
+        "notify_user",
+        if message.trim().is_empty() {
+            "Coordinator sent an update for review."
+        } else {
+            message
+        },
+        Some("review_diff"),
+        "medium",
+        "medium",
+        "needs_review",
+        vec!["Coordinator requested user-facing review.".to_string()],
+        vec![],
+        vec![],
+    );
+    serialize_result_payload(payload, None)
+}
+
+fn complete_result_payload(run_goal: &str, message: Option<&str>, prompt: Option<&str>) -> Option<String> {
+    let mut evidence = vec!["Coordinator marked run complete.".to_string()];
+    if let Some(value) = prompt.map(str::trim).filter(|value| !value.is_empty()) {
+        evidence.push(format!("Completion prompt: {value}"));
+    }
+    let payload = default_result_for_action(
+        run_goal,
+        "complete",
+        message
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("Coordinator marked this run complete and ready for manual review."),
+        Some("review_diff"),
+        "medium",
+        "high",
+        "completed",
+        evidence,
+        vec![],
+        vec![],
+    );
+    serialize_result_payload(payload, None)
+}
+
+fn synthesize_coordinator_profile(
+    role: &str,
+    provider: &str,
+    model: Option<&str>,
+    reasoning: Option<&str>,
+) -> Result<crate::models::AgentProfile, String> {
+    let (agent, command, provider_name, endpoint, local) = match provider {
+        "claude_code" => ("claude_code", "claude", Some("claude"), None, false),
+        "codex" => ("codex", "codex", Some("openai"), None, false),
+        "kimi_code" => ("kimi_code", "kimi", Some("kimi"), None, false),
+        "openai" => (
+            "openai",
+            "openai",
+            Some("openai"),
+            Some("https://api.openai.com/v1"),
+            false,
+        ),
+        "local_llm" => (
+            "local_llm",
+            "ollama",
+            Some("ollama"),
+            Some("http://localhost:11434"),
+            true,
+        ),
+        other => return Err(format!("Unsupported coordinator provider: {other}")),
+    };
+    let role = role.to_ascii_lowercase();
+    let role_label = if role == "coder" { "Coder" } else { "Brain" };
+    Ok(crate::models::AgentProfile {
+        id: format!("builtin-{}-{}", role, provider.replace('_', "-")),
+        label: format!("{} {}", provider_label(provider), role_label),
+        agent: agent.to_string(),
+        command: command.to_string(),
+        args: vec![],
+        model: trim_non_empty(model),
+        reasoning: trim_non_empty(reasoning),
+        mode: Some("act".to_string()),
+        provider: provider_name.map(str::to_string),
+        endpoint: endpoint.map(str::to_string),
+        local,
+        description: Some(format!("Built-in coordinator {} provider profile", role)),
+        skills: vec![],
+        templates: vec![],
+        role_preference: Some(role.clone()),
+        coordinator_eligible: Some(true),
+    })
+}
+
+fn resolve_coordinator_role_profile(
+    state: &AppState,
+    workspace_id: &str,
+    role: &str,
+    requested_profile_id: Option<&str>,
+    requested_provider: Option<&str>,
+    requested_model: Option<&str>,
+    requested_reasoning: Option<&str>,
+    fallback_profile_id: Option<&str>,
+) -> Result<crate::models::AgentProfile, String> {
+    let mut profile = if let Some(profile_id) = trim_non_empty(requested_profile_id).as_deref() {
+        agent_profile_service::resolve_profile_for_role(
+            state,
+            Some(workspace_id),
+            role,
+            Some(profile_id),
+        )?
+    } else if let Some(provider) = normalize_coordinator_provider(requested_provider) {
+        synthesize_coordinator_profile(role, &provider, requested_model, requested_reasoning)?
+    } else if let Some(fallback) = trim_non_empty(fallback_profile_id).as_deref() {
+        if let Some(provider) = normalize_coordinator_provider(Some(fallback)) {
+            synthesize_coordinator_profile(role, &provider, requested_model, requested_reasoning)?
+        } else {
+            agent_profile_service::resolve_profile_for_role(
+                state,
+                Some(workspace_id),
+                role,
+                Some(fallback),
+            )?
+        }
+    } else {
+        synthesize_coordinator_profile(
+            role,
+            "claude_code",
+            requested_model,
+            requested_reasoning,
+        )?
+    };
+    if let Some(model) = trim_non_empty(requested_model) {
+        profile.model = Some(model);
+    }
+    if let Some(reasoning) = trim_non_empty(requested_reasoning) {
+        profile.reasoning = Some(reasoning);
+    }
+    Ok(profile)
+}
+
 pub fn get_workspace_coordinator_status(
     state: &AppState,
     workspace_id: &str,
@@ -96,17 +371,25 @@ pub fn start_workspace_coordinator(
     if goal.is_empty() {
         return Err("Coordinator goal is required".to_string());
     }
-    let brain = agent_profile_service::resolve_profile_for_role(
+    let brain = resolve_coordinator_role_profile(
         state,
-        Some(&input.workspace_id),
+        &input.workspace_id,
         "brain",
         input.brain_profile_id.as_deref(),
+        input.brain_provider.as_deref(),
+        input.brain_model.as_deref(),
+        input.brain_reasoning.as_deref(),
+        None,
     )?;
-    let coder = agent_profile_service::resolve_profile_for_role(
+    let coder = resolve_coordinator_role_profile(
         state,
-        Some(&input.workspace_id),
+        &input.workspace_id,
         "coder",
         input.coder_profile_id.as_deref(),
+        input.coder_provider.as_deref(),
+        input.coder_model.as_deref(),
+        input.coder_reasoning.as_deref(),
+        None,
     )?;
     let run_id = format!("coord-{}-{}", input.workspace_id, unique_suffix());
     coordinator_repository::create_run(
@@ -213,6 +496,12 @@ pub fn replay_workspace_coordinator_action(
                     instruction: instruction.to_string(),
                     brain_profile_id: None,
                     coder_profile_id: None,
+                    brain_provider: None,
+                    coder_provider: None,
+                    brain_model: None,
+                    coder_model: None,
+                    brain_reasoning: None,
+                    coder_reasoning: None,
                 },
             )?;
             coordinator_repository::insert_action_with_metadata(
@@ -363,23 +652,42 @@ pub fn step_workspace_coordinator(
                 goal: instruction.to_string(),
                 brain_profile_id: input.brain_profile_id.clone(),
                 coder_profile_id: input.coder_profile_id.clone(),
+                brain_provider: input.brain_provider.clone(),
+                coder_provider: input.coder_provider.clone(),
+                brain_model: input.brain_model.clone(),
+                coder_model: input.coder_model.clone(),
+                brain_reasoning: input.brain_reasoning.clone(),
+                coder_reasoning: input.coder_reasoning.clone(),
             },
         )?;
         run = coordinator_repository::active_run_for_workspace(&state.db, &input.workspace_id)?;
     }
-    let run = run.ok_or_else(|| "Failed to initialize coordinator run".to_string())?;
-    let brain = agent_profile_service::resolve_profile_for_role(
+    let mut run = run.ok_or_else(|| "Failed to initialize coordinator run".to_string())?;
+    let brain = resolve_coordinator_role_profile(
         state,
-        Some(&input.workspace_id),
+        &input.workspace_id,
         "brain",
+        input.brain_profile_id.as_deref(),
+        input.brain_provider.as_deref(),
+        input.brain_model.as_deref(),
+        input.brain_reasoning.as_deref(),
         Some(&run.brain_profile_id),
     )?;
-    let coder = agent_profile_service::resolve_profile_for_role(
+    let coder = resolve_coordinator_role_profile(
         state,
-        Some(&input.workspace_id),
+        &input.workspace_id,
         "coder",
+        input.coder_profile_id.as_deref(),
+        input.coder_provider.as_deref(),
+        input.coder_model.as_deref(),
+        input.coder_reasoning.as_deref(),
         Some(&run.coder_profile_id),
     )?;
+    if run.brain_profile_id != brain.id || run.coder_profile_id != coder.id {
+        coordinator_repository::update_run_profiles(&state.db, &run.id, &brain.id, &coder.id)?;
+        run.brain_profile_id = brain.id.clone();
+        run.coder_profile_id = coder.id.clone();
+    }
     let mut workers = coordinator_repository::list_workers_for_run(&state.db, &run.id)?;
     let plan = plan_actions(state, &run, &brain, &workers, instruction);
     let actions = plan.actions.clone();
@@ -394,6 +702,13 @@ pub fn step_workspace_coordinator(
     let raw_snippet = raw_response
         .as_deref()
         .map(|value| value.chars().take(4000).collect::<String>());
+    let planner_result_json = planner_result_payload(
+        &run.goal,
+        &planner_message,
+        &actions,
+        planner_error.as_deref(),
+        raw_snippet.as_deref(),
+    );
     coordinator_repository::insert_action(
         &state.db,
         coordinator_repository::CoordinatorActionInsert {
@@ -403,7 +718,7 @@ pub fn step_workspace_coordinator(
             worker_id: None,
             prompt: None,
             message: Some(&planner_message),
-            raw_json: raw_snippet.as_deref(),
+            raw_json: planner_result_json.as_deref(),
         },
     )?;
     let actions = match validate_actions(&workers, actions) {
@@ -574,7 +889,7 @@ pub fn step_workspace_coordinator(
                             worker_id: None,
                             prompt: None,
                             message: Some(message),
-                            raw_json: None,
+                            raw_json: notify_result_payload(&run.goal, message).as_deref(),
                         },
                     )?;
                 }
@@ -603,7 +918,12 @@ pub fn step_workspace_coordinator(
                         worker_id: action.worker_id.as_deref(),
                         prompt: action.prompt.as_deref(),
                         message: action.message.as_deref(),
-                        raw_json: None,
+                        raw_json: complete_result_payload(
+                            &run.goal,
+                            action.message.as_deref(),
+                            action.prompt.as_deref(),
+                        )
+                        .as_deref(),
                     },
                 )?;
             }

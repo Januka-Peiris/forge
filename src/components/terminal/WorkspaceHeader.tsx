@@ -4,6 +4,7 @@ import {
   Copy,
   ExternalLink,
   GitBranch,
+  HelpCircle,
   Layout,
   MoreHorizontal,
   PlugZap,
@@ -11,6 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { Button } from '../ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -107,6 +109,39 @@ export function WorkspaceHeader({
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="h-7 w-7 text-forge-muted hover:text-forge-text"
+                title="Coordinator and Orchestrator guidance"
+              >
+                <HelpCircle className="h-3.5 w-3.5" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-[360px] max-w-[calc(100vw-24px)]">
+              <p className="text-xs font-bold uppercase tracking-widest text-forge-muted">How to use Forge modes</p>
+              <div className="mt-2 space-y-2 text-xs leading-relaxed">
+                <div>
+                  <p className="font-semibold text-forge-text">Direct agent mode</p>
+                  <p className="text-forge-muted">Best for focused edits, debugging, and quick iterations in a single chat or terminal tab.</p>
+                </div>
+                <div>
+                  <p className="font-semibold text-forge-text">Coordinator mode</p>
+                  <p className="text-forge-muted">Use when work needs planning + delegation. A brain profile decides next steps, coder workers execute, and timeline cards summarize review-ready outcomes.</p>
+                </div>
+                <div>
+                  <p className="font-semibold text-forge-text">Orchestrator</p>
+                  <p className="text-forge-muted">Background app-level automation that watches workspace state and can trigger follow-up coordination/checks. Use for continuous flow across multiple workspaces.</p>
+                </div>
+                <div className="rounded border border-forge-border/60 bg-black/10 px-2 py-1 text-[11px] text-forge-dim">
+                  Tip: Start with Direct for small tasks, Coordinator for multi-step goals, and Orchestrator for ongoing automation.
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+
           <Button
             variant="outline"
             size="xs"

@@ -193,8 +193,14 @@ export function useWorkspaceTerminalComposerActions({
           await stepWorkspaceCoordinator({
             workspaceId,
             instruction: text,
+            brainProvider: composerSettings.coordinatorBrainProvider || null,
+            coderProvider: composerSettings.coordinatorCoderProvider || null,
             brainProfileId: brainProfileId.length > 0 ? brainProfileId : null,
             coderProfileId: coderProfileId.length > 0 ? coderProfileId : null,
+            brainModel: composerSettings.coordinatorBrainModel || null,
+            coderModel: composerSettings.coordinatorCoderModel || null,
+            brainReasoning: composerSettings.coordinatorBrainReasoning || null,
+            coderReasoning: composerSettings.coordinatorCoderReasoning || null,
           });
           await refreshCoordinatorStatus();
           return;

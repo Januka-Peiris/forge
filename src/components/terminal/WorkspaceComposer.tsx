@@ -16,6 +16,14 @@ import {
 } from './workspace-terminal-constants';
 import { WorkspaceComposerSettingsPopover } from './WorkspaceComposerSettingsPopover';
 
+const COORDINATOR_PROVIDER_OPTIONS = [
+  { value: 'claude_code', label: 'Claude' },
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'codex', label: 'Codex' },
+  { value: 'kimi_code', label: 'Kimi' },
+  { value: 'local_llm', label: 'Local' },
+];
+
 const CLAUDE_AGENT_OPTIONS = [
   { value: 'general-purpose', label: 'general-purpose', hint: 'default' },
   { value: 'Plan', label: 'Plan', hint: 'planning' },
@@ -68,6 +76,40 @@ const KIMI_THINKING_OPTIONS = [
   { value: 'off', label: 'Off', hint: 'enable --no-thinking' },
 ];
 
+const OPENAI_MODEL_OPTIONS = [
+  { value: 'gpt-5.4', label: 'GPT-5.4 (Flagship)' },
+  { value: 'gpt-5.4-mini', label: 'GPT-5.4 mini' },
+  { value: 'gpt-5.2', label: 'GPT-5.2' },
+  { value: 'o4-mini', label: 'o4-mini' },
+];
+
+const OPENAI_REASONING_OPTIONS = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'xhigh', label: 'Extra High' },
+];
+
+function coordinatorProviderLabel(provider: string): string {
+  return COORDINATOR_PROVIDER_OPTIONS.find((option) => option.value === provider)?.label ?? provider;
+}
+
+function providerModelOptions(provider: string) {
+  if (provider === 'codex') return CODEX_MODEL_OPTIONS;
+  if (provider === 'kimi_code') return KIMI_MODEL_OPTIONS;
+  if (provider === 'openai') return OPENAI_MODEL_OPTIONS;
+  if (provider === 'local_llm') return [] as { value: string; label: string }[];
+  return CLAUDE_MODEL_OPTIONS;
+}
+
+function providerReasoningOptions(provider: string) {
+  if (provider === 'codex') return CODEX_REASONING_OPTIONS;
+  if (provider === 'kimi_code') return KIMI_THINKING_OPTIONS;
+  if (provider === 'openai') return OPENAI_REASONING_OPTIONS;
+  if (provider === 'local_llm') return [] as { value: string; label: string; hint?: string }[];
+  return CLAUDE_THINKING_OPTIONS;
+}
+
 function compactLabel(model: string, provider?: string) {
   if (provider === 'codex') {
     return CODEX_MODEL_OPTIONS.find((o) => o.value === model)?.label ?? model;
@@ -86,8 +128,14 @@ export interface ComposerSettings {
   selectedReasoning: string;
   sendBehavior: 'send_now' | 'interrupt_send' | 'queue_send';
   promptMode: 'direct' | 'coordinator';
+  coordinatorBrainProvider: string;
+  coordinatorCoderProvider: string;
   coordinatorBrainProfileId: string;
   coordinatorCoderProfileId: string;
+  coordinatorBrainModel: string;
+  coordinatorCoderModel: string;
+  coordinatorBrainReasoning: string;
+  coordinatorCoderReasoning: string;
   coordinatorAutoStepOnWorkerComplete: boolean;
   coordinatorAutoStepTrigger: 'terminal_completion' | 'any_worker_status';
   coordinatorAutoStepCooldownSeconds: number;
@@ -141,6 +189,7 @@ export function WorkspaceComposer({
   const [contextPreview, setContextPreview] = useState<WorkspaceContextPreview | null>(null);
   const [contextBusy, setContextBusy] = useState(false);
   const [contextError, setContextError] = useState<string | null>(null);
+  const [coordinatorModelsOpen, setCoordinatorModelsOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
@@ -304,6 +353,10 @@ export function WorkspaceComposer({
     () => agentProfilesForCoordinatorPicker(agentProfiles),
     [agentProfiles],
   );
+  const coordinatorBrainProviderModelOptions = providerModelOptions(settings.coordinatorBrainProvider);
+  const coordinatorCoderProviderModelOptions = providerModelOptions(settings.coordinatorCoderProvider);
+  const coordinatorBrainProviderReasoningOptions = providerReasoningOptions(settings.coordinatorBrainProvider);
+  const coordinatorCoderProviderReasoningOptions = providerReasoningOptions(settings.coordinatorCoderProvider);
   const latestPlannerDiagnostic = coordinatorStatus?.plannerLastMessage
     ?? coordinatorStatus?.recentActions.find((action) => action.actionKind === 'planner')?.message
     ?? null;
@@ -331,31 +384,130 @@ export function WorkspaceComposer({
               <>
                 <span>·</span>
                 <Select
-                  value={settings.coordinatorBrainProfileId}
-                  onValueChange={(value) => onSettingsChange({ coordinatorBrainProfileId: value })}
+                  value={settings.coordinatorBrainProvider}
+                  onValueChange={(value) => onSettingsChange({ coordinatorBrainProvider: value, coordinatorBrainProfileId: '' })}
                 >
-                  <SelectTrigger compact title="Coordinator brain profile"><SelectValue placeholder="Brain" /></SelectTrigger>
+                  <SelectTrigger compact title="Coordinator brain provider"><SelectValue placeholder="Brain provider" /></SelectTrigger>
                   <SelectContent>
-                    {coordinatorProfiles.map((profile) => (
-                      <SelectItem key={`composer-brain-${profile.id}`} value={profile.id}>{profile.label}</SelectItem>
+                    {COORDINATOR_PROVIDER_OPTIONS.map((providerOption) => (
+                      <SelectItem key={`composer-brain-provider-${providerOption.value}`} value={providerOption.value}>{providerOption.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 <span>→</span>
                 <Select
-                  value={settings.coordinatorCoderProfileId}
-                  onValueChange={(value) => onSettingsChange({ coordinatorCoderProfileId: value })}
+                  value={settings.coordinatorCoderProvider}
+                  onValueChange={(value) => onSettingsChange({ coordinatorCoderProvider: value, coordinatorCoderProfileId: '' })}
                 >
-                  <SelectTrigger compact title="Coordinator coder profile"><SelectValue placeholder="Coder" /></SelectTrigger>
+                  <SelectTrigger compact title="Coordinator coder provider"><SelectValue placeholder="Coder provider" /></SelectTrigger>
                   <SelectContent>
-                    {coordinatorProfiles.map((profile) => (
-                      <SelectItem key={`composer-coder-${profile.id}`} value={profile.id}>{profile.label}</SelectItem>
+                    {COORDINATOR_PROVIDER_OPTIONS.map((providerOption) => (
+                      <SelectItem key={`composer-coder-provider-${providerOption.value}`} value={providerOption.value}>{providerOption.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {coordinatorProfiles.length === 0 && (
-                  <span className="text-forge-yellow">No eligible coordinator profiles (configure in Settings or .forge/config.json)</span>
-                )}
+                <span className="rounded border border-forge-blue/30 bg-forge-blue/10 px-1.5 py-0.5 text-[10px] text-forge-blue">
+                  brain {coordinatorProviderLabel(settings.coordinatorBrainProvider)}
+                </span>
+                <span className="rounded border border-forge-violet/30 bg-forge-violet/10 px-1.5 py-0.5 text-[10px] text-forge-violet">
+                  coder {coordinatorProviderLabel(settings.coordinatorCoderProvider)}
+                </span>
+                <Popover open={coordinatorModelsOpen} onOpenChange={setCoordinatorModelsOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="rounded border border-forge-border bg-black/10 px-1.5 py-0.5 text-[10px] text-forge-muted hover:bg-white/10"
+                      title="Coordinator provider model settings"
+                    >
+                      Models
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-[420px] max-w-[calc(100vw-24px)]">
+                    <p className="mb-2 text-xs font-semibold text-forge-text">Coordinator models & overrides</p>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="rounded border border-forge-border/70 bg-black/10 p-2">
+                        <p className="mb-2 text-[11px] font-semibold text-forge-text">Brain ({coordinatorProviderLabel(settings.coordinatorBrainProvider)})</p>
+                        <label className="mb-1 block text-[10px] uppercase tracking-widest text-forge-muted">Model</label>
+                        <Select value={settings.coordinatorBrainModel || '__default__'} onValueChange={(value) => onSettingsChange({ coordinatorBrainModel: value === '__default__' ? '' : value })}>
+                          <SelectTrigger className="w-full"><SelectValue placeholder="Default model" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__default__">Default model</SelectItem>
+                            {coordinatorBrainProviderModelOptions.map((option) => (
+                              <SelectItem key={`coord-brain-model-${option.value}`} value={option.value}>{option.label}</SelectItem>
+                            ))}
+                            {settings.coordinatorBrainModel && !coordinatorBrainProviderModelOptions.some((option) => option.value === settings.coordinatorBrainModel) && (
+                              <SelectItem value={settings.coordinatorBrainModel}>{settings.coordinatorBrainModel}</SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <label className="mb-1 mt-2 block text-[10px] uppercase tracking-widest text-forge-muted">Reasoning</label>
+                        <Select value={settings.coordinatorBrainReasoning || '__default__'} onValueChange={(value) => onSettingsChange({ coordinatorBrainReasoning: value === '__default__' ? '' : value })}>
+                          <SelectTrigger className="w-full"><SelectValue placeholder="Default reasoning" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__default__">Default reasoning</SelectItem>
+                            {coordinatorBrainProviderReasoningOptions.map((option) => (
+                              <SelectItem key={`coord-brain-reasoning-${option.value}`} value={option.value}>{option.label}</SelectItem>
+                            ))}
+                            {settings.coordinatorBrainReasoning && !coordinatorBrainProviderReasoningOptions.some((option) => option.value === settings.coordinatorBrainReasoning) && (
+                              <SelectItem value={settings.coordinatorBrainReasoning}>{settings.coordinatorBrainReasoning}</SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <label className="mb-1 mt-2 block text-[10px] uppercase tracking-widest text-forge-muted">Advanced profile override</label>
+                        <Select value={settings.coordinatorBrainProfileId || '__none__'} onValueChange={(value) => onSettingsChange({ coordinatorBrainProfileId: value === '__none__' ? '' : value })}>
+                          <SelectTrigger className="w-full"><SelectValue placeholder="None (provider default)" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">None (provider default)</SelectItem>
+                            {coordinatorProfiles.map((profile) => (
+                              <SelectItem key={`coord-brain-profile-${profile.id}`} value={profile.id}>{profile.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="rounded border border-forge-border/70 bg-black/10 p-2">
+                        <p className="mb-2 text-[11px] font-semibold text-forge-text">Coder ({coordinatorProviderLabel(settings.coordinatorCoderProvider)})</p>
+                        <label className="mb-1 block text-[10px] uppercase tracking-widest text-forge-muted">Model</label>
+                        <Select value={settings.coordinatorCoderModel || '__default__'} onValueChange={(value) => onSettingsChange({ coordinatorCoderModel: value === '__default__' ? '' : value })}>
+                          <SelectTrigger className="w-full"><SelectValue placeholder="Default model" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__default__">Default model</SelectItem>
+                            {coordinatorCoderProviderModelOptions.map((option) => (
+                              <SelectItem key={`coord-coder-model-${option.value}`} value={option.value}>{option.label}</SelectItem>
+                            ))}
+                            {settings.coordinatorCoderModel && !coordinatorCoderProviderModelOptions.some((option) => option.value === settings.coordinatorCoderModel) && (
+                              <SelectItem value={settings.coordinatorCoderModel}>{settings.coordinatorCoderModel}</SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <label className="mb-1 mt-2 block text-[10px] uppercase tracking-widest text-forge-muted">Reasoning</label>
+                        <Select value={settings.coordinatorCoderReasoning || '__default__'} onValueChange={(value) => onSettingsChange({ coordinatorCoderReasoning: value === '__default__' ? '' : value })}>
+                          <SelectTrigger className="w-full"><SelectValue placeholder="Default reasoning" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__default__">Default reasoning</SelectItem>
+                            {coordinatorCoderProviderReasoningOptions.map((option) => (
+                              <SelectItem key={`coord-coder-reasoning-${option.value}`} value={option.value}>{option.label}</SelectItem>
+                            ))}
+                            {settings.coordinatorCoderReasoning && !coordinatorCoderProviderReasoningOptions.some((option) => option.value === settings.coordinatorCoderReasoning) && (
+                              <SelectItem value={settings.coordinatorCoderReasoning}>{settings.coordinatorCoderReasoning}</SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <label className="mb-1 mt-2 block text-[10px] uppercase tracking-widest text-forge-muted">Advanced profile override</label>
+                        <Select value={settings.coordinatorCoderProfileId || '__none__'} onValueChange={(value) => onSettingsChange({ coordinatorCoderProfileId: value === '__none__' ? '' : value })}>
+                          <SelectTrigger className="w-full"><SelectValue placeholder="None (provider default)" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">None (provider default)</SelectItem>
+                            {coordinatorProfiles.map((profile) => (
+                              <SelectItem key={`coord-coder-profile-${profile.id}`} value={profile.id}>{profile.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-[10px] text-forge-muted">Built-in providers are always available. Profile override is optional.</p>
+                  </PopoverContent>
+                </Popover>
                 <span>·</span>
                 <span className={coordinatorStatus?.activeRun ? 'text-forge-orange' : 'text-forge-muted'}>
                   {coordinatorStatus?.activeRun ? `running (${coordinatorWorkerCount} workers)` : 'idle'}

@@ -50,7 +50,8 @@ pub use checkpoint::{
     WorkspaceCheckpointDiff, WorkspaceCheckpointRestorePlan, WorkspaceCheckpointRestoreResult,
 };
 pub use coordinator::{
-    CoordinatorAction, CoordinatorActionLog, CoordinatorRun, CoordinatorWorker,
+    CoordinatorAction, CoordinatorActionLog, CoordinatorResultArtifact, CoordinatorResultPayload,
+    CoordinatorRun, CoordinatorWorker,
     ReplayWorkspaceCoordinatorActionInput, StartWorkspaceCoordinatorInput,
     StepWorkspaceCoordinatorInput, WorkspaceCoordinatorStatus,
 };

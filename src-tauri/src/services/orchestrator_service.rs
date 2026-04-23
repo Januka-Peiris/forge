@@ -548,6 +548,12 @@ fn run_coordinator_autostep_watch_job(state: &AppState, workspace_id: &str) -> R
                 instruction: "Continue coordinator execution".to_string(),
                 brain_profile_id: None,
                 coder_profile_id: None,
+                brain_provider: None,
+                coder_provider: None,
+                brain_model: None,
+                coder_model: None,
+                brain_reasoning: None,
+                coder_reasoning: None,
             },
         );
     }

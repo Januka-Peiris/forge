@@ -36,7 +36,27 @@ export interface CoordinatorActionLog {
   prompt?: string | null;
   message?: string | null;
   rawJson?: string | null;
+  result?: CoordinatorResultPayload | null;
   createdAt: string;
+}
+
+export interface CoordinatorResultArtifact {
+  kind: string;
+  label?: string | null;
+  path?: string | null;
+  value?: string | null;
+}
+
+export interface CoordinatorResultPayload {
+  goal: string;
+  decision: string;
+  evidence: string[];
+  risks: string[];
+  nextAction?: string | null;
+  confidence: 'low' | 'medium' | 'high' | string;
+  impact: 'low' | 'medium' | 'high' | string;
+  status: 'planned' | 'needs_review' | 'completed' | 'failed' | string;
+  artifacts: CoordinatorResultArtifact[];
 }
 
 export interface WorkspaceCoordinatorStatus {
@@ -56,6 +76,12 @@ export interface StartWorkspaceCoordinatorInput {
   goal: string;
   brainProfileId?: string | null;
   coderProfileId?: string | null;
+  brainProvider?: string | null;
+  coderProvider?: string | null;
+  brainModel?: string | null;
+  coderModel?: string | null;
+  brainReasoning?: string | null;
+  coderReasoning?: string | null;
 }
 
 export interface StepWorkspaceCoordinatorInput {
@@ -63,6 +89,12 @@ export interface StepWorkspaceCoordinatorInput {
   instruction: string;
   brainProfileId?: string | null;
   coderProfileId?: string | null;
+  brainProvider?: string | null;
+  coderProvider?: string | null;
+  brainModel?: string | null;
+  coderModel?: string | null;
+  brainReasoning?: string | null;
+  coderReasoning?: string | null;
 }
 
 export interface ReplayWorkspaceCoordinatorActionInput {

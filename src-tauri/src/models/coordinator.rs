@@ -42,6 +42,29 @@ pub struct CoordinatorAction {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct CoordinatorResultArtifact {
+    pub kind: String,
+    pub label: Option<String>,
+    pub path: Option<String>,
+    pub value: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CoordinatorResultPayload {
+    pub goal: String,
+    pub decision: String,
+    pub evidence: Vec<String>,
+    pub risks: Vec<String>,
+    pub next_action: Option<String>,
+    pub confidence: String,
+    pub impact: String,
+    pub status: String,
+    pub artifacts: Vec<CoordinatorResultArtifact>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct CoordinatorActionLog {
     pub id: String,
     pub run_id: String,
@@ -53,6 +76,8 @@ pub struct CoordinatorActionLog {
     pub prompt: Option<String>,
     pub message: Option<String>,
     pub raw_json: Option<String>,
+    #[serde(default)]
+    pub result: Option<CoordinatorResultPayload>,
     pub created_at: String,
 }
 
@@ -77,6 +102,12 @@ pub struct StartWorkspaceCoordinatorInput {
     pub goal: String,
     pub brain_profile_id: Option<String>,
     pub coder_profile_id: Option<String>,
+    pub brain_provider: Option<String>,
+    pub coder_provider: Option<String>,
+    pub brain_model: Option<String>,
+    pub coder_model: Option<String>,
+    pub brain_reasoning: Option<String>,
+    pub coder_reasoning: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,6 +117,12 @@ pub struct StepWorkspaceCoordinatorInput {
     pub instruction: String,
     pub brain_profile_id: Option<String>,
     pub coder_profile_id: Option<String>,
+    pub brain_provider: Option<String>,
+    pub coder_provider: Option<String>,
+    pub brain_model: Option<String>,
+    pub coder_model: Option<String>,
+    pub brain_reasoning: Option<String>,
+    pub coder_reasoning: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

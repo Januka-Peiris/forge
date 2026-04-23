@@ -1,19 +1,165 @@
 import { useMemo, useState } from 'react';
 import type { AgentProfile } from '../../types';
-import type { WorkspaceCoordinatorStatus } from '../../types/coordinator';
+import type {
+  CoordinatorActionLog,
+  CoordinatorResultPayload,
+  WorkspaceCoordinatorStatus,
+} from '../../types/coordinator';
 
 interface CoordinatorTimelineProps {
+  workspaceId: string;
   status: WorkspaceCoordinatorStatus | null;
   agentProfiles: AgentProfile[];
   onRefresh: () => void;
   onReplayAction: (actionId: string, promptOverride?: string | null) => Promise<void>;
+  onOpenReviewCockpit?: (path?: string | null) => void;
+  onReviewDiff?: () => void;
+  onRunTests?: () => void;
+  onAskReviewer?: () => void;
+  onCreatePr?: () => void;
+  canReviewDiff?: boolean;
+  canRunTests?: boolean;
+  canAskReviewer?: boolean;
+  canCreatePr?: boolean;
+  hasExistingPr?: boolean;
 }
 
 function profileLabel(agentProfiles: AgentProfile[], profileId: string): string {
-  return agentProfiles.find((profile) => profile.id === profileId)?.label ?? profileId;
+  const known = agentProfiles.find((profile) => profile.id === profileId)?.label;
+  if (known) return known;
+  if (profileId.startsWith('builtin-brain-')) {
+    return `${profileId.replace('builtin-brain-', '').replace(/-/g, ' ')} brain`;
+  }
+  if (profileId.startsWith('builtin-coder-')) {
+    return `${profileId.replace('builtin-coder-', '').replace(/-/g, ' ')} coder`;
+  }
+  return profileId;
 }
 
-export function CoordinatorTimeline({ status, agentProfiles, onRefresh, onReplayAction }: CoordinatorTimelineProps) {
+type TimelineViewState = 'expanded' | 'collapsed' | 'hidden';
+
+interface CoordinatorResultCard {
+  action: CoordinatorActionLog;
+  result: CoordinatorResultPayload;
+  structured: boolean;
+}
+
+function stateKey(workspaceId: string) {
+  return `forge:coordinator-timeline:${workspaceId}`;
+}
+
+function isScale(value: string | null | undefined): value is 'low' | 'medium' | 'high' {
+  return value === 'low' || value === 'medium' || value === 'high';
+}
+
+function normalizeScale(value: string | null | undefined): 'low' | 'medium' | 'high' {
+  if (isScale(value)) return value;
+  return 'medium';
+}
+
+function parseResultFromRawJson(rawJson?: string | null): CoordinatorResultPayload | null {
+  if (!rawJson || !rawJson.trim()) return null;
+  try {
+    const parsed = JSON.parse(rawJson) as Record<string, unknown>;
+    const candidate = (parsed && typeof parsed === 'object' && parsed.result && typeof parsed.result === 'object')
+      ? parsed.result as Record<string, unknown>
+      : parsed;
+    const goal = typeof candidate.goal === 'string' ? candidate.goal : null;
+    const decision = typeof candidate.decision === 'string' ? candidate.decision : null;
+    if (!goal || !decision) return null;
+    const evidence = Array.isArray(candidate.evidence) ? candidate.evidence.filter((item): item is string => typeof item === 'string') : [];
+    const risks = Array.isArray(candidate.risks) ? candidate.risks.filter((item): item is string => typeof item === 'string') : [];
+    const artifacts = Array.isArray(candidate.artifacts)
+      ? candidate.artifacts
+        .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+        .map((item) => ({
+          kind: typeof item.kind === 'string' ? item.kind : 'note',
+          label: typeof item.label === 'string' ? item.label : null,
+          path: typeof item.path === 'string' ? item.path : null,
+          value: typeof item.value === 'string' ? item.value : null,
+        }))
+      : [];
+    return {
+      goal,
+      decision,
+      evidence,
+      risks,
+      nextAction: typeof candidate.nextAction === 'string' ? candidate.nextAction : null,
+      confidence: normalizeScale(typeof candidate.confidence === 'string' ? candidate.confidence : null),
+      impact: normalizeScale(typeof candidate.impact === 'string' ? candidate.impact : null),
+      status: typeof candidate.status === 'string' ? candidate.status : 'needs_review',
+      artifacts,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function fallbackResultForAction(action: CoordinatorActionLog, goal: string): CoordinatorResultPayload | null {
+  if (!['planner', 'notify_user', 'complete', 'validation_error'].includes(action.actionKind)) {
+    return null;
+  }
+  const decision = (action.message ?? action.prompt ?? '').trim()
+    || (action.actionKind === 'complete'
+      ? 'Coordinator marked this run complete.'
+      : action.actionKind === 'notify_user'
+        ? 'Coordinator requested a user-facing review.'
+        : action.actionKind === 'validation_error'
+          ? 'Coordinator produced invalid actions and requires intervention.'
+          : 'Planner generated coordinator actions.');
+  return {
+    goal: goal.trim() || 'Coordinator run',
+    decision,
+    evidence: [
+      `${action.actionKind} · ${action.createdAt}`,
+    ],
+    risks: action.actionKind === 'validation_error' ? ['Planner action validation failed.'] : [],
+    nextAction: action.actionKind === 'complete' ? 'review_diff' : null,
+    confidence: action.actionKind === 'validation_error' ? 'low' : 'medium',
+    impact: action.actionKind === 'complete' ? 'high' : 'medium',
+    status: action.actionKind === 'complete'
+      ? 'completed'
+      : action.actionKind === 'validation_error'
+        ? 'failed'
+        : 'needs_review',
+    artifacts: [],
+  };
+}
+
+function artifactReviewPath(result: CoordinatorResultPayload): string | null {
+  const fileArtifact = result.artifacts.find((artifact) => artifact.path && (artifact.kind === 'file' || artifact.kind === 'path'));
+  return fileArtifact?.path ?? null;
+}
+
+function triadChipTone(value: string): string {
+  if (value === 'high') return 'border-forge-red/40 bg-forge-red/10 text-forge-red';
+  if (value === 'low') return 'border-forge-green/40 bg-forge-green/10 text-forge-green';
+  return 'border-forge-yellow/35 bg-forge-yellow/10 text-forge-yellow';
+}
+
+function derivedRisk(result: CoordinatorResultPayload): 'low' | 'medium' | 'high' {
+  if (result.risks.length >= 2) return 'high';
+  if (result.risks.length === 1) return 'medium';
+  return 'low';
+}
+
+export function CoordinatorTimeline({
+  workspaceId,
+  status,
+  agentProfiles,
+  onRefresh,
+  onReplayAction,
+  onOpenReviewCockpit,
+  onReviewDiff,
+  onRunTests,
+  onAskReviewer,
+  onCreatePr,
+  canReviewDiff = false,
+  canRunTests = false,
+  canAskReviewer = false,
+  canCreatePr = false,
+  hasExistingPr = false,
+}: CoordinatorTimelineProps) {
   const [kindFilter, setKindFilter] = useState<'all' | 'planner' | 'worker' | 'notify' | 'lifecycle'>('all');
   const [workerFilter, setWorkerFilter] = useState<string>('all');
   const [expandedActionId, setExpandedActionId] = useState<string | null>(null);
@@ -23,6 +169,12 @@ export function CoordinatorTimeline({ status, agentProfiles, onRefresh, onReplay
   const [replayedAtByActionId, setReplayedAtByActionId] = useState<Record<string, string>>({});
   const [editingActionId, setEditingActionId] = useState<string | null>(null);
   const [promptOverrides, setPromptOverrides] = useState<Record<string, string>>({});
+  const [expandedResultIds, setExpandedResultIds] = useState<Record<string, boolean>>({});
+  const [visibleResultCount, setVisibleResultCount] = useState(10);
+  const [viewState, setViewState] = useState<TimelineViewState>(() => {
+    const raw = window.localStorage.getItem(stateKey(workspaceId));
+    return raw === 'expanded' || raw === 'collapsed' || raw === 'hidden' ? raw : 'collapsed';
+  });
   const workers = useMemo(() => status?.workers ?? [], [status]);
   const recentActions = useMemo(() => status?.recentActions ?? [], [status]);
   const activeWorkers = useMemo(
@@ -72,9 +224,46 @@ export function CoordinatorTimeline({ status, agentProfiles, onRefresh, onReplay
       .filter((action) => action.workerId === selectedWorker.id)
       .slice(0, 8);
   }, [recentActions, selectedWorker]);
+  const resultCards = useMemo<CoordinatorResultCard[]>(() => {
+    const goal = status?.activeRun?.goal ?? 'Coordinator run';
+    return recentActions
+      .map((action) => {
+        const structured = action.result ?? parseResultFromRawJson(action.rawJson);
+        const result = structured ?? fallbackResultForAction(action, goal);
+        if (!result) return null;
+        return { action, result, structured: !!structured };
+      })
+      .filter((item): item is CoordinatorResultCard => !!item);
+  }, [recentActions, status?.activeRun?.goal]);
+  const visibleResultCards = resultCards.slice(0, visibleResultCount);
+  const newestResultCard = resultCards[0] ?? null;
 
+  const hasData = !!status?.activeRun || (status?.recentActions.length ?? 0) > 0;
   if (!status) return null;
-  if (!status.activeRun && status.recentActions.length === 0) return null;
+  if (!hasData && viewState === 'hidden') return null;
+
+  const runningWorkers = status.workers.filter((worker) => worker.status === 'running').length;
+  const statusText = status.activeRun ? `running (${runningWorkers} workers)` : 'idle';
+
+  const setPersistedViewState = (next: TimelineViewState) => {
+    setViewState(next);
+    window.localStorage.setItem(stateKey(workspaceId), next);
+  };
+
+  if (viewState === 'hidden') {
+    return (
+      <div className="mx-2 mt-2 flex items-center justify-between rounded border border-forge-border/70 bg-forge-card/40 px-2 py-1 text-[11px]">
+        <span className="text-forge-muted">Coordinator · {statusText}</span>
+        <button
+          type="button"
+          onClick={() => setPersistedViewState('collapsed')}
+          className="rounded border border-forge-border px-1.5 py-0.5 text-[10px] text-forge-muted hover:bg-forge-surface-overlay"
+        >
+          Show timeline
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-2 mt-2 rounded-lg border border-forge-border bg-forge-card/60 p-2">
@@ -85,13 +274,179 @@ export function CoordinatorTimeline({ status, agentProfiles, onRefresh, onReplay
             {status.activeRun ? `Run ${status.activeRun.id}` : 'No active run'} · {status.mode}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onRefresh}
-          className="rounded border border-forge-border px-2 py-1 text-[11px] text-forge-muted hover:bg-forge-surface-overlay"
-        >
-          Refresh
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setPersistedViewState(viewState === 'expanded' ? 'collapsed' : 'expanded')}
+            className="rounded border border-forge-border px-2 py-1 text-[11px] text-forge-muted hover:bg-forge-surface-overlay"
+          >
+            {viewState === 'expanded' ? 'Collapse' : 'Expand'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setPersistedViewState('hidden')}
+            className="rounded border border-forge-border px-2 py-1 text-[11px] text-forge-muted hover:bg-forge-surface-overlay"
+          >
+            Dismiss
+          </button>
+          <button
+            type="button"
+            onClick={onRefresh}
+            className="rounded border border-forge-border px-2 py-1 text-[11px] text-forge-muted hover:bg-forge-surface-overlay"
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {viewState === 'collapsed' && (
+        <div className="flex items-center justify-between rounded border border-forge-border/70 bg-black/10 px-2 py-1 text-[11px]">
+          <span className={status.activeRun ? 'text-forge-orange' : 'text-forge-muted'}>
+            {statusText}
+          </span>
+          {newestResultCard ? (
+            <span className="flex max-w-[68%] items-center gap-1 overflow-hidden">
+              <span className="truncate text-forge-muted" title={newestResultCard.result.decision}>
+                {newestResultCard.result.decision}
+              </span>
+              <span className={`rounded border px-1 py-0 text-[10px] ${triadChipTone(newestResultCard.result.confidence)}`}>
+                C {newestResultCard.result.confidence}
+              </span>
+              <span className={`rounded border px-1 py-0 text-[10px] ${triadChipTone(newestResultCard.result.impact)}`}>
+                I {newestResultCard.result.impact}
+              </span>
+            </span>
+          ) : status.plannerLastMessage ? (
+            <span className="max-w-[65%] truncate text-forge-muted" title={status.plannerLastMessage}>
+              {status.plannerLastMessage}
+            </span>
+          ) : null}
+        </div>
+      )}
+
+      {viewState === 'expanded' && (
+        <div className="max-h-[300px] space-y-2 overflow-y-auto pr-1">
+      <div className="rounded border border-forge-border/70 bg-black/10 p-2">
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-[11px] font-semibold text-forge-text">Coordinator result cards</p>
+          <span className="text-[10px] text-forge-muted">
+            {visibleResultCards.length}/{resultCards.length || 0}
+          </span>
+        </div>
+        {visibleResultCards.length > 0 ? (
+          <div className="space-y-2">
+            {visibleResultCards.map((card) => {
+              const expanded = !!expandedResultIds[card.action.id];
+              const reviewPath = artifactReviewPath(card.result);
+              return (
+                <div key={`result-${card.action.id}`} className="rounded border border-forge-border/60 bg-black/20 p-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold text-forge-text">
+                        {card.result.status} · {card.action.actionKind}
+                        {!card.structured && <span className="ml-1 text-[10px] text-forge-yellow">(fallback)</span>}
+                      </p>
+                      <p className="truncate text-[10px] text-forge-muted">{card.action.createdAt} · {card.action.workerId ?? 'general'}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedResultIds((current) => ({ ...current, [card.action.id]: !current[card.action.id] }))}
+                      className="rounded border border-forge-border px-1.5 py-0.5 text-[10px] text-forge-muted hover:bg-forge-surface-overlay"
+                    >
+                      {expanded ? 'Less' : 'More'}
+                    </button>
+                  </div>
+                  <p className="mt-1 text-[11px] text-forge-text">{card.result.decision}</p>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    <span className={`rounded border px-1.5 py-0.5 text-[10px] ${triadChipTone(derivedRisk(card.result))}`}>
+                      Risk {derivedRisk(card.result)}
+                    </span>
+                    <span className={`rounded border px-1.5 py-0.5 text-[10px] ${triadChipTone(card.result.confidence)}`}>
+                      Confidence {normalizeScale(card.result.confidence)}
+                    </span>
+                    <span className={`rounded border px-1.5 py-0.5 text-[10px] ${triadChipTone(card.result.impact)}`}>
+                      Impact {normalizeScale(card.result.impact)}
+                    </span>
+                  </div>
+                  {expanded && (
+                    <div className="mt-2 space-y-1 text-[10px]">
+                      <p className="text-forge-dim">Goal: {card.result.goal}</p>
+                      {card.result.evidence.length > 0 && (
+                        <div>
+                          <p className="font-semibold text-forge-muted">Evidence</p>
+                          <ul className="list-disc pl-4 text-forge-dim">
+                            {card.result.evidence.map((item, index) => <li key={`ev-${card.action.id}-${index}`}>{item}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                      {card.result.risks.length > 0 && (
+                        <div>
+                          <p className="font-semibold text-forge-muted">Risks</p>
+                          <ul className="list-disc pl-4 text-forge-yellow">
+                            {card.result.risks.map((item, index) => <li key={`rk-${card.action.id}-${index}`}>{item}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    <button
+                      type="button"
+                      disabled={!canReviewDiff}
+                      onClick={onReviewDiff}
+                      className="rounded border border-forge-blue/30 bg-forge-blue/10 px-1.5 py-0.5 text-[10px] text-forge-blue disabled:opacity-50"
+                    >
+                      Review diff
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!canRunTests}
+                      onClick={onRunTests}
+                      className="rounded border border-forge-border px-1.5 py-0.5 text-[10px] text-forge-muted disabled:opacity-50"
+                    >
+                      Run tests
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!canAskReviewer}
+                      onClick={onAskReviewer}
+                      className="rounded border border-forge-border px-1.5 py-0.5 text-[10px] text-forge-muted disabled:opacity-50"
+                    >
+                      Ask reviewer
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!canCreatePr || hasExistingPr}
+                      onClick={onCreatePr}
+                      className="rounded border border-forge-green/30 bg-forge-green/10 px-1.5 py-0.5 text-[10px] text-forge-green disabled:opacity-50"
+                    >
+                      {hasExistingPr ? 'PR exists' : 'Create PR'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!onOpenReviewCockpit}
+                      onClick={() => onOpenReviewCockpit?.(reviewPath)}
+                      className="rounded border border-forge-border px-1.5 py-0.5 text-[10px] text-forge-muted disabled:opacity-50"
+                    >
+                      Open review cockpit
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-[11px] text-forge-muted">No structured coordinator results yet.</p>
+        )}
+        {resultCards.length > visibleResultCount && (
+          <button
+            type="button"
+            onClick={() => setVisibleResultCount((current) => current + 10)}
+            className="mt-2 rounded border border-forge-border px-2 py-0.5 text-[10px] text-forge-muted hover:bg-forge-surface-overlay"
+          >
+            Load more
+          </button>
+        )}
       </div>
 
       {replayNotice && (
@@ -318,6 +673,8 @@ export function CoordinatorTimeline({ status, agentProfiles, onRefresh, onReplay
           <p className="text-forge-muted">No coordinator actions yet.</p>
         )}
       </div>
+        </div>
+      )}
     </div>
   );
 }

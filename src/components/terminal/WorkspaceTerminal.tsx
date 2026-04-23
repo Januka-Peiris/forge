@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Terminal as TerminalIcon } from 'lucide-react';
 import type { AgentProfile, ForgeWorkspaceConfig, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
-import type { AgentChatEvent, AgentChatSession } from '../../types/agent-chat';
+import type { AgentChatEvent, AgentChatNextAction, AgentChatSession } from '../../types/agent-chat';
 import type { WorkspaceCoordinatorStatus } from '../../types/coordinator';
 import type { WorkspaceChangedFile } from '../../types/git-review';
 import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
@@ -22,6 +22,7 @@ import { getWorkspaceHealth } from '../../lib/tauri-api/workspace-health';
 import { getWorkspaceReadiness } from '../../lib/tauri-api/workspace-readiness';
 import { getWorkspaceChangedFiles } from '../../lib/tauri-api/git-review';
 import { getWorkspaceReviewCockpit } from '../../lib/tauri-api/review-cockpit';
+import { createWorkspacePr } from '../../lib/tauri-api/pr-draft';
 import {
   listAgentChatEvents,
   listAgentChatSessions,
@@ -34,7 +35,6 @@ import {
   stopWorkspaceCoordinator,
 } from '../../lib/tauri-api/coordinator';
 import {
-  agentProfilesForCoordinatorPicker,
   defaultWorkspaceAgentProfileId,
   listWorkspaceAgentProfiles,
 } from '../../lib/tauri-api/agent-profiles';
@@ -84,6 +84,7 @@ interface WorkspaceTerminalProps {
   onRequestedFilePathHandled: () => void;
   onActiveEditorFileChange?: (path: string | null) => void;
   onOpenInCursor?: () => void;
+  onOpenReviewCockpit?: (path?: string | null) => void;
 }
 
 export function WorkspaceTerminal({
@@ -92,6 +93,7 @@ export function WorkspaceTerminal({
   onRequestedFilePathHandled,
   onActiveEditorFileChange,
   onOpenInCursor,
+  onOpenReviewCockpit,
 }: WorkspaceTerminalProps) {
   const [visibleSessions, setVisibleSessions] = useState<TerminalSession[]>([]);
   const [allSessions, setAllSessions] = useState<TerminalSession[]>([]);
@@ -121,8 +123,14 @@ export function WorkspaceTerminal({
     selectedReasoning: 'Default',
     sendBehavior: 'send_now',
     promptMode: 'direct',
+    coordinatorBrainProvider: 'claude_code',
+    coordinatorCoderProvider: 'claude_code',
     coordinatorBrainProfileId: '',
     coordinatorCoderProfileId: '',
+    coordinatorBrainModel: '',
+    coordinatorCoderModel: '',
+    coordinatorBrainReasoning: '',
+    coordinatorCoderReasoning: '',
     coordinatorAutoStepOnWorkerComplete: false,
     coordinatorAutoStepTrigger: 'terminal_completion',
     coordinatorAutoStepCooldownSeconds: 3,
@@ -381,19 +389,16 @@ export function WorkspaceTerminal({
         profiles.some((profile) => profile.id === current) ? current : defaultWorkspaceAgentProfileId(profiles),
       );
       setComposerSettings((current) => {
-        const coordinatorProfiles = agentProfilesForCoordinatorPicker(profiles);
-        const fallbackBrain = coordinatorProfiles[0];
-        const fallbackCoder = coordinatorProfiles[0];
         return {
           ...current,
           coordinatorBrainProfileId:
-            current.coordinatorBrainProfileId && coordinatorProfiles.some((profile) => profile.id === current.coordinatorBrainProfileId)
+            current.coordinatorBrainProfileId && profiles.some((profile) => profile.id === current.coordinatorBrainProfileId)
               ? current.coordinatorBrainProfileId
-              : (fallbackBrain?.id ?? ''),
+              : '',
           coordinatorCoderProfileId:
-            current.coordinatorCoderProfileId && coordinatorProfiles.some((profile) => profile.id === current.coordinatorCoderProfileId)
+            current.coordinatorCoderProfileId && profiles.some((profile) => profile.id === current.coordinatorCoderProfileId)
               ? current.coordinatorCoderProfileId
-              : (fallbackCoder?.id ?? ''),
+              : '',
         };
       });
     } catch (err) {
@@ -657,8 +662,14 @@ export function WorkspaceTerminal({
     void stepWorkspaceCoordinator({
       workspaceId,
       instruction: nextInstruction,
+      brainProvider: composerSettings.coordinatorBrainProvider || null,
+      coderProvider: composerSettings.coordinatorCoderProvider || null,
       brainProfileId: composerSettings.coordinatorBrainProfileId || null,
       coderProfileId: composerSettings.coordinatorCoderProfileId || null,
+      brainModel: composerSettings.coordinatorBrainModel || null,
+      coderModel: composerSettings.coordinatorCoderModel || null,
+      brainReasoning: composerSettings.coordinatorBrainReasoning || null,
+      coderReasoning: composerSettings.coordinatorCoderReasoning || null,
     })
       .then((next) => setCoordinatorStatus(next))
       .catch((err) => {
@@ -676,8 +687,14 @@ export function WorkspaceTerminal({
       });
   }, [
     composerSettings.coordinatorAutoStepCooldownSeconds,
+    composerSettings.coordinatorBrainProvider,
+    composerSettings.coordinatorCoderProvider,
     composerSettings.coordinatorBrainProfileId,
     composerSettings.coordinatorCoderProfileId,
+    composerSettings.coordinatorBrainModel,
+    composerSettings.coordinatorCoderModel,
+    composerSettings.coordinatorBrainReasoning,
+    composerSettings.coordinatorCoderReasoning,
     setActionError,
     workspaceId,
   ]);
@@ -799,6 +816,41 @@ export function WorkspaceTerminal({
     sendPrompt(nextPrompt, { forceImmediate: true });
   }, [focusedChatSession, queuedPrompts, sendPrompt]);
 
+  const handleCoordinatorReviewDiff = useCallback(() => {
+    void refreshWorkbenchState();
+  }, [refreshWorkbenchState]);
+
+  const handleCoordinatorRunTests = useCallback(() => {
+    if (!forgeConfig?.run[0]) return;
+    void startRunCommand(0);
+  }, [forgeConfig?.run, startRunCommand]);
+
+  const handleCoordinatorAskReviewer = useCallback(() => {
+    if (!focusedChatSession) {
+      showCoordinatorToast('Open an agent chat to run reviewer prompts.');
+      return;
+    }
+    const action: AgentChatNextAction = {
+      id: 'coord-ask-reviewer',
+      label: 'Ask reviewer',
+      kind: 'ask_reviewer',
+    };
+    void handleWorkbenchAction(action);
+  }, [focusedChatSession, handleWorkbenchAction, showCoordinatorToast]);
+
+  const handleCoordinatorCreatePr = useCallback(() => {
+    if (!workspaceId) return;
+    setBusy(true);
+    setError(null);
+    void createWorkspacePr(workspaceId)
+      .then(() => Promise.all([
+        refreshWorkbenchState(),
+        refreshReadiness(),
+      ]))
+      .catch(setActionError)
+      .finally(() => setBusy(false));
+  }, [refreshReadiness, refreshWorkbenchState, setActionError, workspaceId]);
+
   useEffect(() => {
     if (!requestedFilePath) return;
     void openEditorFile(requestedFilePath);
@@ -880,9 +932,20 @@ export function WorkspaceTerminal({
       )}
 
       <CoordinatorTimeline
+        workspaceId={workspace.id}
         status={coordinatorStatus}
         agentProfiles={agentProfiles}
         onRefresh={() => void refreshCoordinatorStatus()}
+        onOpenReviewCockpit={onOpenReviewCockpit}
+        onReviewDiff={handleCoordinatorReviewDiff}
+        onRunTests={handleCoordinatorRunTests}
+        onAskReviewer={handleCoordinatorAskReviewer}
+        onCreatePr={handleCoordinatorCreatePr}
+        canReviewDiff={changedFiles.length > 0}
+        canRunTests={Boolean(forgeConfig?.run[0])}
+        canAskReviewer={Boolean(focusedChatSession)}
+        canCreatePr={changedFiles.length > 0 && !workspace.prNumber}
+        hasExistingPr={Boolean(workspace.prNumber)}
         onReplayAction={async (actionId, promptOverride) => {
           if (!workspaceId) return;
           try {

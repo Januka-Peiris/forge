@@ -4,7 +4,8 @@ use rusqlite::{params, OptionalExtension};
 
 use crate::db::Database;
 use crate::models::{
-    CoordinatorActionLog, CoordinatorRun, CoordinatorWorker, WorkspaceCoordinatorStatus,
+    CoordinatorActionLog, CoordinatorResultPayload, CoordinatorRun, CoordinatorWorker,
+    WorkspaceCoordinatorStatus,
 };
 
 pub struct CoordinatorActionInsert<'a> {
@@ -49,6 +50,7 @@ fn worker_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CoordinatorWorke
 }
 
 fn action_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CoordinatorActionLog> {
+    let raw_json: Option<String> = row.get("raw_json")?;
     Ok(CoordinatorActionLog {
         id: row.get("id")?,
         run_id: row.get("run_id")?,
@@ -59,9 +61,19 @@ fn action_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CoordinatorActio
         worker_id: row.get("worker_id")?,
         prompt: row.get("prompt")?,
         message: row.get("message")?,
-        raw_json: row.get("raw_json")?,
+        result: parse_result_payload(raw_json.as_deref()),
+        raw_json,
         created_at: row.get("created_at")?,
     })
+}
+
+fn parse_result_payload(raw_json: Option<&str>) -> Option<CoordinatorResultPayload> {
+    let raw = raw_json?;
+    let value = serde_json::from_str::<serde_json::Value>(raw).ok()?;
+    if let Some(result) = value.get("result") {
+        return serde_json::from_value::<CoordinatorResultPayload>(result.clone()).ok();
+    }
+    serde_json::from_value::<CoordinatorResultPayload>(value).ok()
 }
 
 pub fn active_run_for_workspace(
@@ -137,6 +149,25 @@ pub fn mark_run_result(
                  updated_at = CURRENT_TIMESTAMP
              WHERE id = ?1",
             params![run_id, last_response, last_error],
+        )?;
+        Ok(())
+    })
+}
+
+pub fn update_run_profiles(
+    db: &Database,
+    run_id: &str,
+    brain_profile_id: &str,
+    coder_profile_id: &str,
+) -> Result<(), String> {
+    db.with_connection_mut(|connection| {
+        connection.execute(
+            "UPDATE workspace_coordinator_runs
+             SET brain_profile_id = ?2,
+                 coder_profile_id = ?3,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?1",
+            params![run_id, brain_profile_id, coder_profile_id],
         )?;
         Ok(())
     })

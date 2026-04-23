@@ -254,6 +254,10 @@ export default function App() {
           requestedFilePath={requestedEditorFilePath}
           onRequestedFilePathHandled={() => setRequestedEditorFilePath(null)}
           onOpenInCursor={() => void openWorkspaceInCursor()}
+          onOpenReviewCockpit={(path) => {
+            setSelectedReviewPath(path ?? null);
+            setView('reviews');
+          }}
         />
       );
     }

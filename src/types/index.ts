@@ -19,6 +19,8 @@ export type { AgentContextWorktree, WorkspaceAgentContext, WorkspaceContextItem,
 export type { AgentProfile } from './agent-profile';
 export type {
   CoordinatorActionLog,
+  CoordinatorResultArtifact,
+  CoordinatorResultPayload,
   ReplayWorkspaceCoordinatorActionInput,
   CoordinatorRun,
   CoordinatorWorker,
