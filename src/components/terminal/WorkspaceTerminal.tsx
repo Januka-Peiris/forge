@@ -114,6 +114,8 @@ export function WorkspaceTerminal({
   const [changedFiles, setChangedFiles] = useState<WorkspaceChangedFile[]>([]);
   const [reviewCockpit, setReviewCockpit] = useState<WorkspaceReviewCockpit | null>(null);
   const [acceptedPlans, setAcceptedPlans] = useState<Record<string, string>>({});
+  const [planTransitionEligibleBySession, setPlanTransitionEligibleBySession] = useState<Record<string, boolean>>({});
+  const [workflowHint, setWorkflowHint] = useState<string | null>(null);
   const [agentProfiles, setAgentProfiles] = useState<AgentProfile[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useAgentProfile();
   const [composerSettings, setComposerSettings] = useState<ComposerSettings>({
@@ -216,13 +218,14 @@ export function WorkspaceTerminal({
     () => focusedChatSession ? deriveNextActions({
       session: focusedChatSession,
       events: focusedChatEvents,
+      hasAcceptedPlan: Boolean(acceptedPlans[focusedChatSession.id]),
       readiness: workspaceReadiness,
       changedFiles,
       reviewCockpit,
       hasRunCommands: (forgeConfig?.run.length ?? 0) > 0,
       hasPr: !!workspace?.prNumber,
     }) : [],
-    [changedFiles, focusedChatEvents, focusedChatSession, forgeConfig?.run.length, reviewCockpit, workspace?.prNumber, workspaceReadiness],
+    [acceptedPlans, changedFiles, focusedChatEvents, focusedChatSession, forgeConfig?.run.length, reviewCockpit, workspace?.prNumber, workspaceReadiness],
   );
 
   /** Running sessions not shown in the main panes (for the attach overflow strip only). */
@@ -789,6 +792,7 @@ export function WorkspaceTerminal({
     selectedProfileId,
     composerSettings,
     acceptedPlans,
+    planTransitionEligibleBySession,
     forgeConfig,
     refreshChatSessions,
     refreshWorkbenchState,
@@ -804,6 +808,7 @@ export function WorkspaceTerminal({
     setError,
     setActionError,
     onCoordinatorInfo: showCoordinatorToast,
+    onPlanAutoActInfo: setWorkflowHint,
     promptSendChainRef,
   });
 
@@ -815,6 +820,21 @@ export function WorkspaceTerminal({
     setQueuedPrompts((current) => ({ ...current, [focusedChatSession.id]: remaining }));
     sendPrompt(nextPrompt, { forceImmediate: true });
   }, [focusedChatSession, queuedPrompts, sendPrompt]);
+
+  useEffect(() => {
+    if (!focusedChatSession) return;
+    const hasPlan = Boolean(latestPlanEvent(focusedChatEvents)?.body);
+    setPlanTransitionEligibleBySession((current) => {
+      if (current[focusedChatSession.id] === hasPlan) return current;
+      return { ...current, [focusedChatSession.id]: hasPlan };
+    });
+  }, [focusedChatEvents, focusedChatSession]);
+
+  useEffect(() => {
+    if (!workflowHint) return;
+    const timeout = window.setTimeout(() => setWorkflowHint((current) => (current === workflowHint ? null : current)), 4200);
+    return () => window.clearTimeout(timeout);
+  }, [workflowHint]);
 
   const handleCoordinatorReviewDiff = useCallback(() => {
     void refreshWorkbenchState();
@@ -1031,6 +1051,7 @@ export function WorkspaceTerminal({
           canInterrupt={focusedChatSession?.status === 'running' || false}
           queuedCount={focusedChatSession ? (queuedPrompts[focusedChatSession.id]?.length ?? 0) : 0}
           promptTemplateWarning={promptTemplateWarning}
+          workflowHint={workflowHint}
           promptTemplates={promptTemplates}
           agentContext={agentContext}
           agentProfiles={agentProfiles}

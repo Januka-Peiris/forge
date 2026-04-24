@@ -148,6 +148,7 @@ interface WorkspaceComposerProps {
   canInterrupt: boolean;
   queuedCount: number;
   promptTemplateWarning: string | null;
+  workflowHint: string | null;
   promptTemplates: PromptTemplate[];
   agentContext: WorkspaceAgentContext | null;
   agentProfiles: AgentProfile[];
@@ -168,6 +169,7 @@ export function WorkspaceComposer({
   canInterrupt,
   queuedCount,
   promptTemplateWarning,
+  workflowHint,
   promptTemplates,
   agentContext,
   agentProfiles,
@@ -702,6 +704,9 @@ export function WorkspaceComposer({
           )}
           {promptTemplateWarning && (
             <span className="text-xs text-forge-yellow">{promptTemplateWarning}</span>
+          )}
+          {workflowHint && (
+            <span className="text-xs text-forge-blue">{workflowHint}</span>
           )}
           <span className="text-xs text-forge-muted">Type <span className="font-mono text-forge-text/80">/</span> for workflows (e.g. <span className="font-mono text-forge-text/80">/plan-act</span>)</span>
         </div>

@@ -19,6 +19,7 @@ interface UseWorkspaceTerminalComposerActionsParams {
   selectedProfileId: string;
   composerSettings: ComposerSettings;
   acceptedPlans: Record<string, string>;
+  planTransitionEligibleBySession: Record<string, boolean>;
   forgeConfig: ForgeWorkspaceConfig | null;
   refreshChatSessions: (preferredFocusId?: string | null, scope?: 'all' | 'active') => Promise<void>;
   refreshWorkbenchState: () => Promise<void>;
@@ -34,6 +35,7 @@ interface UseWorkspaceTerminalComposerActionsParams {
   setError: (error: string | null) => void;
   setActionError: (err: unknown) => void;
   onCoordinatorInfo?: (message: string) => void;
+  onPlanAutoActInfo?: (message: string) => void;
   promptSendChainRef: MutableRefObject<Promise<void>>;
 }
 
@@ -45,6 +47,7 @@ export function useWorkspaceTerminalComposerActions({
   selectedProfileId,
   composerSettings,
   acceptedPlans,
+  planTransitionEligibleBySession,
   forgeConfig,
   refreshChatSessions,
   refreshWorkbenchState,
@@ -60,8 +63,12 @@ export function useWorkspaceTerminalComposerActions({
   setError,
   setActionError,
   onCoordinatorInfo,
+  onPlanAutoActInfo,
   promptSendChainRef,
 }: UseWorkspaceTerminalComposerActionsParams) {
+  const PLANNING_INTENT_PATTERN = /\b(revise|revision|update|adjust|expand|replan|re-plan|rewrite)\b.*\bplan\b|\bplan\b.*\b(revise|revision|update|adjust|expand|replan|re-plan|rewrite)\b/i;
+  const hasPlanningIntent = (text: string) => PLANNING_INTENT_PATTERN.test(text);
+
   const togglePlanMode = () => {
     setComposerSettings((current) => {
       const next = current.selectedTaskMode === 'Plan' ? 'Act' : 'Plan';
@@ -217,9 +224,29 @@ export function useWorkspaceTerminalComposerActions({
             setError('Agent is still running. Use Interrupt + send or Queue if running.');
             return;
           }
-          let prompt = text;
-          const acceptedPlan = acceptedPlans[focusedChatSession.id];
-          if (acceptedPlan && selectedTaskMode !== 'Plan' && !prompt.includes('Accepted implementation plan:')) {
+          const trimmedText = text.trim();
+          const latestPlan = latestPlanEvent(focusedChatEvents);
+          const sessionEligible = planTransitionEligibleBySession[focusedChatSession.id] ?? Boolean(latestPlan?.body);
+          const keepInPlan = hasPlanningIntent(trimmedText);
+          const autoSwitchToAct = selectedTaskMode === 'Plan' && sessionEligible && !keepInPlan;
+          if (autoSwitchToAct) {
+            onPlanAutoActInfo?.('Auto-switched to Act using the latest plan (use plan wording to revise the plan).');
+            setComposerSettings((current) => (
+              current.selectedTaskMode === 'Plan'
+                ? { ...current, selectedTaskMode: 'Act', selectedClaudeAgent: current.selectedClaudeAgent === 'Plan' ? 'general-purpose' : current.selectedClaudeAgent }
+                : current
+            ));
+          }
+          const effectiveTaskMode = autoSwitchToAct ? 'Act' : selectedTaskMode;
+          const effectiveClaudeAgent = autoSwitchToAct && selectedClaudeAgent === 'Plan'
+            ? 'general-purpose'
+            : selectedClaudeAgent;
+          let prompt = trimmedText;
+          const acceptedPlan = acceptedPlans[focusedChatSession.id] ?? (latestPlan?.body ?? undefined);
+          if (acceptedPlan && !acceptedPlans[focusedChatSession.id]) {
+            setAcceptedPlans((current) => ({ ...current, [focusedChatSession.id]: acceptedPlan }));
+          }
+          if (acceptedPlan && effectiveTaskMode !== 'Plan' && !prompt.includes('Accepted implementation plan:')) {
             prompt = `Accepted implementation plan:\n${acceptedPlan}\n\nNow continue with this user request:\n${prompt}`;
           }
           if (effectiveBehavior === 'interrupt_send' && focusedChatSession.status === 'running') {
@@ -229,9 +256,9 @@ export function useWorkspaceTerminalComposerActions({
             sessionId: focusedChatSession.id,
             prompt,
             profileId: selectedProfileId,
-            taskMode: selectedTaskMode,
+            taskMode: effectiveTaskMode,
             reasoning: selectedReasoning,
-            claudeAgent: selectedClaudeAgent,
+            claudeAgent: effectiveClaudeAgent,
             model: selectedModel,
           });
           await refreshChatSessions(focusedChatSession.id);

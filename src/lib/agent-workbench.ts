@@ -74,6 +74,7 @@ export function deriveWorkbenchSummary(
 export function deriveNextActions(input: {
   session: AgentChatSession;
   events: AgentChatEvent[];
+  hasAcceptedPlan: boolean;
   readiness: WorkspaceReadiness | null;
   changedFiles: WorkspaceChangedFile[];
   reviewCockpit: WorkspaceReviewCockpit | null;
@@ -88,7 +89,7 @@ export function deriveNextActions(input: {
   const prComments = input.readiness?.prCommentCount ?? input.reviewCockpit?.prComments.length ?? 0;
 
   if (plan && input.session.status !== 'running') {
-    actions.push({ id: 'accept-plan', label: 'Accept Plan', kind: 'accept_plan', tone: 'primary' });
+    if (!input.hasAcceptedPlan) actions.push({ id: 'accept-plan', label: 'Accept Plan', kind: 'accept_plan', tone: 'primary' });
     actions.push({ id: 'ask-followup', label: 'Ask follow-up', kind: 'ask_followup' });
     actions.push({ id: 'copy-plan', label: 'Copy plan', kind: 'copy_plan' });
   }
