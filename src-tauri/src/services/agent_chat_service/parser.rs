@@ -18,14 +18,7 @@ pub(super) fn parse_adapter_line(provider: &str, line: &str) -> Vec<ParsedAgentE
             if text.is_empty() {
                 return Vec::new();
             }
-            return vec![ParsedAgentEvent {
-                event_type: "assistant_message".to_string(),
-                role: Some("assistant".to_string()),
-                title: None,
-                body: text,
-                status: None,
-                metadata: None,
-            }];
+            return assistant_text_events(&text);
         }
     };
     match provider {
@@ -46,14 +39,7 @@ fn parse_local_llm_line(line: &str) -> Vec<ParsedAgentEvent> {
     // Basic heuristic for local LLMs: if it looks like a tool call in markdown or specific text
     // we can try to promote it, but for now we just treat it as assistant text.
     // The UI handles markdown rendering of the 'body' automatically.
-    vec![ParsedAgentEvent {
-        event_type: "assistant_message".to_string(),
-        role: Some("assistant".to_string()),
-        title: None,
-        body: text,
-        status: None,
-        metadata: None,
-    }]
+    assistant_text_events(&text)
 }
 
 fn parse_claude_json_line(value: &Value) -> Vec<ParsedAgentEvent> {
@@ -75,7 +61,7 @@ fn parse_claude_json_line(value: &Value) -> Vec<ParsedAgentEvent> {
                         .and_then(Value::as_str)
                         .filter(|s| !s.trim().is_empty())
                     {
-                        out.push(assistant_text(text));
+                        out.extend(assistant_text_events(text));
                     }
                 }
                 "tool_use" => {
@@ -159,7 +145,7 @@ fn parse_codex_json_line(value: &Value) -> Vec<ParsedAgentEvent> {
                 .and_then(Value::as_str)
                 .filter(|s| !s.trim().is_empty())
             {
-                out.push(assistant_text(text));
+                out.extend(assistant_text_events(text));
             }
             return out;
         }
@@ -172,7 +158,7 @@ fn parse_codex_json_line(value: &Value) -> Vec<ParsedAgentEvent> {
         .and_then(Value::as_str)
         .filter(|s| !s.trim().is_empty())
     {
-        out.push(assistant_text(text));
+        out.extend(assistant_text_events(text));
     } else if typ.contains("command") || typ.contains("exec") || typ.contains("tool") {
         out.push(ParsedAgentEvent {
             event_type: if typ.contains("command") || typ.contains("exec") {
@@ -205,7 +191,7 @@ fn parse_kimi_json_line(value: &Value) -> Vec<ParsedAgentEvent> {
             .and_then(Value::as_str)
             .filter(|s| !s.trim().is_empty())
         {
-            out.push(assistant_text(text));
+            out.extend(assistant_text_events(text));
         }
         if let Some(tool_calls) = value.get("tool_calls").and_then(Value::as_array) {
             for call in tool_calls {
@@ -255,7 +241,7 @@ fn parse_kimi_json_line(value: &Value) -> Vec<ParsedAgentEvent> {
         .and_then(Value::as_str)
         .filter(|s| !s.trim().is_empty())
     {
-        out.push(assistant_text(text));
+        out.extend(assistant_text_events(text));
         return out;
     }
 
@@ -272,15 +258,82 @@ fn parse_kimi_json_line(value: &Value) -> Vec<ParsedAgentEvent> {
     out
 }
 
-fn assistant_text(text: &str) -> ParsedAgentEvent {
+fn assistant_text_events(text: &str) -> Vec<ParsedAgentEvent> {
+    split_proposed_plan_blocks(text)
+}
+
+fn assistant_message(body: &str) -> ParsedAgentEvent {
     ParsedAgentEvent {
         event_type: "assistant_message".to_string(),
         role: Some("assistant".to_string()),
         title: None,
-        body: text.to_string(),
+        body: body.to_string(),
         status: None,
         metadata: None,
     }
+}
+
+fn plan_message(body: &str) -> ParsedAgentEvent {
+    ParsedAgentEvent {
+        event_type: "plan".to_string(),
+        role: Some("assistant".to_string()),
+        title: Some("Plan".to_string()),
+        body: body.to_string(),
+        status: None,
+        metadata: None,
+    }
+}
+
+fn split_proposed_plan_blocks(text: &str) -> Vec<ParsedAgentEvent> {
+    const OPEN: &str = "<proposed_plan>";
+    const CLOSE: &str = "</proposed_plan>";
+
+    let mut events = Vec::new();
+    let mut cursor = 0usize;
+
+    while let Some(open_start) = find_ascii_case_insensitive(text, OPEN, cursor) {
+        let content_start = open_start + OPEN.len();
+        let Some(close_start) = find_ascii_case_insensitive(text, CLOSE, content_start) else {
+            break;
+        };
+        let close_end = close_start + CLOSE.len();
+
+        let before = text[cursor..open_start].trim();
+        if !before.is_empty() {
+            events.push(assistant_message(before));
+        }
+
+        let plan = text[content_start..close_start].trim();
+        if !plan.is_empty() {
+            events.push(plan_message(plan));
+        }
+
+        cursor = close_end;
+    }
+
+    let trailing = text[cursor..].trim();
+    if !trailing.is_empty() {
+        events.push(assistant_message(trailing));
+    }
+
+    if events.is_empty() && !text.trim().is_empty() {
+        events.push(assistant_message(text.trim()));
+    }
+
+    events
+}
+
+fn find_ascii_case_insensitive(haystack: &str, needle: &str, start: usize) -> Option<usize> {
+    let haystack = haystack.as_bytes();
+    let needle = needle.as_bytes();
+    if needle.is_empty() || start >= haystack.len() || needle.len() > haystack.len() {
+        return None;
+    }
+
+    haystack[start..]
+        .windows(needle.len())
+        .position(|window| window.eq_ignore_ascii_case(needle))
+        .map(|index| start + index)
 }
 
 fn tool_event_type(name: &str) -> String {
@@ -340,4 +393,40 @@ fn strip_ansi(input: &str) -> String {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plain_assistant_text_stays_assistant_message() {
+        let events = split_proposed_plan_blocks("Here is a normal response.");
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "assistant_message");
+        assert_eq!(events[0].body, "Here is a normal response.");
+    }
+
+    #[test]
+    fn proposed_plan_block_becomes_plan_event() {
+        let events =
+            split_proposed_plan_blocks("<proposed_plan>\n# Plan\n- Do it\n</proposed_plan>");
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "plan");
+        assert_eq!(events[0].title.as_deref(), Some("Plan"));
+        assert_eq!(events[0].body, "# Plan\n- Do it");
+    }
+
+    #[test]
+    fn surrounding_text_is_preserved() {
+        let events =
+            split_proposed_plan_blocks("Intro\n<proposed_plan>Plan body</proposed_plan>\nOutro");
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[0].event_type, "assistant_message");
+        assert_eq!(events[0].body, "Intro");
+        assert_eq!(events[1].event_type, "plan");
+        assert_eq!(events[1].body, "Plan body");
+        assert_eq!(events[2].event_type, "assistant_message");
+        assert_eq!(events[2].body, "Outro");
+    }
 }

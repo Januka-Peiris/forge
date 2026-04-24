@@ -153,25 +153,25 @@ pub fn get_workspace_hook_inspector(
     workspace_id: &str,
 ) -> Result<WorkspaceHookInspector, String> {
     let config = workspace_script_service::get_workspace_forge_config(state, workspace_id)?;
-    let risky_scripts_enabled = settings_repository::get_value(
-        &state.db,
-        "allow_risky_workspace_scripts",
-    )?
-    .map(|value| value == "true")
-    .unwrap_or(false);
+    let risky_scripts_enabled =
+        settings_repository::get_value(&state.db, "allow_risky_workspace_scripts")?
+            .map(|value| value == "true")
+            .unwrap_or(false);
 
     let commands = collect_hook_commands(&config.hooks)
         .into_iter()
-        .map(|(id, hook_kind, phase, label, command)| WorkspaceHookCommand {
-            id,
-            hook_kind,
-            phase,
-            label,
-            safety: command_safety_service::check_command_safety(&command),
-            will_block_when_risky: !risky_scripts_enabled
-                && command_safety_service::is_risky_command(&command),
-            command,
-        })
+        .map(
+            |(id, hook_kind, phase, label, command)| WorkspaceHookCommand {
+                id,
+                hook_kind,
+                phase,
+                label,
+                safety: command_safety_service::check_command_safety(&command),
+                will_block_when_risky: !risky_scripts_enabled
+                    && command_safety_service::is_risky_command(&command),
+                command,
+            },
+        )
         .collect::<Vec<_>>();
 
     let recent_events = activity_repository::list_for_workspace(&state.db, workspace_id, 80)?
@@ -220,11 +220,23 @@ fn collect_hook_commands(
 
 fn map_activity_to_hook_event(activity: crate::models::ActivityItem) -> Option<WorkspaceHookEvent> {
     let (category, event, status) = match activity.event.as_str() {
-        "Workspace hook finished" => ("hook", "hook_finished", infer_hook_status(activity.details.as_deref())),
+        "Workspace hook finished" => (
+            "hook",
+            "hook_finished",
+            infer_hook_status(activity.details.as_deref()),
+        ),
         "Workspace hook failed" => ("hook", "hook_failed", "failed".to_string()),
         "Workspace hook blocked" => ("guardrail", "hook_blocked", "blocked".to_string()),
-        "Workspace script blocked" => ("guardrail", "workspace_script_blocked", "blocked".to_string()),
-        "Terminal launch blocked" => ("guardrail", "terminal_launch_blocked", "blocked".to_string()),
+        "Workspace script blocked" => (
+            "guardrail",
+            "workspace_script_blocked",
+            "blocked".to_string(),
+        ),
+        "Terminal launch blocked" => (
+            "guardrail",
+            "terminal_launch_blocked",
+            "blocked".to_string(),
+        ),
         _ => return None,
     };
 

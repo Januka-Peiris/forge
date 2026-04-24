@@ -57,7 +57,7 @@ import { useWorkspaceTerminalOutput } from './useWorkspaceTerminalOutput';
 import { WorkspaceTerminalEmptyState } from './WorkspaceTerminalEmptyState';
 import { WorkspaceContextFooter } from './WorkspaceContextFooter';
 import { CoordinatorTimeline } from './CoordinatorTimeline';
-import { useWorkspaceTerminalComposerActions } from './useWorkspaceTerminalComposerActions';
+import { useWorkspaceTerminalComposerActions, type AcceptedPlan } from './useWorkspaceTerminalComposerActions';
 import { useWorkspaceTerminalSessionActions } from './useWorkspaceTerminalSessionActions';
 import { useWorkspaceTerminalPolling } from './useWorkspaceTerminalPolling';
 import { useWorkspaceTerminalEvents } from './useWorkspaceTerminalEvents';
@@ -113,7 +113,7 @@ export function WorkspaceTerminal({
   const [workspaceReadiness, setWorkspaceReadiness] = useState<WorkspaceReadiness | null>(null);
   const [changedFiles, setChangedFiles] = useState<WorkspaceChangedFile[]>([]);
   const [reviewCockpit, setReviewCockpit] = useState<WorkspaceReviewCockpit | null>(null);
-  const [acceptedPlans, setAcceptedPlans] = useState<Record<string, string>>({});
+  const [acceptedPlans, setAcceptedPlans] = useState<Record<string, AcceptedPlan>>({});
   const [planTransitionEligibleBySession, setPlanTransitionEligibleBySession] = useState<Record<string, boolean>>({});
   const [workflowHint, setWorkflowHint] = useState<string | null>(null);
   const [agentProfiles, setAgentProfiles] = useState<AgentProfile[]>([]);
@@ -563,16 +563,28 @@ export function WorkspaceTerminal({
       void refreshAgentContext();
       void refreshAgentProfiles();
       void refreshModelSettings();
-      void refreshSessions(true);
-      void refreshChatSessions(undefined, 'all');
+      void refreshSessions(false);
+      void refreshChatSessions(undefined, 'active');
       void refreshWorkbenchState();
       void refreshCoordinatorStatus();
-      const timer = window.setTimeout(() => {
+      const outputTimer = window.setTimeout(() => {
+        if (document.hidden) return;
+        void refreshSessions(true);
+      }, 250);
+      const chatBackfillTimer = window.setTimeout(() => {
+        if (document.hidden) return;
+        void refreshChatSessions(undefined, 'all');
+      }, 650);
+      const healthTimer = window.setTimeout(() => {
         if (document.hidden) return;
         void refreshHealth();
         void refreshReadiness();
       }, 1500);
-      return () => window.clearTimeout(timer);
+      return () => {
+        window.clearTimeout(outputTimer);
+        window.clearTimeout(chatBackfillTimer);
+        window.clearTimeout(healthTimer);
+      };
     }
   }, [refreshAgentContext, refreshAgentProfiles, refreshChatSessions, refreshCoordinatorStatus, refreshForgeConfig, refreshHealth, refreshModelSettings, refreshReadiness, refreshPromptTemplates, refreshSessions, refreshWorkbenchState, resetWorkspaceState, workspaceId]);
 
@@ -1005,7 +1017,7 @@ export function WorkspaceTerminal({
               sections={focusedRunSections}
               summary={focusedWorkbenchSummary.changedFileCount > 0 || focusedChatSession.status === 'succeeded' ? focusedWorkbenchSummary : null}
               nextActions={focusedNextActions}
-              acceptedPlanId={acceptedPlans[focusedChatSession.id] ? latestPlanEvent(focusedChatEvents)?.id ?? null : null}
+              acceptedPlanId={acceptedPlans[focusedChatSession.id]?.eventId ?? null}
               onAction={(action, event) => void handleWorkbenchAction(action, event)}
             />
           ) : focusedSession ? (

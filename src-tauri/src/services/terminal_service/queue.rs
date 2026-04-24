@@ -137,6 +137,7 @@ pub(super) fn queue_workspace_agent_prompt(
             prompt = format!("{metadata}\n\nUser request:\n{prompt}");
         }
     }
+    prompt = append_plan_mode_response_instructions(prompt, input.task_mode.as_deref());
     let profile = resolved_profile.id.clone();
     let mut entry = AgentPromptEntry {
         id: format!("prompt-{}", unique_suffix()),
@@ -175,6 +176,17 @@ pub(super) fn queue_workspace_agent_prompt(
         );
     }
     Ok(entry)
+}
+
+const PLAN_MODE_RESPONSE_INSTRUCTIONS: &str = "Forge Plan mode instructions:\n- Stay in planning mode: do not make file edits or run mutating commands.\n- Explore only as needed to make the plan decision-complete.\n- When you are ready to present the final implementation plan, wrap only the plan Markdown in <proposed_plan> and </proposed_plan> tags so Forge can render it as an actionable plan card.";
+
+fn append_plan_mode_response_instructions(mut prompt: String, task_mode: Option<&str>) -> String {
+    if task_mode.is_some_and(|mode| mode.eq_ignore_ascii_case("plan"))
+        && !prompt.contains("Forge Plan mode instructions:")
+    {
+        prompt = format!("{prompt}\n\n{PLAN_MODE_RESPONSE_INSTRUCTIONS}");
+    }
+    prompt
 }
 
 pub(super) fn batch_dispatch_workspace_agent_prompt(
@@ -231,17 +243,11 @@ pub(super) fn list_workspace_agent_prompts(
 }
 
 fn dispatch_prompt_entry(state: &AppState, entry: &mut AgentPromptEntry) -> Result<(), String> {
-    if let Err(err) = checkpoint_service::create_checkpoint_if_dirty(
-        state,
-        &entry.workspace_id,
-        "before agent prompt",
-    ) {
-        log::warn!(
-            target: "forge_lib",
-            "failed to create pre-prompt checkpoint for workspace {}: {err}",
-            entry.workspace_id
-        );
-    }
+    checkpoint_service::create_checkpoint_if_dirty_in_background(
+        state.clone(),
+        entry.workspace_id.clone(),
+        "before agent prompt".to_string(),
+    );
 
     let session = ensure_agent_session_for_prompt(state, &entry.workspace_id, &entry.profile)?;
 

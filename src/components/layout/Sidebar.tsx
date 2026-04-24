@@ -39,6 +39,15 @@ import { WorkspaceListItem } from '../workspaces/WorkspaceListItem';
 
 export type NavView = 'workspaces' | 'files' | 'reviews' | 'settings' | 'memory';
 
+type WorkspaceFilter = 'all' | 'active' | 'archived';
+
+const WORKSPACE_FILTER_KEY = 'forge:workspace-sidebar-filter';
+
+function readWorkspaceFilter(): WorkspaceFilter {
+  const raw = window.localStorage.getItem(WORKSPACE_FILTER_KEY);
+  return raw === 'all' || raw === 'active' || raw === 'archived' ? raw : 'active';
+}
+
 interface SidebarProps {
   activeView: NavView;
   onNavigate: (view: NavView) => void;
@@ -91,7 +100,7 @@ export function Sidebar({
   onCollapse,
   onFilteredWorkspacesChange,
 }: SidebarProps) {
-  const [filter, setFilter] = useState<'all' | 'active' | 'archived'>('all');
+  const [filter, setFilter] = useState<WorkspaceFilter>(readWorkspaceFilter);
   const [sort, setSort] = useState<'recent' | 'name' | 'status'>('recent');
   const [searchQuery, setSearchQuery] = useState('');
   /** Track which workspace row the mouse is hovering over so we can show quick lifecycle actions. */
@@ -112,6 +121,10 @@ export function Sidebar({
     y: number;
     workspace: Workspace;
   } | null>(null);
+
+  useEffect(() => {
+    window.localStorage.setItem(WORKSPACE_FILTER_KEY, filter);
+  }, [filter]);
 
   useEffect(() => {
     let cancelled = false;
@@ -337,7 +350,7 @@ export function Sidebar({
         <div className="mt-2 px-2 flex items-center gap-2">
           <div className="relative flex-1">
             <Filter className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-forge-muted pointer-events-none z-10" />
-            <Select value={filter} onValueChange={(v) => setFilter(v as 'all' | 'active' | 'archived')}>
+            <Select value={filter} onValueChange={(v) => setFilter(v as WorkspaceFilter)}>
               <SelectTrigger className="w-full pl-6 pr-2 py-1 text-xs bg-forge-card border-forge-border rounded-md h-auto">
                 <SelectValue />
               </SelectTrigger>

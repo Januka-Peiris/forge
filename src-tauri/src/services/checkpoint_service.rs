@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::process::Command;
+use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::models::{
@@ -250,6 +251,22 @@ pub fn create_branch_from_workspace_checkpoint(
             "Branch {branch} created from checkpoint. Workspace files were not changed."
         ),
     })
+}
+
+pub fn create_checkpoint_if_dirty_in_background(
+    state: AppState,
+    workspace_id: String,
+    reason: String,
+) {
+    thread::spawn(move || {
+        if let Err(err) = create_checkpoint_if_dirty(&state, &workspace_id, &reason) {
+            log::warn!(
+                target: "forge_lib",
+                "failed to create background checkpoint for workspace {}: {err}",
+                workspace_id
+            );
+        }
+    });
 }
 
 pub fn create_checkpoint_if_dirty(

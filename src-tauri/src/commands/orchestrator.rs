@@ -83,7 +83,12 @@ pub fn set_workspace_scheduler_job_enabled(
     job_id: String,
     enabled: bool,
 ) -> Result<(), String> {
-    orchestrator_service::set_workspace_scheduler_job_enabled(&state, &workspace_id, &job_id, enabled)
+    orchestrator_service::set_workspace_scheduler_job_enabled(
+        &state,
+        &workspace_id,
+        &job_id,
+        enabled,
+    )
 }
 
 #[tauri::command]

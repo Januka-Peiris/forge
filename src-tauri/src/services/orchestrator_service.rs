@@ -39,7 +39,7 @@ pub fn start_orchestrator_loop(state: AppState) {
             let now = now_secs();
             let due_jobs = list_due_scheduler_jobs(&state, now).unwrap_or_default();
             for job in due_jobs {
-                let single_flight_key = format!("{}:{}", job.workspace_id, job.kind);
+                let single_flight_key = scheduler_single_flight_key(&job);
                 let acquired = state
                     .scheduler_job_inflight
                     .lock()
@@ -84,6 +84,14 @@ pub fn start_orchestrator_loop(state: AppState) {
             std::thread::sleep(Duration::from_secs(SCHEDULER_TICK_SECS));
         }
     });
+}
+
+fn scheduler_single_flight_key(job: &DueJob) -> String {
+    if job.kind == "review_reminder" {
+        job.kind.clone()
+    } else {
+        format!("{}:{}", job.workspace_id, job.kind)
+    }
 }
 
 fn now_secs() -> u64 {
@@ -225,6 +233,35 @@ fn run_orchestrator_pass(state: &AppState) -> Result<(), String> {
     drop(terminals_registry);
 
     let workspace_context = context_lines.join("\n\n");
+    let pass_result = run_orchestrator_pass_inner(
+        state,
+        &model,
+        &run_at,
+        now,
+        &workspace_context,
+        &workspace_ids,
+    );
+
+    match &pass_result {
+        Ok(actions) => {
+            finalize_orchestrator_task_runs(state, &task_run_ids, "completed", actions.len(), None)
+        }
+        Err(error) => {
+            finalize_orchestrator_task_runs(state, &task_run_ids, "failed", 0, Some(error))
+        }
+    }
+
+    pass_result.map(|_| ())
+}
+
+fn run_orchestrator_pass_inner(
+    state: &AppState,
+    model: &str,
+    run_at: &str,
+    now: u64,
+    workspace_context: &str,
+    workspace_ids: &[String],
+) -> Result<Vec<OrchestratorAction>, String> {
     let prompt = format!(
         r#"You are the Forge Orchestrator — the strategic brain coordinating multiple AI coding agents (Claude, Codex, Kimi) running in parallel git worktrees.
 
@@ -251,11 +288,11 @@ Rules:
 - Do NOT include "idle" actions — just omit workspaces that need nothing"#
     );
 
-    let response = if is_openai_model(&model) {
-        call_openai_api(&model, &prompt)?
+    let response = if is_openai_model(model) {
+        call_openai_api(model, &prompt)?
     } else {
         let output = std::process::Command::new("claude")
-            .args(["--model", &model, "-p", &prompt])
+            .args(["--model", model, "-p", &prompt])
             .output()
             .map_err(|e| format!("Failed to run claude CLI: {e}"))?;
         if !output.status.success() {
@@ -324,27 +361,40 @@ Rules:
     }
 
     // Persist log + update state.
-    let _ =
-        orchestrator_repository::insert_log(&state.db, &run_at, &model, &workspace_ids, &actions);
+    let _ = orchestrator_repository::insert_log(&state.db, run_at, model, workspace_ids, &actions);
+
+    if let Ok(mut last_run) = state.orchestrator_last_run.lock() {
+        *last_run = Some(run_at.to_string());
+    }
+    if let Ok(mut last_actions) = state.orchestrator_last_actions.lock() {
+        *last_actions = actions.clone();
+    }
+
+    Ok(actions)
+}
+
+fn finalize_orchestrator_task_runs(
+    state: &AppState,
+    task_run_ids: &[(String, String)],
+    status: &str,
+    action_count: usize,
+    error: Option<&str>,
+) {
+    let event_name = if status == "completed" {
+        "orchestrator_pass_finished"
+    } else {
+        "orchestrator_pass_failed"
+    };
     for (workspace_id, task_run_id) in task_run_ids {
         task_lifecycle_service::append_task_event(
             state,
-            &task_run_id,
-            &workspace_id,
-            "orchestrator_pass_finished",
-            serde_json::json!({ "actionCount": actions.len() }),
+            task_run_id,
+            workspace_id,
+            event_name,
+            serde_json::json!({ "actionCount": action_count, "error": error }),
         );
-        let _ = task_lifecycle_service::mark_task_run_completed(state, &task_run_id, "completed");
+        let _ = task_lifecycle_service::mark_task_run_completed(state, task_run_id, status);
     }
-
-    if let Ok(mut last_run) = state.orchestrator_last_run.lock() {
-        *last_run = Some(run_at);
-    }
-    if let Ok(mut last_actions) = state.orchestrator_last_actions.lock() {
-        *last_actions = actions;
-    }
-
-    Ok(())
 }
 
 pub fn list_workspace_scheduler_jobs(
@@ -541,7 +591,7 @@ fn run_coordinator_autostep_watch_job(state: &AppState, workspace_id: &str) -> R
         .filter(|worker| worker.status == "running")
         .count();
     if has_active && running_workers == 0 {
-        let _ = coordinator_service::step_workspace_coordinator(
+        match coordinator_service::step_workspace_coordinator(
             state,
             crate::models::StepWorkspaceCoordinatorInput {
                 workspace_id: workspace_id.to_string(),
@@ -555,7 +605,16 @@ fn run_coordinator_autostep_watch_job(state: &AppState, workspace_id: &str) -> R
                 brain_reasoning: None,
                 coder_reasoning: None,
             },
-        );
+        ) {
+            Ok(_) => {}
+            Err(err) if err.starts_with("COORDINATOR_STEP_IN_PROGRESS:") => {
+                log::debug!(target: "forge_lib", "coordinator autostep already running for {workspace_id}");
+            }
+            Err(err) => {
+                log::warn!(target: "forge_lib", "coordinator autostep failed for {workspace_id}: {err}");
+                return Err(err);
+            }
+        }
     }
     Ok(())
 }
@@ -616,4 +675,35 @@ fn parse_actions(response: &str) -> Vec<OrchestratorAction> {
         text
     };
     serde_json::from_str::<Vec<OrchestratorAction>>(json_text).unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn due_job(workspace_id: &str, kind: &str) -> DueJob {
+        DueJob {
+            id: format!("job-{workspace_id}-{kind}"),
+            workspace_id: workspace_id.to_string(),
+            kind: kind.to_string(),
+            interval_seconds: 300,
+            jitter_pct: 0,
+        }
+    }
+
+    #[test]
+    fn review_reminder_uses_global_single_flight_key() {
+        assert_eq!(
+            scheduler_single_flight_key(&due_job("ws-1", "review_reminder")),
+            scheduler_single_flight_key(&due_job("ws-2", "review_reminder")),
+        );
+    }
+
+    #[test]
+    fn workspace_jobs_keep_workspace_scoped_single_flight_keys() {
+        assert_ne!(
+            scheduler_single_flight_key(&due_job("ws-1", "workspace_health_check")),
+            scheduler_single_flight_key(&due_job("ws-2", "workspace_health_check")),
+        );
+    }
 }

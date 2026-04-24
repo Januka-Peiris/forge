@@ -4,8 +4,7 @@ use tauri::Emitter;
 
 use crate::models::{
     CoordinatorAction, CoordinatorResultArtifact, CoordinatorResultPayload, CoordinatorWorker,
-    QueueAgentPromptInput,
-    ReplayWorkspaceCoordinatorActionInput, StartWorkspaceCoordinatorInput,
+    QueueAgentPromptInput, ReplayWorkspaceCoordinatorActionInput, StartWorkspaceCoordinatorInput,
     StepWorkspaceCoordinatorInput, WorkspaceCoordinatorStatus,
 };
 use crate::repositories::{
@@ -203,7 +202,11 @@ fn planner_result_payload(
         "planner",
         "Planner evaluated coordinator instruction and produced next actions.",
         next_action,
-        if planner_error.is_some() { "low" } else { "medium" },
+        if planner_error.is_some() {
+            "low"
+        } else {
+            "medium"
+        },
         "medium",
         "planned",
         evidence,
@@ -233,7 +236,11 @@ fn notify_result_payload(run_goal: &str, message: &str) -> Option<String> {
     serialize_result_payload(payload, None)
 }
 
-fn complete_result_payload(run_goal: &str, message: Option<&str>, prompt: Option<&str>) -> Option<String> {
+fn complete_result_payload(
+    run_goal: &str,
+    message: Option<&str>,
+    prompt: Option<&str>,
+) -> Option<String> {
     let mut evidence = vec!["Coordinator marked run complete.".to_string()];
     if let Some(value) = prompt.map(str::trim).filter(|value| !value.is_empty()) {
         evidence.push(format!("Completion prompt: {value}"));
@@ -335,12 +342,7 @@ fn resolve_coordinator_role_profile(
             )?
         }
     } else {
-        synthesize_coordinator_profile(
-            role,
-            "claude_code",
-            requested_model,
-            requested_reasoning,
-        )?
+        synthesize_coordinator_profile(role, "claude_code", requested_model, requested_reasoning)?
     };
     if let Some(model) = trim_non_empty(requested_model) {
         profile.model = Some(model);
@@ -1046,6 +1048,9 @@ fn validate_actions(
     if actions.len() > MAX_ACTIONS_PER_STEP {
         return Err("Coordinator returned too many actions in one step".to_string());
     }
+    if actions.len() > 1 && actions.iter().any(|action| action.action == "complete") {
+        return Err("complete must be the only coordinator action in a step".to_string());
+    }
     let mut out = Vec::with_capacity(actions.len());
     let existing_worker_count = workers.len();
     let mut additional_workers = 0usize;
@@ -1641,6 +1646,20 @@ mod tests {
         let err = validate_actions(&workers, vec![action("spawn_worker", Some("   "), None)])
             .expect_err("should reject blank prompt");
         assert!(err.contains("non-empty prompt"));
+    }
+
+    #[test]
+    fn rejects_complete_mixed_with_other_actions() {
+        let workers = Vec::<CoordinatorWorker>::new();
+        let err = validate_actions(
+            &workers,
+            vec![
+                action("complete", None, Some("done")),
+                action("spawn_worker", Some("do more"), None),
+            ],
+        )
+        .expect_err("complete should be exclusive");
+        assert!(err.contains("complete must be the only"));
     }
 
     #[test]

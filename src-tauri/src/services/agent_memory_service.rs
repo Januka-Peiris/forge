@@ -4,10 +4,7 @@ use crate::repositories::{agent_memory_repository, workspace_repository};
 use crate::services::workspace_script_service;
 use crate::state::AppState;
 
-pub fn sync_candidate_memories(
-    state: &AppState,
-    workspace_id: Option<&str>,
-) -> Result<(), String> {
+pub fn sync_candidate_memories(state: &AppState, workspace_id: Option<&str>) -> Result<(), String> {
     let workspaces = workspace_repository::list(&state.db)?;
     for workspace in workspaces {
         if workspace_id.is_some() && workspace_id != Some(workspace.id.as_str()) {
@@ -50,7 +47,9 @@ fn sync_workspace_candidates(state: &AppState, workspace_id: &str) -> Result<(),
                     value: &summary,
                     confidence: 0.68,
                     source_label: Some(".forge/config.json"),
-                    source_detail: Some("Derived from durable workspace setup/run/hook configuration."),
+                    source_detail: Some(
+                        "Derived from durable workspace setup/run/hook configuration.",
+                    ),
                     source_task_run_id: None,
                 },
             )?;
@@ -65,7 +64,9 @@ fn sync_workspace_candidates(state: &AppState, workspace_id: &str) -> Result<(),
             && memory.key.starts_with("run-command-")
             && !memory.value.trim().is_empty()
         {
-            *repeated_commands.entry(memory.value.trim().to_string()).or_insert(0) += 1;
+            *repeated_commands
+                .entry(memory.value.trim().to_string())
+                .or_insert(0) += 1;
         }
     }
 
@@ -100,19 +101,32 @@ fn summarize_workspace_rules(config: &crate::models::ForgeWorkspaceConfig) -> St
     if !config.setup.is_empty() {
         parts.push(format!(
             "Setup: {}",
-            config.setup.iter().take(2).cloned().collect::<Vec<_>>().join(" → ")
+            config
+                .setup
+                .iter()
+                .take(2)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(" → ")
         ));
     }
     if !config.run.is_empty() {
         parts.push(format!(
             "Checks: {}",
-            config.run.iter().take(3).cloned().collect::<Vec<_>>().join(" · ")
+            config
+                .run
+                .iter()
+                .take(3)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(" · ")
         ));
     }
     if !config.teardown.is_empty() {
         parts.push(format!(
             "Teardown: {}",
-            config.teardown
+            config
+                .teardown
                 .iter()
                 .take(2)
                 .cloned()
@@ -143,7 +157,13 @@ fn summarize_workspace_rules(config: &crate::models::ForgeWorkspaceConfig) -> St
 fn slugify_for_key(value: &str) -> String {
     let slug = value
         .chars()
-        .map(|ch| if ch.is_ascii_alphanumeric() { ch.to_ascii_lowercase() } else { '-' })
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
         .collect::<String>();
     let compact = slug
         .split('-')

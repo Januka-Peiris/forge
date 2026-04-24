@@ -13,7 +13,7 @@ import { listWorkspaceActivity } from '../../lib/tauri-api/activity';
 import { getWorkspaceForgeConfig, getWorkspaceHookInspector } from '../../lib/tauri-api/workspace-scripts';
 import { getWorkspaceReadiness } from '../../lib/tauri-api/workspace-readiness';
 import { listWorkspacePorts } from '../../lib/tauri-api/workspace-ports';
-import { getWorkspacePrDraft, getWorkspacePrStatus } from '../../lib/tauri-api/pr-draft';
+import { getCachedWorkspacePrStatus, getWorkspacePrDraft, getWorkspacePrStatus } from '../../lib/tauri-api/pr-draft';
 import { getWorkspaceChangedFiles } from '../../lib/tauri-api/git-review';
 import { getWorkspaceHealth } from '../../lib/tauri-api/workspace-health';
 import { getWorkspaceReviewCockpit } from '../../lib/tauri-api/review-cockpit';
@@ -124,6 +124,8 @@ export function useDetailPanelCockpitState(workspaceId: string | undefined, acti
     }
     let cancelled = false;
     let heavyTimer: number | undefined;
+    const cachedPrStatus = getCachedWorkspacePrStatus(workspaceId);
+    if (cachedPrStatus) setWorkspacePrStatus(cachedPrStatus);
     setCockpitLoading(true);
 
     loadCockpitSummaryData(workspaceId)

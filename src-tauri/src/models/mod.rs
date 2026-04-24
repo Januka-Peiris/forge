@@ -51,9 +51,8 @@ pub use checkpoint::{
 };
 pub use coordinator::{
     CoordinatorAction, CoordinatorActionLog, CoordinatorResultArtifact, CoordinatorResultPayload,
-    CoordinatorRun, CoordinatorWorker,
-    ReplayWorkspaceCoordinatorActionInput, StartWorkspaceCoordinatorInput,
-    StepWorkspaceCoordinatorInput, WorkspaceCoordinatorStatus,
+    CoordinatorRun, CoordinatorWorker, ReplayWorkspaceCoordinatorActionInput,
+    StartWorkspaceCoordinatorInput, StepWorkspaceCoordinatorInput, WorkspaceCoordinatorStatus,
 };
 pub use deep_link::{OpenDeepLinkInput, OpenDeepLinkResult};
 pub use environment::EnvironmentCheckItem;

@@ -22,6 +22,7 @@ import { Button } from '../ui/button';
 import { Switch } from '../ui/switch';
 
 const TIMELINE_EVENT_TYPES = new Set(['file_change', 'file_read', 'command', 'test_run', 'tool_call', 'tool_result']);
+const CHAT_SCROLL_POSITIONS = new Map<string, number>();
 
 export function AgentChatPanel({
   session,
@@ -44,6 +45,8 @@ export function AgentChatPanel({
   const [chatMode, setChatMode] = useState<'clean' | 'full'>('clean');
   const latestPlan = latestPlanEvent(events);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  const activeScrollKey = `${session.id}:${tab}`;
   const running = session.status === 'running';
   const handleAction = (action: AgentChatNextAction, event?: AgentChatEvent) => {
     if (action.kind === 'open_diagnostics') setTab('raw');
@@ -51,8 +54,33 @@ export function AgentChatPanel({
   };
 
   useEffect(() => {
-    if (tab === 'chat') bottomRef.current?.scrollIntoView({ block: 'end' });
-  }, [events.length, tab]);
+    const el = chatScrollRef.current;
+    if (!el || tab !== 'chat') return;
+    const saved = CHAT_SCROLL_POSITIONS.get(activeScrollKey);
+    if (saved !== undefined) {
+      window.requestAnimationFrame(() => {
+        el.scrollTop = saved;
+      });
+      return;
+    }
+    window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ block: 'end' }));
+  }, [activeScrollKey, tab]);
+
+  useEffect(() => {
+    if (tab !== 'chat') return;
+    const el = chatScrollRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (running || distanceFromBottom < 140) {
+      window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ block: 'end' }));
+    }
+  }, [events.length, running, tab]);
+
+  const rememberChatScroll = () => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+    CHAT_SCROLL_POSITIONS.set(activeScrollKey, el.scrollTop);
+  };
 
   const hasSummary = !!summary && summary.changedFileCount > 0;
   const hasNextActions = (nextActions ?? []).length > 0;
@@ -106,21 +134,11 @@ export function AgentChatPanel({
                     <span className="rounded border border-forge-green/25 bg-forge-green/10 px-1.5 py-0.5 text-[9px] uppercase text-forge-green">accepted</span>
                   )}
                 </div>
-                <MarkdownishText text={latestPlan.body} />
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {([
-                    { id: 'accept-plan', label: acceptedPlanId === latestPlan.id ? 'Plan accepted' : 'Accept Plan', kind: 'accept_plan', tone: 'primary' },
-                    { id: 'copy-plan', label: 'Copy Plan', kind: 'copy_plan' },
-                    { id: 'switch-to-act', label: 'Switch to Act', kind: 'switch_to_act' },
-                  ] as AgentChatNextAction[]).map((action) => (
-                    <ActionButton
-                      key={action.id}
-                      action={action}
-                      disabled={acceptedPlanId === latestPlan.id && action.kind === 'accept_plan'}
-                      onClick={() => handleAction(action, latestPlan)}
-                    />
-                  ))}
-                </div>
+                <PlanEventCard
+                  event={latestPlan}
+                  accepted={acceptedPlanId === latestPlan.id}
+                  onAction={handleAction}
+                />
               </>
             ) : (
               <p className="text-xs text-forge-muted">No plan yet.</p>
@@ -135,7 +153,7 @@ export function AgentChatPanel({
         </TabsContent>
 
         <TabsContent value="chat">
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+          <div ref={chatScrollRef} onScroll={rememberChatScroll} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
             <div className="flex flex-col gap-3">
               {events.length === 0 && <EmptyChat provider={session.provider} />}
               {sections.map((section) => (
@@ -351,42 +369,76 @@ function AgentEventCard({
     return <TimelineEventRow event={event} />;
   }
 
-  // Full card for plan, todo, result, error, next_action, and anything else
+  // Full card for plan, result, error, next_action, and anything else
   const isPlan = event.eventType === 'plan' || event.eventType === 'todo';
+  if (isPlan) {
+    return <PlanEventCard event={event} accepted={accepted} onAction={onAction} />;
+  }
+
   const isResult = event.eventType === 'result';
   const isError = event.eventType === 'error';
-  const eventActions: AgentChatNextAction[] = isPlan
-    ? [
-      { id: 'accept-plan', label: accepted ? 'Plan accepted' : 'Accept Plan', kind: 'accept_plan', tone: 'primary' },
-      { id: 'ask-followup', label: 'Ask follow-up', kind: 'ask_followup' },
-      { id: 'switch-to-act', label: 'Switch to Act', kind: 'switch_to_act' },
-      { id: 'copy-plan', label: 'Copy Plan', kind: 'copy_plan' },
-    ]
-    : event.metadata?.nextActions ?? [];
+  const eventActions: AgentChatNextAction[] = event.metadata?.nextActions ?? [];
 
-  const accentClass = isPlan
-    ? 'border-l-forge-blue/60'
-    : isResult
-      ? 'border-l-forge-green/60'
-      : isError
-        ? 'border-l-forge-red/60'
-        : 'border-l-forge-border/50';
+  const accentClass = isResult
+    ? 'border-l-forge-green/60'
+    : isError
+      ? 'border-l-forge-red/60'
+      : 'border-l-forge-border/50';
 
   return (
     <div className={`border-l-2 pl-3 py-1.5 ${accentClass}`}>
       <div className="mb-1 flex items-center gap-2">
         {iconForEvent(event)}
         <span className="text-xs font-semibold uppercase tracking-widest text-forge-muted">{event.title || labelForEvent(event.eventType)}</span>
-        {accepted && <span className="rounded border border-forge-green/25 bg-forge-green/10 px-1.5 py-0.5 text-[9px] uppercase text-forge-green">accepted</span>}
       </div>
-      {event.body && (isPlan ? <MarkdownishText text={event.body} /> : <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-forge-text/85">{event.body}</pre>)}
+      {event.body && <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-forge-text/85">{event.body}</pre>}
       {!!eventActions.length && (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {eventActions.map((action) => (
-            <ActionButton key={action.id} action={action} disabled={accepted && action.kind === 'accept_plan'} onClick={() => onAction?.(action, event)} />
+            <ActionButton key={action.id} action={action} onClick={() => onAction?.(action, event)} />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function PlanEventCard({
+  event,
+  accepted,
+  onAction,
+}: {
+  event: AgentChatEvent;
+  accepted?: boolean;
+  onAction?: (action: AgentChatNextAction, event?: AgentChatEvent) => void;
+}) {
+  const actions: AgentChatNextAction[] = [
+    { id: 'accept-plan', label: accepted ? 'Plan accepted' : 'Accept Plan', kind: 'accept_plan', tone: 'primary' },
+    { id: 'ask-followup', label: 'Ask follow-up', kind: 'ask_followup' },
+    { id: 'switch-to-act', label: 'Switch to Act', kind: 'switch_to_act' },
+    { id: 'copy-plan', label: 'Copy Plan', kind: 'copy_plan' },
+  ];
+
+  return (
+    <div className="overflow-hidden rounded-md border border-forge-blue/20 bg-forge-surface/70 shadow-sm shadow-black/10">
+      <div className="border-l-2 border-forge-blue pl-3 pr-3 py-2">
+        <div className="mb-1.5 flex items-center gap-2">
+          <ListChecks className="h-3.5 w-3.5 text-forge-blue" />
+          <span className="text-[11px] font-bold uppercase tracking-widest text-forge-blue">PLAN</span>
+          {accepted && <span className="rounded border border-forge-green/25 bg-forge-green/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-forge-green">accepted</span>}
+        </div>
+        <MarkdownishText text={event.body} />
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {actions.map((action) => (
+            <ActionButton
+              key={action.id}
+              action={action}
+              disabled={accepted && action.kind === 'accept_plan'}
+              onClick={() => onAction?.(action, event)}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

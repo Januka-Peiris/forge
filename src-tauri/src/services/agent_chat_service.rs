@@ -100,15 +100,16 @@ pub fn send_agent_chat_message(
                 .to_string(),
         );
     }
-    let mut prompt = input.prompt.trim().to_string();
-    if prompt.is_empty() {
+    let display_prompt = input.prompt.trim().to_string();
+    if display_prompt.is_empty() {
         return Err("Prompt is required".to_string());
     }
+    let mut prompt = display_prompt.clone();
 
     if let Some(metadata) = workspace_mcp_metadata(state, &session.workspace_id) {
-        if !prompt.contains("Forge workspace MCP config:") {
-            prompt = format!("{metadata}\n\nUser request:\n{prompt}");
-        }
+        prompt = prepare_agent_adapter_prompt(prompt, Some(&metadata), input.task_mode.as_deref());
+    } else {
+        prompt = prepare_agent_adapter_prompt(prompt, None, input.task_mode.as_deref());
     }
 
     let user_metadata = serde_json::json!({
@@ -128,22 +129,16 @@ pub fn send_agent_chat_message(
             event_type: "user_message",
             role: Some("user"),
             title: None,
-            body: &prompt,
+            body: &display_prompt,
             status: None,
             metadata: Some(user_metadata),
         },
     )?;
-    if let Err(err) = checkpoint_service::create_checkpoint_if_dirty(
-        state,
-        &session.workspace_id,
-        "before agent chat run",
-    ) {
-        log::warn!(
-            target: "forge_lib",
-            "failed to create pre-chat checkpoint for workspace {}: {err}",
-            session.workspace_id
-        );
-    }
+    checkpoint_service::create_checkpoint_if_dirty_in_background(
+        state.clone(),
+        session.workspace_id.clone(),
+        "before agent chat run".to_string(),
+    );
     agent_chat_repository::update_session_status(&state.db, &session.id, "running", None)?;
     let running_session =
         agent_chat_repository::get_session(&state.db, &session.id)?.unwrap_or(session);
@@ -167,6 +162,30 @@ pub fn send_agent_chat_message(
         should_resume_provider_session,
     )?;
     Ok(user_event)
+}
+
+fn prepare_agent_adapter_prompt(
+    mut prompt: String,
+    workspace_metadata: Option<&str>,
+    task_mode: Option<&str>,
+) -> String {
+    if let Some(metadata) = workspace_metadata {
+        if !prompt.contains("Forge workspace MCP config:") {
+            prompt = format!("{metadata}\n\nUser request:\n{prompt}");
+        }
+    }
+    append_plan_mode_response_instructions(prompt, task_mode)
+}
+
+const PLAN_MODE_RESPONSE_INSTRUCTIONS: &str = "Forge Plan mode instructions:\n- Stay in planning mode: do not make file edits or run mutating commands.\n- Explore only as needed to make the plan decision-complete.\n- When you are ready to present the final implementation plan, wrap only the plan Markdown in <proposed_plan> and </proposed_plan> tags so Forge can render it as an actionable plan card.";
+
+fn append_plan_mode_response_instructions(mut prompt: String, task_mode: Option<&str>) -> String {
+    if task_mode.is_some_and(|mode| mode.eq_ignore_ascii_case("plan"))
+        && !prompt.contains("Forge Plan mode instructions:")
+    {
+        prompt = format!("{prompt}\n\n{PLAN_MODE_RESPONSE_INSTRUCTIONS}");
+    }
+    prompt
 }
 
 fn workspace_mcp_metadata(state: &AppState, workspace_id: &str) -> Option<String> {
@@ -782,5 +801,25 @@ mod tests {
         );
         assert_eq!(tool_result.len(), 1);
         assert_eq!(tool_result[0].event_type, "tool_result");
+    }
+
+    #[test]
+    fn plan_mode_adapter_prompt_adds_hidden_instructions() {
+        let prompt = prepare_agent_adapter_prompt("Review tests".to_string(), None, Some("Plan"));
+        assert!(prompt.starts_with("Review tests"));
+        assert!(prompt.contains("Forge Plan mode instructions:"));
+        assert!(prompt.contains("<proposed_plan>"));
+    }
+
+    #[test]
+    fn adapter_prompt_keeps_workspace_metadata_out_of_display_prompt_contract() {
+        let prompt = prepare_agent_adapter_prompt(
+            "Review tests".to_string(),
+            Some("Forge workspace MCP config:\n- repo context"),
+            Some("Plan"),
+        );
+        assert!(prompt.contains("Forge workspace MCP config:"));
+        assert!(prompt.contains("User request:\nReview tests"));
+        assert!(prompt.contains("Forge Plan mode instructions:"));
     }
 }

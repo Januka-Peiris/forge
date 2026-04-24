@@ -39,14 +39,14 @@ export function useWorkspaceTerminalPolling({
       const hasRunningChat = chatSessionsRef.current.some((session) => session.status === 'running');
       const hasRunningSession = hasRunningTerminal || hasRunningChat;
 
-      if (!hasRunningSession && metadataPollTickRef.current % 3 !== 0) return;
+      if (!hasRunningSession && metadataPollTickRef.current % 6 !== 0) return;
 
       const shouldBackfillOutput = hasRunningSession
         ? metadataPollTickRef.current % 6 === 0
-        : metadataPollTickRef.current % 9 === 0;
+        : metadataPollTickRef.current % 18 === 0;
       const shouldRefreshExpensiveState = hasRunningSession
         ? metadataPollTickRef.current % 3 === 0
-        : metadataPollTickRef.current % 6 === 0;
+        : metadataPollTickRef.current % 12 === 0;
 
       void refreshSessions(shouldBackfillOutput);
       void refreshChatSessions(undefined, 'active');

@@ -223,23 +223,29 @@ pub fn upsert_candidate(
     input: AgentMemoryCandidateUpsert<'_>,
 ) -> Result<Option<AgentMemory>, String> {
     if let Some(existing) = get_by_key(db, input.workspace_id, input.key)? {
-        if existing.status == "dismissed" || existing.origin == "manual" || existing.status == "active" {
+        if existing.status == "dismissed"
+            || existing.origin == "manual"
+            || existing.status == "active"
+        {
             return Ok(None);
         }
     }
-    upsert(db, AgentMemoryUpsert {
-        workspace_id: input.workspace_id,
-        scope: input.scope,
-        key: input.key,
-        value: input.value,
-        origin: Some("auto"),
-        status: Some("candidate"),
-        confidence: Some(input.confidence),
-        source_task_run_id: input.source_task_run_id,
-        source_label: input.source_label,
-        source_detail: input.source_detail,
-        last_used_at: None,
-    })
+    upsert(
+        db,
+        AgentMemoryUpsert {
+            workspace_id: input.workspace_id,
+            scope: input.scope,
+            key: input.key,
+            value: input.value,
+            origin: Some("auto"),
+            status: Some("candidate"),
+            confidence: Some(input.confidence),
+            source_task_run_id: input.source_task_run_id,
+            source_label: input.source_label,
+            source_detail: input.source_detail,
+            last_used_at: None,
+        },
+    )
     .map(Some)
 }
 

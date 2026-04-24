@@ -7,6 +7,11 @@ import { stepWorkspaceCoordinator } from '../../lib/tauri-api/coordinator';
 import { latestPlanEvent } from '../../lib/agent-workbench';
 import { formatSessionError } from '../../lib/ui-errors';
 import type { AgentChatEvent, AgentChatNextAction, AgentChatSession } from '../../types/agent-chat';
+
+export interface AcceptedPlan {
+  eventId: string;
+  body: string;
+}
 import type { ForgeWorkspaceConfig, TerminalSession } from '../../types';
 import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
 import type { ComposerSettings } from './WorkspaceComposer';
@@ -18,7 +23,7 @@ interface UseWorkspaceTerminalComposerActionsParams {
   focusedChatEvents: AgentChatEvent[];
   selectedProfileId: string;
   composerSettings: ComposerSettings;
-  acceptedPlans: Record<string, string>;
+  acceptedPlans: Record<string, AcceptedPlan>;
   planTransitionEligibleBySession: Record<string, boolean>;
   forgeConfig: ForgeWorkspaceConfig | null;
   refreshChatSessions: (preferredFocusId?: string | null, scope?: 'all' | 'active') => Promise<void>;
@@ -28,7 +33,7 @@ interface UseWorkspaceTerminalComposerActionsParams {
   closeChatSession: (sessionId: string) => Promise<void>;
   startRunCommand: (index: number, restart?: boolean) => Promise<void>;
   setReviewCockpit: (cockpit: WorkspaceReviewCockpit | null) => void;
-  setAcceptedPlans: Dispatch<SetStateAction<Record<string, string>>>;
+  setAcceptedPlans: Dispatch<SetStateAction<Record<string, AcceptedPlan>>>;
   setComposerSettings: Dispatch<SetStateAction<ComposerSettings>>;
   setQueuedPrompts: Dispatch<SetStateAction<Record<string, string[]>>>;
   setBusy: (busy: boolean) => void;
@@ -47,7 +52,6 @@ export function useWorkspaceTerminalComposerActions({
   selectedProfileId,
   composerSettings,
   acceptedPlans,
-  planTransitionEligibleBySession,
   forgeConfig,
   refreshChatSessions,
   refreshWorkbenchState,
@@ -63,12 +67,8 @@ export function useWorkspaceTerminalComposerActions({
   setError,
   setActionError,
   onCoordinatorInfo,
-  onPlanAutoActInfo,
   promptSendChainRef,
 }: UseWorkspaceTerminalComposerActionsParams) {
-  const PLANNING_INTENT_PATTERN = /\b(revise|revision|update|adjust|expand|replan|re-plan|rewrite)\b.*\bplan\b|\bplan\b.*\b(revise|revision|update|adjust|expand|replan|re-plan|rewrite)\b/i;
-  const hasPlanningIntent = (text: string) => PLANNING_INTENT_PATTERN.test(text);
-
   const togglePlanMode = () => {
     setComposerSettings((current) => {
       const next = current.selectedTaskMode === 'Plan' ? 'Act' : 'Plan';
@@ -115,11 +115,15 @@ export function useWorkspaceTerminalComposerActions({
       case 'accept_plan': {
         const plan = event ?? latestPlanEvent(focusedChatEvents);
         if (plan?.body) {
-          setAcceptedPlans((current) => ({ ...current, [focusedChatSession.id]: plan.body }));
+          setAcceptedPlans((current) => ({ ...current, [focusedChatSession.id]: { eventId: plan.id, body: plan.body } }));
           setComposerSettings((current) => ({ ...current, selectedTaskMode: 'Act', selectedClaudeAgent: 'general-purpose' }));
         }
         return;
       }
+      case 'ask_followup':
+        setComposerSettings((current) => ({ ...current, selectedTaskMode: 'Plan', selectedClaudeAgent: focusedChatSession.provider === 'claude_code' ? 'Plan' : current.selectedClaudeAgent }));
+        window.setTimeout(() => window.dispatchEvent(new CustomEvent('forge:focus-composer')), 0);
+        return;
       case 'switch_to_act':
         setComposerSettings((current) => ({ ...current, selectedTaskMode: 'Act', selectedClaudeAgent: 'general-purpose' }));
         return;
@@ -225,29 +229,12 @@ export function useWorkspaceTerminalComposerActions({
             return;
           }
           const trimmedText = text.trim();
-          const latestPlan = latestPlanEvent(focusedChatEvents);
-          const sessionEligible = planTransitionEligibleBySession[focusedChatSession.id] ?? Boolean(latestPlan?.body);
-          const keepInPlan = hasPlanningIntent(trimmedText);
-          const autoSwitchToAct = selectedTaskMode === 'Plan' && sessionEligible && !keepInPlan;
-          if (autoSwitchToAct) {
-            onPlanAutoActInfo?.('Auto-switched to Act using the latest plan (use plan wording to revise the plan).');
-            setComposerSettings((current) => (
-              current.selectedTaskMode === 'Plan'
-                ? { ...current, selectedTaskMode: 'Act', selectedClaudeAgent: current.selectedClaudeAgent === 'Plan' ? 'general-purpose' : current.selectedClaudeAgent }
-                : current
-            ));
-          }
-          const effectiveTaskMode = autoSwitchToAct ? 'Act' : selectedTaskMode;
-          const effectiveClaudeAgent = autoSwitchToAct && selectedClaudeAgent === 'Plan'
-            ? 'general-purpose'
-            : selectedClaudeAgent;
+          const effectiveTaskMode = selectedTaskMode;
+          const effectiveClaudeAgent = selectedClaudeAgent;
           let prompt = trimmedText;
-          const acceptedPlan = acceptedPlans[focusedChatSession.id] ?? (latestPlan?.body ?? undefined);
-          if (acceptedPlan && !acceptedPlans[focusedChatSession.id]) {
-            setAcceptedPlans((current) => ({ ...current, [focusedChatSession.id]: acceptedPlan }));
-          }
-          if (acceptedPlan && effectiveTaskMode !== 'Plan' && !prompt.includes('Accepted implementation plan:')) {
-            prompt = `Accepted implementation plan:\n${acceptedPlan}\n\nNow continue with this user request:\n${prompt}`;
+          const acceptedPlan = acceptedPlans[focusedChatSession.id];
+          if (acceptedPlan?.body && effectiveTaskMode !== 'Plan' && !prompt.includes('Accepted implementation plan:')) {
+            prompt = `Accepted implementation plan:\n${acceptedPlan.body}\n\nNow continue with this user request:\n${prompt}`;
           }
           if (effectiveBehavior === 'interrupt_send' && focusedChatSession.status === 'running') {
             await interruptAgentChatSession(focusedChatSession.id).catch(() => undefined);
