@@ -23,6 +23,11 @@ fn configure_connection(connection: &Connection) -> Result<(), String> {
     connection
         .pragma_update(None, "synchronous", "NORMAL")
         .map_err(|err| format!("Failed to set SQLite synchronous mode: {err}"))?;
+    // Checkpoint every ~400KB of WAL writes (100 pages × 4KB) so the WAL never
+    // grows large enough to slow down reads.
+    connection
+        .pragma_update(None, "wal_autocheckpoint", "100")
+        .map_err(|err| format!("Failed to set SQLite WAL autocheckpoint: {err}"))?;
     connection
         .busy_timeout(std::time::Duration::from_millis(5_000))
         .map_err(|err| format!("Failed to set SQLite busy timeout: {err}"))?;
@@ -50,6 +55,9 @@ impl Database {
         configure_connection(&connection)?;
 
         migrations::run(&connection)?;
+
+        // Merge any WAL left over from a previous run into the main database file.
+        let _ = connection.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
 
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
