@@ -130,6 +130,7 @@ export function WorkspaceTerminal({
   const [allSessions, setAllSessions] = useState<TerminalSession[]>([]);
   const [chatSessions, setChatSessions] = useState<AgentChatSession[]>([]);
   const [chatEvents, setChatEvents] = useState<Record<string, AgentChatEvent[]>>({});
+  const [chatEventsLoaded, setChatEventsLoaded] = useState<Set<string>>(new Set());
   const [focusedChatId, setFocusedChatId] = useState<string | null>(null);
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -217,7 +218,7 @@ export function WorkspaceTerminal({
     [chatSessions, focusedChatId],
   );
   const focusedIsAgent = !!focusedChatSession || focusedSession?.terminalKind === 'agent' || focusedSession?.sessionRole === 'agent';
-  const focusedChatEventsLoaded = !focusedChatSession || Object.prototype.hasOwnProperty.call(chatEvents, focusedChatSession.id);
+  const focusedChatEventsLoaded = !focusedChatSession || chatEventsLoaded.has(focusedChatSession.id);
   const focusedChatEvents = useMemo(
     () => focusedChatSession ? (chatEvents[focusedChatSession.id] ?? []) : [],
     [chatEvents, focusedChatSession],
@@ -311,7 +312,6 @@ export function WorkspaceTerminal({
     chatEventLoadInFlightRef.current.add(sessionId);
     void listAgentChatEvents(sessionId)
       .then((events) => {
-        chatEventsHistoryLoadedRef.current.add(sessionId);
         setChatEvents((current) => {
           const live = current[sessionId] ?? [];
           const loadedIds = new Set(events.map((e) => e.id));
@@ -322,7 +322,14 @@ export function WorkspaceTerminal({
       })
       .catch(setActionError)
       .finally(() => {
+        chatEventsHistoryLoadedRef.current.add(sessionId);
         chatEventLoadInFlightRef.current.delete(sessionId);
+        setChatEventsLoaded((current) => {
+          if (current.has(sessionId)) return current;
+          const next = new Set(current);
+          next.add(sessionId);
+          return next;
+        });
       });
   }, [focusedChatSession?.id, setActionError]);
 
@@ -549,6 +556,7 @@ export function WorkspaceTerminal({
     promptSendChainRef.current = Promise.resolve();
     chatEventsHistoryLoadedRef.current.clear();
     chatEventLoadInFlightRef.current.clear();
+    setChatEventsLoaded(new Set());
     focusedIdRef.current = null;
     focusedChatIdRef.current = null;
     setVisibleSessions([]);
