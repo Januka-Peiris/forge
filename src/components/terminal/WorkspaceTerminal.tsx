@@ -184,7 +184,6 @@ export function WorkspaceTerminal({
   const chatSessionsRef = useSyncedRef(chatSessions);
   /** Serializes agent prompt writes so rapid Enter / Send do not race attach + PTY. */
   const promptSendChainRef = useRef(Promise.resolve());
-  const chatEventLoadInFlightRef = useRef<Set<string>>(new Set());
   const lastCoordinatorAutoStepEventRef = useRef<string | null>(null);
   const coordinatorAutoStepRunningRef = useRef(false);
   const coordinatorAutoStepQueuedRef = useRef(false);
@@ -314,21 +313,16 @@ export function WorkspaceTerminal({
   useEffect(() => {
     if (!focusedChatSession) return;
     if (Object.prototype.hasOwnProperty.call(chatEvents, focusedChatSession.id)) return;
-    if (chatEventLoadInFlightRef.current.has(focusedChatSession.id)) return;
 
-    chatEventLoadInFlightRef.current.add(focusedChatSession.id);
-    let cancelled = false;
-    void listAgentChatEvents(focusedChatSession.id)
+    const sessionId = focusedChatSession.id;
+    void listAgentChatEvents(sessionId)
       .then((events) => {
-        if (cancelled) return;
-        setChatEvents((current) => ({ ...current, [focusedChatSession.id]: events }));
+        setChatEvents((current) => {
+          if (Object.prototype.hasOwnProperty.call(current, sessionId)) return current;
+          return { ...current, [sessionId]: events };
+        });
       })
-      .catch(setActionError)
-      .finally(() => {
-        chatEventLoadInFlightRef.current.delete(focusedChatSession.id);
-      });
-
-    return () => { cancelled = true; };
+      .catch(setActionError);
   }, [chatEvents, focusedChatSession, setActionError]);
 
   const refreshForgeConfig = useCallback(async () => {
@@ -552,7 +546,6 @@ export function WorkspaceTerminal({
   const resetWorkspaceState = useCallback(() => {
     resetOutputState();
     promptSendChainRef.current = Promise.resolve();
-    chatEventLoadInFlightRef.current.clear();
     focusedIdRef.current = null;
     focusedChatIdRef.current = null;
     setVisibleSessions([]);
