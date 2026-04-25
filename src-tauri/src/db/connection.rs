@@ -124,6 +124,7 @@ impl Database {
     /// Run VACUUM to reclaim free pages after a prune. This rewrites the entire
     /// database and should only be called from a background thread — never on the
     /// startup path — because it holds the connection mutex for several seconds.
+    #[allow(dead_code)]
     pub fn vacuum(&self) -> Result<(), String> {
         self.with_connection(|connection| connection.execute("VACUUM", []).map(|_| ()))
             .map_err(|err| format!("Failed to vacuum database: {err}"))
