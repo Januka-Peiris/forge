@@ -13,8 +13,8 @@ export function listAgentChatSessions(workspaceId: string): Promise<AgentChatSes
   return invokeCommand<AgentChatSession[]>('list_agent_chat_sessions', { workspaceId });
 }
 
-export function listAgentChatEvents(sessionId: string, limit = 80): Promise<AgentChatEvent[]> {
-  return invokeCommand<AgentChatEvent[]>('list_agent_chat_events', { sessionId, limit });
+export function listAgentChatEvents(sessionId: string, limit = 100, skipToolResults = true): Promise<AgentChatEvent[]> {
+  return invokeCommand<AgentChatEvent[]>('list_agent_chat_events', { sessionId, limit, skipToolResults });
 }
 
 export function interruptAgentChatSession(sessionId: string): Promise<AgentChatSession> {

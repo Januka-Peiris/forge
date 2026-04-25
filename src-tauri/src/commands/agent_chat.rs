@@ -35,8 +35,9 @@ pub fn list_agent_chat_events(
     state: State<'_, AppState>,
     session_id: String,
     limit: Option<u32>,
+    skip_tool_results: Option<bool>,
 ) -> Result<Vec<AgentChatEvent>, String> {
-    agent_chat_service::list_agent_chat_events(&state, &session_id, limit)
+    agent_chat_service::list_agent_chat_events(&state, &session_id, limit, skip_tool_results.unwrap_or(false))
 }
 
 #[tauri::command]

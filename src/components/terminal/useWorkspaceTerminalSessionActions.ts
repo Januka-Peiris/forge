@@ -45,7 +45,7 @@ interface UseWorkspaceTerminalSessionActionsParams {
   appendOutput: (sessionId: string, chunks: TerminalOutputChunk[], reset?: boolean) => void;
   removeSessionOutput: (sessionId: string) => void;
   refreshSessions: (fetchOutput?: boolean, preferredFocusId?: string | null) => Promise<void>;
-  refreshChatSessions: (preferredFocusId?: string | null, scope?: 'all' | 'active') => Promise<void>;
+  refreshChatSessions: (preferredFocusId?: string | null) => Promise<void>;
   refreshHealth: () => Promise<void>;
   refreshReadiness: () => Promise<void>;
   setActionError: (err: unknown) => void;

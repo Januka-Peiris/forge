@@ -85,8 +85,9 @@ pub fn list_agent_chat_events(
     state: &AppState,
     session_id: &str,
     limit: Option<u32>,
+    skip_tool_results: bool,
 ) -> Result<Vec<AgentChatEvent>, String> {
-    agent_chat_repository::list_events_for_session_limited(&state.db, session_id, limit)
+    agent_chat_repository::list_events_for_session_limited(&state.db, session_id, limit, skip_tool_results)
 }
 
 pub fn send_agent_chat_message(

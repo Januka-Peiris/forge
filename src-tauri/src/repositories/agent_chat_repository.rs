@@ -230,43 +230,51 @@ pub fn list_events_for_session(
     db: &Database,
     session_id: &str,
 ) -> Result<Vec<AgentChatEvent>, String> {
-    list_events_for_session_limited(db, session_id, None)
+    list_events_for_session_limited(db, session_id, None, false)
 }
 
 pub fn list_events_for_session_limited(
     db: &Database,
     session_id: &str,
     limit: Option<u32>,
+    skip_tool_results: bool,
 ) -> Result<Vec<AgentChatEvent>, String> {
+    let type_filter = if skip_tool_results {
+        "AND event_type NOT IN ('tool_result', 'diagnostic')"
+    } else {
+        ""
+    };
     db.with_connection(|connection| {
         if let Some(limit) = limit {
-            let mut statement = connection.prepare(
+            let sql = format!(
                 r#"
                 SELECT id, session_id, seq, event_type, role, title, body, status, metadata, created_at
                 FROM (
                     SELECT id, session_id, seq, event_type, role, title, body, status, metadata, created_at
                     FROM agent_chat_events
-                    WHERE session_id = ?1
+                    WHERE session_id = ?1 {type_filter}
                     ORDER BY seq DESC
                     LIMIT ?2
                 ) recent
                 ORDER BY seq ASC
-                "#,
-            )?;
+                "#
+            );
+            let mut statement = connection.prepare(&sql)?;
             let events = statement
                 .query_map(params![session_id, limit], agent_chat_event_from_row)?
                 .collect::<rusqlite::Result<Vec<_>>>()?;
             return Ok(events);
         }
 
-        let mut statement = connection.prepare(
+        let sql = format!(
             r#"
             SELECT id, session_id, seq, event_type, role, title, body, status, metadata, created_at
             FROM agent_chat_events
-            WHERE session_id = ?1
+            WHERE session_id = ?1 {type_filter}
             ORDER BY seq ASC
-            "#,
-        )?;
+            "#
+        );
+        let mut statement = connection.prepare(&sql)?;
         let events = statement
             .query_map(params![session_id], agent_chat_event_from_row)?
             .collect::<rusqlite::Result<Vec<_>>>()?;

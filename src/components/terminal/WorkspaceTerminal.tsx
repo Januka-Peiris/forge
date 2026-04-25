@@ -184,6 +184,8 @@ export function WorkspaceTerminal({
   const chatSessionsRef = useSyncedRef(chatSessions);
   /** Serializes agent prompt writes so rapid Enter / Send do not race attach + PTY. */
   const promptSendChainRef = useRef(Promise.resolve());
+  const chatEventsHistoryLoadedRef = useRef<Set<string>>(new Set());
+  const chatEventLoadInFlightRef = useRef<Set<string>>(new Set());
   const lastCoordinatorAutoStepEventRef = useRef<string | null>(null);
   const coordinatorAutoStepRunningRef = useRef(false);
   const coordinatorAutoStepQueuedRef = useRef(false);
@@ -282,7 +284,6 @@ export function WorkspaceTerminal({
 
   const refreshChatSessions = useCallback(async (
     preferredFocusId?: string | null,
-    scope: 'all' | 'active' = 'active',
   ) => {
     if (!workspaceId) return;
     try {
@@ -296,15 +297,6 @@ export function WorkspaceTerminal({
       focusedChatIdRef.current = focused;
       setFocusedChatId(focused);
 
-      const sessionsNeedingEvents = sessions
-        .filter((session) => session.id === focused || session.status === 'running')
-        .slice(0, scope === 'all' ? 6 : 4);
-
-      if (sessionsNeedingEvents.length === 0) return;
-      const eventPairs = await Promise.all(
-        sessionsNeedingEvents.map(async (session) => [session.id, await listAgentChatEvents(session.id)] as const),
-      );
-      setChatEvents((current) => ({ ...current, ...Object.fromEntries(eventPairs) }));
     } catch (err) {
       setActionError(err);
     }
@@ -312,18 +304,27 @@ export function WorkspaceTerminal({
 
   useEffect(() => {
     if (!focusedChatSession) return;
-    if (Object.prototype.hasOwnProperty.call(chatEvents, focusedChatSession.id)) return;
-
     const sessionId = focusedChatSession.id;
+    if (chatEventsHistoryLoadedRef.current.has(sessionId)) return;
+    if (chatEventLoadInFlightRef.current.has(sessionId)) return;
+
+    chatEventLoadInFlightRef.current.add(sessionId);
     void listAgentChatEvents(sessionId)
       .then((events) => {
+        chatEventsHistoryLoadedRef.current.add(sessionId);
         setChatEvents((current) => {
-          if (Object.prototype.hasOwnProperty.call(current, sessionId)) return current;
-          return { ...current, [sessionId]: events };
+          const live = current[sessionId] ?? [];
+          const loadedIds = new Set(events.map((e) => e.id));
+          const merged = [...events, ...live.filter((e) => !loadedIds.has(e.id))]
+            .sort((a, b) => a.seq - b.seq);
+          return { ...current, [sessionId]: merged };
         });
       })
-      .catch(setActionError);
-  }, [chatEvents, focusedChatSession, setActionError]);
+      .catch(setActionError)
+      .finally(() => {
+        chatEventLoadInFlightRef.current.delete(sessionId);
+      });
+  }, [focusedChatSession?.id, setActionError]);
 
   const refreshForgeConfig = useCallback(async () => {
     if (!workspaceId) return;
@@ -546,6 +547,8 @@ export function WorkspaceTerminal({
   const resetWorkspaceState = useCallback(() => {
     resetOutputState();
     promptSendChainRef.current = Promise.resolve();
+    chatEventsHistoryLoadedRef.current.clear();
+    chatEventLoadInFlightRef.current.clear();
     focusedIdRef.current = null;
     focusedChatIdRef.current = null;
     setVisibleSessions([]);
@@ -591,7 +594,7 @@ export function WorkspaceTerminal({
       void refreshAgentProfiles();
       void refreshModelSettings();
       void refreshSessions(false);
-      void refreshChatSessions(undefined, 'active');
+      void refreshChatSessions();
       void refreshWorkbenchState();
       void refreshCoordinatorStatus();
       const outputTimer = window.setTimeout(() => {

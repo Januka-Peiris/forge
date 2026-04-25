@@ -8,7 +8,7 @@ interface UseWorkspaceTerminalPollingParams {
   visibleSessionsRef: MutableRefObject<TerminalSession[]>;
   chatSessionsRef: MutableRefObject<AgentChatSession[]>;
   refreshSessions: (fetchOutput?: boolean, preferredFocusId?: string | null) => Promise<void>;
-  refreshChatSessions: (preferredFocusId?: string | null, scope?: 'all' | 'active') => Promise<void>;
+  refreshChatSessions: (preferredFocusId?: string | null) => Promise<void>;
   refreshHealth: () => Promise<void>;
   refreshReadiness: () => Promise<void>;
   refreshWorkbenchState: () => Promise<void>;
@@ -49,7 +49,7 @@ export function useWorkspaceTerminalPolling({
         : metadataPollTickRef.current % 12 === 0;
 
       void refreshSessions(shouldBackfillOutput);
-      void refreshChatSessions(undefined, 'active');
+      void refreshChatSessions();
       if (shouldRefreshExpensiveState) {
         void refreshHealth();
         void refreshReadiness();
