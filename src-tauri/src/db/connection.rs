@@ -102,12 +102,10 @@ impl Database {
                 "DELETE FROM activity_items WHERE created_at < datetime('now', '-7 days')",
                 [],
             )?;
-
             transaction.execute(
                 "DELETE FROM terminal_output_chunks WHERE created_at < datetime('now', '-7 days')",
                 [],
             )?;
-
             transaction.execute(
                 "DELETE FROM workspace_run_logs WHERE created_at < datetime('now', '-7 days')",
                 [],
@@ -120,11 +118,15 @@ impl Database {
         // Drop old tree-sitter / symbol cache rows (blob-keyed; safe to prune aggressively)
         crate::context::cache::prune_old(self, 45);
 
-        // VACUUM must run outside a transaction
-        self.with_connection(|connection| connection.execute("VACUUM", []))
-            .map_err(|err| format!("Failed to vacuum database: {err}"))?;
-
         Ok(())
+    }
+
+    /// Run VACUUM to reclaim free pages after a prune. This rewrites the entire
+    /// database and should only be called from a background thread — never on the
+    /// startup path — because it holds the connection mutex for several seconds.
+    pub fn vacuum(&self) -> Result<(), String> {
+        self.with_connection(|connection| connection.execute("VACUUM", []).map(|_| ()))
+            .map_err(|err| format!("Failed to vacuum database: {err}"))
     }
 
     #[cfg(test)]

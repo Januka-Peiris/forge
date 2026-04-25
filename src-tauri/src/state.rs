@@ -56,11 +56,6 @@ impl AppState {
     pub fn initialize(app_handle: &AppHandle) -> Result<Self, String> {
         let db = Database::initialize(app_handle)?;
 
-        // Prune old data and vacuum on startup
-        if let Err(err) = db.prune_old_data() {
-            log::error!(target: "forge_lib", "Failed to prune old data: {err}");
-        }
-
         let now = crate::services::agent_process_service::timestamp();
         let interrupted_chat_groups = agent_chat_repository::list_running_chat_groups(&db)?;
         agent_chat_repository::mark_running_chats_interrupted(&db, &now)?;
