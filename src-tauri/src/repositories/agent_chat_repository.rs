@@ -156,7 +156,7 @@ pub fn list_sessions_for_workspace(
         let mut statement = connection.prepare(
             r#"
             SELECT id, workspace_id, provider, status, title, provider_session_id, cwd,
-                   raw_output, created_at, updated_at, ended_at, closed_at
+                   '' AS raw_output, created_at, updated_at, ended_at, closed_at
             FROM agent_chat_sessions
             WHERE workspace_id = ?1 AND closed_at IS NULL
             ORDER BY created_at DESC
@@ -230,7 +230,35 @@ pub fn list_events_for_session(
     db: &Database,
     session_id: &str,
 ) -> Result<Vec<AgentChatEvent>, String> {
+    list_events_for_session_limited(db, session_id, None)
+}
+
+pub fn list_events_for_session_limited(
+    db: &Database,
+    session_id: &str,
+    limit: Option<u32>,
+) -> Result<Vec<AgentChatEvent>, String> {
     db.with_connection(|connection| {
+        if let Some(limit) = limit {
+            let mut statement = connection.prepare(
+                r#"
+                SELECT id, session_id, seq, event_type, role, title, body, status, metadata, created_at
+                FROM (
+                    SELECT id, session_id, seq, event_type, role, title, body, status, metadata, created_at
+                    FROM agent_chat_events
+                    WHERE session_id = ?1
+                    ORDER BY seq DESC
+                    LIMIT ?2
+                ) recent
+                ORDER BY seq ASC
+                "#,
+            )?;
+            let events = statement
+                .query_map(params![session_id, limit], agent_chat_event_from_row)?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            return Ok(events);
+        }
+
         let mut statement = connection.prepare(
             r#"
             SELECT id, session_id, seq, event_type, role, title, body, status, metadata, created_at

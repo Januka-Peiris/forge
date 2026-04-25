@@ -664,7 +664,8 @@ export function WorkspaceTerminal({
   }, [filePreviewWidth]);
 
   useEffect(() => {
-    const { selectedModel: _model, ...toSave } = composerSettings;
+    const toSave = { ...composerSettings };
+    delete (toSave as Partial<typeof composerSettings>).selectedModel;
     window.localStorage.setItem(COMPOSER_SETTINGS_KEY, JSON.stringify(toSave));
   }, [composerSettings]);
 
