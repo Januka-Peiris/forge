@@ -38,14 +38,13 @@ pub fn run() {
             log::info!(target: "forge_lib", "SQLite database path: {}", state.db.path().display());
             println!("Forge SQLite database: {}", state.db.path().display());
 
-            // Prune stale rows and vacuum in a background thread so startup never blocks.
+            // Prune stale rows in a background thread so startup never blocks.
+            // VACUUM is intentionally omitted — it rewrites the entire DB and holds
+            // the connection mutex for seconds, which stalls all other commands.
             let bg_db = state.db.clone();
             std::thread::spawn(move || {
                 if let Err(err) = bg_db.prune_old_data() {
                     log::warn!(target: "forge_lib", "Background prune failed: {err}");
-                }
-                if let Err(err) = bg_db.vacuum() {
-                    log::warn!(target: "forge_lib", "Background vacuum failed: {err}");
                 }
             });
 
