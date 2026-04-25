@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import type { AgentChatSession, AgentProfile, WorkspaceAgentContext, WorkspaceContextPreview, WorkspaceCoordinatorStatus } from '../../types';
 import type { PromptTemplate } from '../../types/prompt-template';
 import { getWorkspaceContextPreview, refreshWorkspaceRepoContext } from '../../lib/tauri-api/agent-context';
+import { saveWorkspacePastedImage } from '../../lib/tauri-api/workspace-file-tree';
 import { agentProfilesForCoordinatorPicker } from '../../lib/tauri-api/agent-profiles';
 import { formatSessionError } from '../../lib/ui-errors';
 import {
@@ -15,6 +16,8 @@ import {
   roughTokenEstimateFromChars,
 } from './workspace-terminal-constants';
 import { WorkspaceComposerSettingsPopover } from './WorkspaceComposerSettingsPopover';
+
+const COMPOSER_DRAFTS = new Map<string, string>();
 
 const COORDINATOR_PROVIDER_OPTIONS = [
   { value: 'claude_code', label: 'Claude' },
@@ -182,7 +185,8 @@ export function WorkspaceComposer({
   onInterrupt,
   onStopCoordinator,
 }: WorkspaceComposerProps) {
-  const [promptInput, setPromptInput] = useState('');
+  const draftKey = `${workspaceId}:${focusedChatSession?.id ?? 'terminal'}`;
+  const [promptInput, setPromptInput] = useState(() => COMPOSER_DRAFTS.get(draftKey) ?? '');
   const [composerHeight, setComposerHeight] = useState<number>(() => {
     const raw = window.localStorage.getItem(AGENT_COMPOSER_HEIGHT_KEY);
     const parsed = raw ? Number(raw) : NaN;
@@ -193,6 +197,22 @@ export function WorkspaceComposer({
   const [contextError, setContextError] = useState<string | null>(null);
   const [coordinatorModelsOpen, setCoordinatorModelsOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const activeDraftKeyRef = useRef(draftKey);
+
+  const updatePromptInput = (next: string | ((current: string) => string)) => {
+    setPromptInput((current) => {
+      const value = typeof next === 'function' ? next(current) : next;
+      COMPOSER_DRAFTS.set(activeDraftKeyRef.current, value);
+      return value;
+    });
+  };
+
+  useEffect(() => {
+    if (activeDraftKeyRef.current === draftKey) return;
+    COMPOSER_DRAFTS.set(activeDraftKeyRef.current, promptInput);
+    activeDraftKeyRef.current = draftKey;
+    setPromptInput(COMPOSER_DRAFTS.get(draftKey) ?? '');
+  }, [draftKey, promptInput]);
 
   useEffect(() => {
     window.localStorage.setItem(AGENT_COMPOSER_HEIGHT_KEY, String(composerHeight));
@@ -283,7 +303,7 @@ export function WorkspaceComposer({
       const preview = await getWorkspaceContextPreview(workspaceId);
       setContextPreview(preview);
       if (!preview.promptContext.trim()) return;
-      setPromptInput((current) => {
+      updatePromptInput((current) => {
         if (current.includes('Forge repo context:')) return current;
         const suffix = current.trim().length > 0 ? `\n\n${current.trim()}` : '';
         return `${preview.promptContext}${suffix}`;
@@ -310,7 +330,7 @@ export function WorkspaceComposer({
 
   const injectLinkedContext = () => {
     if (!agentContext?.promptPreamble.trim()) return;
-    setPromptInput((current) => {
+    updatePromptInput((current) => {
       if (current.includes('Forge linked repository context:')) return current;
       const suffix = current.trim().length > 0 ? `\n\n${current.trim()}` : '';
       return `${agentContext.promptPreamble}${suffix}`;
@@ -320,12 +340,12 @@ export function WorkspaceComposer({
   const handleSend = () => {
     if (!promptInput.trim() || busy) return;
     const text = promptInput.trim();
-    setPromptInput('');
+    updatePromptInput('');
     onSend(text);
   };
 
   const applyPreset = (preset: 'plan-act' | 'plan-codex-review' | 'implement-review-pr', defaultPrompt: string) => {
-    setPromptInput((current) => current.trimStart().startsWith('/') || !current ? defaultPrompt : current);
+    updatePromptInput((current) => current.trimStart().startsWith('/') || !current ? defaultPrompt : current);
     onApplyWorkflowPreset(preset, defaultPrompt);
   };
 
@@ -334,7 +354,48 @@ export function WorkspaceComposer({
       applyPreset(option.preset, option.body);
       return;
     }
-    setPromptInput(option.body);
+    updatePromptInput(option.body);
+  };
+
+  const appendTextToPrompt = (text: string) => {
+    updatePromptInput((current) => {
+      const prefix = current.trim().length > 0 ? `${current.trimEnd()}\n\n` : '';
+      return `${prefix}${text}`;
+    });
+  };
+
+  const saveImageFile = async (file: File) => {
+    const buffer = await file.arrayBuffer();
+    const bytes = Array.from(new Uint8Array(buffer));
+    const path = await saveWorkspacePastedImage(workspaceId, file.name || 'pasted-image.png', bytes);
+    appendTextToPrompt(`![pasted image](${path})`);
+  };
+
+  const handleImageFiles = async (files: File[]) => {
+    const imageFiles = files.filter((file) => file.type.startsWith('image/'));
+    if (imageFiles.length === 0) return false;
+    try {
+      await Promise.all(imageFiles.map(saveImageFile));
+    } catch (err) {
+      setContextError(formatSessionError(err));
+    }
+    return true;
+  };
+
+  const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(event.clipboardData.files);
+    if (files.some((file) => file.type.startsWith('image/'))) {
+      event.preventDefault();
+      void handleImageFiles(files);
+    }
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(event.dataTransfer.files);
+    if (files.some((file) => file.type.startsWith('image/'))) {
+      event.preventDefault();
+      void handleImageFiles(files);
+    }
   };
 
   const provider = focusedChatSession?.provider ?? 'claude_code';
@@ -742,7 +803,12 @@ export function WorkspaceComposer({
             ref={textareaRef}
             data-forge-composer="true"
             value={promptInput}
-            onChange={(e) => setPromptInput(e.target.value)}
+            onChange={(e) => updatePromptInput(e.target.value)}
+            onPaste={handlePaste}
+            onDrop={handleDrop}
+            onDragOver={(e) => {
+              if (Array.from(e.dataTransfer.items).some((item) => item.type.startsWith('image/'))) e.preventDefault();
+            }}
             rows={5}
             placeholder={
               settings.sendBehavior === 'interrupt_send'

@@ -34,11 +34,14 @@ export function deriveAgentRunSections(events: AgentChatEvent[]): AgentRunSectio
     { kind: 'diagnostics', title: 'Diagnostics', events: [] },
   ];
   const byKind = Object.fromEntries(sections.map((section) => [section.kind, section])) as Record<AgentRunSectionKind, AgentRunSection>;
+  let latestTaskMode: string | null = null;
 
   for (const event of events) {
-    if (event.eventType === 'user_message' || event.eventType === 'assistant_message') {
-      const mode = latestPlanModeBefore(events, event.seq);
-      if (event.eventType === 'assistant_message' && mode === 'Plan' && event.body.includes('\n')) byKind.planning.events.push({ ...event, eventType: 'plan', title: 'Plan' });
+    if (event.eventType === 'user_message') {
+      latestTaskMode = typeof event.metadata?.taskMode === 'string' ? event.metadata.taskMode : latestTaskMode;
+      byKind.conversation.events.push(event);
+    } else if (event.eventType === 'assistant_message') {
+      if (latestTaskMode === 'Plan' && event.body.includes('\n')) byKind.planning.events.push({ ...event, eventType: 'plan', title: 'Plan' });
       else byKind.conversation.events.push(event);
     } else if (PLANNING_EVENTS.has(event.eventType)) byKind.planning.events.push(event);
     else if (ACTION_EVENTS.has(event.eventType)) byKind.actions.events.push(event);
@@ -51,9 +54,20 @@ export function deriveAgentRunSections(events: AgentChatEvent[]): AgentRunSectio
 }
 
 export function latestPlanEvent(events: AgentChatEvent[]): AgentChatEvent | null {
-  const sections = deriveAgentRunSections(events);
-  const plans = sections.flatMap((section) => section.events).filter((event) => event.eventType === 'plan');
-  return plans[plans.length - 1] ?? null;
+  let latestTaskMode: string | null = null;
+  let latestPlan: AgentChatEvent | null = null;
+
+  for (const event of events) {
+    if (event.eventType === 'user_message') {
+      latestTaskMode = typeof event.metadata?.taskMode === 'string' ? event.metadata.taskMode : latestTaskMode;
+    } else if (event.eventType === 'plan') {
+      latestPlan = event;
+    } else if (event.eventType === 'assistant_message' && latestTaskMode === 'Plan' && event.body.includes('\n')) {
+      latestPlan = { ...event, eventType: 'plan', title: 'Plan' };
+    }
+  }
+
+  return latestPlan;
 }
 
 export function deriveWorkbenchSummary(
@@ -117,13 +131,6 @@ export function modelContextLabel(modelId: string): string {
   if (modelId.includes('opus-4')) return '200k';
   if (modelId.includes('haiku')) return '200k';
   return 'context unknown';
-}
-
-function latestPlanModeBefore(events: AgentChatEvent[], seq: number): string | null {
-  const user = [...events]
-    .filter((event) => event.seq <= seq && event.eventType === 'user_message')
-    .sort((a, b) => b.seq - a.seq)[0];
-  return typeof user?.metadata?.taskMode === 'string' ? user.metadata.taskMode : null;
 }
 
 function dedupeActions(actions: AgentChatNextAction[]): AgentChatNextAction[] {

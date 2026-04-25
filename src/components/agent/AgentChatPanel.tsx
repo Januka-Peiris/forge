@@ -27,6 +27,7 @@ const CHAT_SCROLL_POSITIONS = new Map<string, number>();
 export function AgentChatPanel({
   session,
   events,
+  eventsLoaded = true,
   sections,
   summary,
   nextActions,
@@ -35,6 +36,7 @@ export function AgentChatPanel({
 }: {
   session: AgentChatSession;
   events: AgentChatEvent[];
+  eventsLoaded?: boolean;
   sections: AgentRunSection[];
   summary?: AgentWorkbenchSummary | null;
   nextActions?: AgentChatNextAction[];
@@ -155,7 +157,8 @@ export function AgentChatPanel({
         <TabsContent value="chat">
           <div ref={chatScrollRef} onScroll={rememberChatScroll} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
             <div className="flex flex-col gap-3">
-              {events.length === 0 && <EmptyChat provider={session.provider} />}
+              {!eventsLoaded && <LoadingChatHistory />}
+              {eventsLoaded && events.length === 0 && <EmptyChat provider={session.provider} />}
               {sections.map((section) => (
                 <AgentRunSectionView
                   key={section.kind}
@@ -301,6 +304,18 @@ function shouldOmitEvent(event: AgentChatEvent, chatMode: 'clean' | 'full'): boo
 
 function isCompactStatusEvent(event: AgentChatEvent): boolean {
   return event.eventType === 'status' && (event.status === 'succeeded' || event.status === 'failed');
+}
+
+function LoadingChatHistory() {
+  return (
+    <div className="flex min-h-[160px] items-center justify-center text-center">
+      <div className="max-w-sm">
+        <MessageSquare className="mx-auto mb-3 h-7 w-7 text-forge-muted animate-pulse" />
+        <h3 className="text-sm font-semibold text-forge-text">Loading chat history…</h3>
+        <p className="mt-1 text-xs leading-relaxed text-forge-muted">Restoring the previous conversation for this chat.</p>
+      </div>
+    </div>
+  );
 }
 
 function EmptyChat({ provider }: { provider: string }) {

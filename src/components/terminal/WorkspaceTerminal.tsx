@@ -77,6 +77,37 @@ function isLikelyCodexModel(model: string): boolean {
 }
 
 const FILE_PREVIEW_WIDTH_KEY = 'forge:file-preview-width';
+const COMPOSER_SETTINGS_KEY = 'forge:composer-settings';
+
+const COMPOSER_SETTINGS_DEFAULTS: ComposerSettings = {
+  selectedClaudeAgent: 'general-purpose',
+  selectedModel: '',
+  selectedTaskMode: 'Act',
+  selectedReasoning: 'Default',
+  sendBehavior: 'send_now',
+  promptMode: 'direct',
+  coordinatorBrainProvider: 'claude_code',
+  coordinatorCoderProvider: 'claude_code',
+  coordinatorBrainProfileId: '',
+  coordinatorCoderProfileId: '',
+  coordinatorBrainModel: '',
+  coordinatorCoderModel: '',
+  coordinatorBrainReasoning: '',
+  coordinatorCoderReasoning: '',
+  coordinatorAutoStepOnWorkerComplete: false,
+  coordinatorAutoStepTrigger: 'terminal_completion',
+  coordinatorAutoStepCooldownSeconds: 3,
+};
+
+function loadComposerSettings(): ComposerSettings {
+  try {
+    const raw = window.localStorage.getItem(COMPOSER_SETTINGS_KEY);
+    if (raw) return { ...COMPOSER_SETTINGS_DEFAULTS, ...JSON.parse(raw) };
+  } catch {
+    // ignore corrupt data
+  }
+  return { ...COMPOSER_SETTINGS_DEFAULTS };
+}
 
 interface WorkspaceTerminalProps {
   workspace: Workspace | null;
@@ -118,25 +149,7 @@ export function WorkspaceTerminal({
   const [workflowHint, setWorkflowHint] = useState<string | null>(null);
   const [agentProfiles, setAgentProfiles] = useState<AgentProfile[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useAgentProfile();
-  const [composerSettings, setComposerSettings] = useState<ComposerSettings>({
-    selectedClaudeAgent: 'general-purpose',
-    selectedModel: DEFAULT_CLAUDE_MODEL,
-    selectedTaskMode: 'Act',
-    selectedReasoning: 'Default',
-    sendBehavior: 'send_now',
-    promptMode: 'direct',
-    coordinatorBrainProvider: 'claude_code',
-    coordinatorCoderProvider: 'claude_code',
-    coordinatorBrainProfileId: '',
-    coordinatorCoderProfileId: '',
-    coordinatorBrainModel: '',
-    coordinatorCoderModel: '',
-    coordinatorBrainReasoning: '',
-    coordinatorCoderReasoning: '',
-    coordinatorAutoStepOnWorkerComplete: false,
-    coordinatorAutoStepTrigger: 'terminal_completion',
-    coordinatorAutoStepCooldownSeconds: 3,
-  });
+  const [composerSettings, setComposerSettings] = useState<ComposerSettings>(loadComposerSettings);
   const [queuedPrompts, setQueuedPrompts] = useState<Record<string, string[]>>({});
   const [providerModelDefaults, setProviderModelDefaults] = useState({
     claude: DEFAULT_CLAUDE_MODEL,
@@ -171,6 +184,7 @@ export function WorkspaceTerminal({
   const chatSessionsRef = useSyncedRef(chatSessions);
   /** Serializes agent prompt writes so rapid Enter / Send do not race attach + PTY. */
   const promptSendChainRef = useRef(Promise.resolve());
+  const chatEventLoadInFlightRef = useRef<Set<string>>(new Set());
   const lastCoordinatorAutoStepEventRef = useRef<string | null>(null);
   const coordinatorAutoStepRunningRef = useRef(false);
   const coordinatorAutoStepQueuedRef = useRef(false);
@@ -202,6 +216,7 @@ export function WorkspaceTerminal({
     [chatSessions, focusedChatId],
   );
   const focusedIsAgent = !!focusedChatSession || focusedSession?.terminalKind === 'agent' || focusedSession?.sessionRole === 'agent';
+  const focusedChatEventsLoaded = !focusedChatSession || Object.prototype.hasOwnProperty.call(chatEvents, focusedChatSession.id);
   const focusedChatEvents = useMemo(
     () => focusedChatSession ? (chatEvents[focusedChatSession.id] ?? []) : [],
     [chatEvents, focusedChatSession],
@@ -268,7 +283,7 @@ export function WorkspaceTerminal({
 
   const refreshChatSessions = useCallback(async (
     preferredFocusId?: string | null,
-    scope: 'all' | 'active' = 'all',
+    scope: 'all' | 'active' = 'active',
   ) => {
     if (!workspaceId) return;
     try {
@@ -282,11 +297,9 @@ export function WorkspaceTerminal({
       focusedChatIdRef.current = focused;
       setFocusedChatId(focused);
 
-      const sessionsNeedingEvents = scope === 'all'
-        ? sessions.slice(0, 12)
-        : sessions
-            .filter((session) => session.id === focused || session.status === 'running')
-            .slice(0, 4);
+      const sessionsNeedingEvents = sessions
+        .filter((session) => session.id === focused || session.status === 'running')
+        .slice(0, scope === 'all' ? 6 : 4);
 
       if (sessionsNeedingEvents.length === 0) return;
       const eventPairs = await Promise.all(
@@ -297,6 +310,26 @@ export function WorkspaceTerminal({
       setActionError(err);
     }
   }, [chatSessionsRef, focusedChatIdRef, setActionError, workspaceId]);
+
+  useEffect(() => {
+    if (!focusedChatSession) return;
+    if (Object.prototype.hasOwnProperty.call(chatEvents, focusedChatSession.id)) return;
+    if (chatEventLoadInFlightRef.current.has(focusedChatSession.id)) return;
+
+    chatEventLoadInFlightRef.current.add(focusedChatSession.id);
+    let cancelled = false;
+    void listAgentChatEvents(focusedChatSession.id)
+      .then((events) => {
+        if (cancelled) return;
+        setChatEvents((current) => ({ ...current, [focusedChatSession.id]: events }));
+      })
+      .catch(setActionError)
+      .finally(() => {
+        chatEventLoadInFlightRef.current.delete(focusedChatSession.id);
+      });
+
+    return () => { cancelled = true; };
+  }, [chatEvents, focusedChatSession, setActionError]);
 
   const refreshForgeConfig = useCallback(async () => {
     if (!workspaceId) return;
@@ -519,6 +552,7 @@ export function WorkspaceTerminal({
   const resetWorkspaceState = useCallback(() => {
     resetOutputState();
     promptSendChainRef.current = Promise.resolve();
+    chatEventLoadInFlightRef.current.clear();
     focusedIdRef.current = null;
     focusedChatIdRef.current = null;
     setVisibleSessions([]);
@@ -571,10 +605,6 @@ export function WorkspaceTerminal({
         if (document.hidden) return;
         void refreshSessions(true);
       }, 250);
-      const chatBackfillTimer = window.setTimeout(() => {
-        if (document.hidden) return;
-        void refreshChatSessions(undefined, 'all');
-      }, 650);
       const healthTimer = window.setTimeout(() => {
         if (document.hidden) return;
         void refreshHealth();
@@ -582,7 +612,6 @@ export function WorkspaceTerminal({
       }, 1500);
       return () => {
         window.clearTimeout(outputTimer);
-        window.clearTimeout(chatBackfillTimer);
         window.clearTimeout(healthTimer);
       };
     }
@@ -633,6 +662,11 @@ export function WorkspaceTerminal({
   useEffect(() => {
     window.localStorage.setItem(FILE_PREVIEW_WIDTH_KEY, String(filePreviewWidth));
   }, [filePreviewWidth]);
+
+  useEffect(() => {
+    const { selectedModel: _model, ...toSave } = composerSettings;
+    window.localStorage.setItem(COMPOSER_SETTINGS_KEY, JSON.stringify(toSave));
+  }, [composerSettings]);
 
   useWorkspaceTerminalPolling({
     workspaceId,
@@ -1014,6 +1048,7 @@ export function WorkspaceTerminal({
             <AgentChatPanel
               session={focusedChatSession}
               events={focusedChatEvents}
+              eventsLoaded={focusedChatEventsLoaded}
               sections={focusedRunSections}
               summary={focusedWorkbenchSummary.changedFileCount > 0 || focusedChatSession.status === 'succeeded' ? focusedWorkbenchSummary : null}
               nextActions={focusedNextActions}

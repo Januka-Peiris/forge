@@ -28,3 +28,7 @@ export function renameWorkspacePath(workspaceId: string, fromPath: string, toPat
 export function deleteWorkspacePath(workspaceId: string, path: string): Promise<void> {
   return invokeCommand<void>('delete_workspace_path', { workspaceId, path });
 }
+
+export function saveWorkspacePastedImage(workspaceId: string, filename: string, bytes: number[]): Promise<string> {
+  return invokeCommand<string>('save_workspace_pasted_image', { workspaceId, filename, bytes });
+}

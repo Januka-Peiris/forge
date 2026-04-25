@@ -191,6 +191,7 @@ pub fn run() {
             workspace_file_tree::list_workspace_file_tree,
             workspace_file_tree::read_workspace_file,
             workspace_file_tree::write_workspace_file,
+            workspace_file_tree::save_workspace_pasted_image,
             workspace_file_tree::create_workspace_directory,
             workspace_file_tree::rename_workspace_path,
             workspace_file_tree::delete_workspace_path,

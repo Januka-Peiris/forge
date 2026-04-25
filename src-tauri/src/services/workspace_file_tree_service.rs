@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::context::ignore::IgnoreSet;
 use crate::models::WorkspaceFileTreeNode;
@@ -67,6 +68,59 @@ pub fn write_workspace_file(
             file_path.display()
         )
     })
+}
+
+pub fn save_workspace_pasted_image(
+    state: &AppState,
+    workspace_id: &str,
+    filename: &str,
+    bytes: &[u8],
+) -> Result<String, String> {
+    if bytes.is_empty() {
+        return Err("Image is empty.".to_string());
+    }
+    if bytes.len() > 10_000_000 {
+        return Err("Image is too large to paste (max 10MB).".to_string());
+    }
+    let root = workspace_root_path(state, workspace_id)?;
+    let extension = image_extension(filename).unwrap_or("png");
+    let suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().to_string())
+        .unwrap_or_else(|_| "0".to_string());
+    let relative = format!(".forge/attachments/pasted-{suffix}.{extension}");
+    let file_path = resolve_target_path(&root, &relative)?;
+    let parent = file_path
+        .parent()
+        .ok_or_else(|| "Invalid attachment path.".to_string())?;
+    fs::create_dir_all(parent).map_err(|err| {
+        format!(
+            "Could not create attachment directory {}: {err}",
+            parent.display()
+        )
+    })?;
+    fs::write(&file_path, bytes).map_err(|err| {
+        format!(
+            "Could not write pasted image {}: {err}",
+            file_path.display()
+        )
+    })?;
+    Ok(relative)
+}
+
+fn image_extension(filename: &str) -> Option<&'static str> {
+    let lower = filename
+        .rsplit('.')
+        .next()
+        .unwrap_or(filename)
+        .to_lowercase();
+    match lower.as_str() {
+        "png" => Some("png"),
+        "jpg" | "jpeg" => Some("jpg"),
+        "gif" => Some("gif"),
+        "webp" => Some("webp"),
+        _ => None,
+    }
 }
 
 pub fn create_workspace_directory(
