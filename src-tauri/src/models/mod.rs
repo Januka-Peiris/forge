@@ -1,5 +1,4 @@
 pub mod activity;
-pub mod agent_chat;
 pub mod agent_context;
 pub mod agent_memory;
 pub mod agent_profile;
@@ -35,10 +34,6 @@ pub mod workspace_script;
 pub mod workspace_template;
 
 pub use activity::ActivityItem;
-pub use agent_chat::{
-    AgentChatEvent, AgentChatEventEnvelope, AgentChatSession, CreateAgentChatSessionInput,
-    SendAgentChatMessageInput,
-};
 pub use agent_context::{
     AgentContextWorktree, WorkspaceAgentContext, WorkspaceContextItem, WorkspaceContextPreview,
 };

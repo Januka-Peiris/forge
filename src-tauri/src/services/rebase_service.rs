@@ -1,9 +1,8 @@
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tauri::Emitter;
 
 use crate::repositories::{activity_repository, settings_repository, workspace_repository};
-use crate::services::agent_process_service;
 use crate::state::AppState;
 
 /// How often to attempt auto-rebase across all active workspaces.
@@ -110,7 +109,10 @@ fn run_rebase_pass(state: &AppState) -> Result<(), String> {
 
         match rebase_output {
             Ok(out) if out.status.success() => {
-                let now = agent_process_service::timestamp();
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|d| d.as_secs().to_string())
+                    .unwrap_or_else(|_| "0".to_string());
                 log::info!(
                     target: "forge_lib",
                     "auto-rebase: workspace {} rebased onto origin/{base_branch}",
