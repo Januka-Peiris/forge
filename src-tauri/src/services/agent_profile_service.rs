@@ -400,24 +400,44 @@ pub fn prompt_metadata_preamble_for_workspace(
 }
 
 pub fn default_profiles() -> Vec<AgentProfile> {
-    vec![AgentProfile {
-        id: "shell".to_string(),
-        label: "Shell".to_string(),
-        agent: "shell".to_string(),
-        command: std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string()),
-        args: vec![],
-        model: None,
-        reasoning: None,
-        mode: None,
-        provider: None,
-        endpoint: None,
-        local: true,
-        description: Some("Plain shell utility terminal".to_string()),
-        skills: vec![],
-        templates: vec![],
-        role_preference: None,
-        coordinator_eligible: Some(false),
-    }]
+    vec![
+        AgentProfile {
+            id: "claude-code".to_string(),
+            label: "Claude Code".to_string(),
+            agent: "claude_code".to_string(),
+            command: "claude".to_string(),
+            args: vec![],
+            model: None,
+            reasoning: None,
+            mode: Some("act".to_string()),
+            provider: None,
+            endpoint: None,
+            local: false,
+            description: Some("Claude Code agent".to_string()),
+            skills: vec![],
+            templates: vec![],
+            role_preference: None,
+            coordinator_eligible: Some(true),
+        },
+        AgentProfile {
+            id: "shell".to_string(),
+            label: "Shell".to_string(),
+            agent: "shell".to_string(),
+            command: std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string()),
+            args: vec![],
+            model: None,
+            reasoning: None,
+            mode: None,
+            provider: None,
+            endpoint: None,
+            local: true,
+            description: Some("Plain shell utility terminal".to_string()),
+            skills: vec![],
+            templates: vec![],
+            role_preference: None,
+            coordinator_eligible: Some(false),
+        },
+    ]
 }
 
 fn normalize_agent(value: &str) -> String {
