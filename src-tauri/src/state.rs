@@ -7,11 +7,12 @@ use std::sync::{Arc, Mutex};
 use portable_pty::{ChildKiller, MasterPty};
 use tauri::AppHandle;
 
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use crate::db::Database;
 use crate::models::OrchestratorAction;
 use crate::repositories::{
-    activity_repository, agent_chat_repository, agent_run_repository, settings_repository,
-    terminal_repository,
+    activity_repository, agent_run_repository, settings_repository, terminal_repository,
 };
 
 pub type ProcessRegistry = Arc<Mutex<HashMap<String, Arc<Mutex<Option<Child>>>>>>;
@@ -56,24 +57,10 @@ impl AppState {
     pub fn initialize(app_handle: &AppHandle) -> Result<Self, String> {
         let db = Database::initialize(app_handle)?;
 
-        let now = crate::services::agent_process_service::timestamp();
-        let interrupted_chat_groups = agent_chat_repository::list_running_chat_groups(&db)?;
-        agent_chat_repository::mark_running_chats_interrupted(&db, &now)?;
-        for group in interrupted_chat_groups {
-            let details = format!(
-                "{} running chat session(s) were marked interrupted after app restart; transcript was preserved.",
-                group.count
-            );
-            let _ = activity_repository::record(
-                &db,
-                &group.workspace_id,
-                &group.repo,
-                Some(&group.branch),
-                "Startup chat reconciliation",
-                "warning",
-                Some(&details),
-            );
-        }
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs().to_string())
+            .unwrap_or_else(|_| "0".to_string());
         let abandoned_run_groups = agent_run_repository::list_running_run_groups(&db)?;
         agent_run_repository::mark_stale_running_abandoned(&db, &now)?;
         for group in abandoned_run_groups {

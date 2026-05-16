@@ -265,43 +265,6 @@ pub fn run(connection: &Connection) -> Result<(), String> {
             CREATE INDEX IF NOT EXISTS idx_terminal_prompt_entries_workspace_created
                 ON terminal_prompt_entries(workspace_id, created_at DESC);
 
-            CREATE TABLE IF NOT EXISTS agent_chat_sessions (
-                id TEXT PRIMARY KEY,
-                workspace_id TEXT NOT NULL,
-                provider TEXT NOT NULL,
-                status TEXT NOT NULL,
-                title TEXT NOT NULL DEFAULT '',
-                provider_session_id TEXT,
-                cwd TEXT NOT NULL,
-                raw_output TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                ended_at TEXT,
-                closed_at TEXT,
-                FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_agent_chat_sessions_workspace
-                ON agent_chat_sessions(workspace_id, created_at DESC);
-
-            CREATE TABLE IF NOT EXISTS agent_chat_events (
-                id TEXT PRIMARY KEY,
-                session_id TEXT NOT NULL,
-                seq INTEGER NOT NULL,
-                event_type TEXT NOT NULL,
-                role TEXT,
-                title TEXT,
-                body TEXT NOT NULL DEFAULT '',
-                status TEXT,
-                metadata TEXT,
-                created_at TEXT NOT NULL,
-                FOREIGN KEY (session_id) REFERENCES agent_chat_sessions(id) ON DELETE CASCADE,
-                UNIQUE(session_id, seq)
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_agent_chat_events_session_seq
-                ON agent_chat_events(session_id, seq);
-
             CREATE TABLE IF NOT EXISTS workspace_attention_reads (
                 workspace_id TEXT PRIMARY KEY,
                 last_read_at TEXT NOT NULL,
@@ -625,7 +588,6 @@ pub fn run(connection: &Connection) -> Result<(), String> {
         "INTEGER NOT NULL DEFAULT 0",
     )?;
     add_column_if_missing(connection, "workspaces", "cost_limit_usd", "REAL")?;
-    add_column_if_missing(connection, "agent_chat_sessions", "closed_at", "TEXT")?;
     add_column_if_missing(
         connection,
         "workspace_coordinator_workers",
@@ -694,6 +656,17 @@ pub fn run(connection: &Connection) -> Result<(), String> {
             "#,
         )
         .map_err(|err| format!("Failed to create workspace_templates table: {err}"))?;
+
+    // Drop deprecated agent_chat tables (child table first to respect FK).
+    // Idempotent: IF EXISTS means this is safe on fresh installs too.
+    connection
+        .execute_batch(
+            r#"
+            DROP TABLE IF EXISTS agent_chat_events;
+            DROP TABLE IF EXISTS agent_chat_sessions;
+            "#,
+        )
+        .map_err(|err| format!("Failed to drop deprecated agent_chat tables: {err}"))?;
 
     Ok(())
 }

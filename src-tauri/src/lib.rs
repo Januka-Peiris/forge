@@ -9,7 +9,7 @@ mod state;
 use std::sync::atomic::Ordering;
 
 use commands::{
-    activity, agent_chat, agent_context, agent_memory, agent_profiles, agent_runs, checkpoints,
+    activity, agent_context, agent_memory, agent_profiles, checkpoints,
     coordinator as coordinator_commands, deep_links, environment, git_review, local_llms,
     merge_readiness, orchestrator as orchestrator_commands, pr_draft, prompt_templates,
     repositories as repository_commands, review_cockpit, review_summary, reviews, settings,
@@ -114,12 +114,6 @@ pub fn run() {
             agent_context::build_workspace_repo_context,
             agent_context::get_context_status,
             agent_context::get_context_preview_with_hint,
-            agent_chat::create_agent_chat_session,
-            agent_chat::send_agent_chat_message,
-            agent_chat::list_agent_chat_sessions,
-            agent_chat::list_agent_chat_events,
-            agent_chat::interrupt_agent_chat_session,
-            agent_chat::close_agent_chat_session,
             agent_profiles::list_workspace_agent_profiles,
             agent_profiles::list_app_agent_profiles,
             agent_profiles::save_app_agent_profiles,
@@ -131,10 +125,6 @@ pub fn run() {
             repository_commands::remove_repository,
             repository_commands::add_repository,
             repository_commands::list_repositories,
-            agent_runs::start_workspace_run,
-            agent_runs::stop_workspace_run,
-            agent_runs::get_workspace_runs,
-            agent_runs::get_workspace_run_logs,
             checkpoints::list_workspace_checkpoints,
             checkpoints::create_workspace_checkpoint,
             checkpoints::get_workspace_checkpoint_diff,
