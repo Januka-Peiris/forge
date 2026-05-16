@@ -16,12 +16,6 @@ import {
   killWorkspacePortProcess,
   openWorkspacePort,
 } from '../../lib/tauri-api/workspace-ports';
-import {
-  closeAgentChatSession,
-  createAgentChatSession,
-  interruptAgentChatSession,
-} from '../../lib/tauri-api/agent-chat';
-import type { AgentChatEvent, AgentChatSession } from '../../types/agent-chat';
 import type { OutputMap } from './workspace-terminal-constants';
 import type { TerminalOutputChunk, TerminalProfile, TerminalSession, WorkspacePort } from '../../types';
 
@@ -30,22 +24,17 @@ interface UseWorkspaceTerminalSessionActionsParams {
   setSelectedProfileId: (value: string | ((current: string) => string)) => void;
   focusedSession: TerminalSession | null;
   focusedIdRef: MutableRefObject<string | null>;
-  focusedChatIdRef: MutableRefObject<string | null>;
-  chatSessionsRef: MutableRefObject<AgentChatSession[]>;
   outputs: OutputMap;
   setBusy: (busy: boolean) => void;
   setError: (error: string | null) => void;
   setCommandBusy: (busy: string | null) => void;
   setPortsBusy: (busy: boolean) => void;
   setFocusedId: (id: string | null) => void;
-  setFocusedChatId: (id: string | null) => void;
-  setChatEvents: Dispatch<SetStateAction<Record<string, AgentChatEvent[]>>>;
   setPorts: Dispatch<SetStateAction<WorkspacePort[]>>;
   setNextSeq: (sessionId: string, nextSeq: number) => void;
   appendOutput: (sessionId: string, chunks: TerminalOutputChunk[], reset?: boolean) => void;
   removeSessionOutput: (sessionId: string) => void;
   refreshSessions: (fetchOutput?: boolean, preferredFocusId?: string | null) => Promise<void>;
-  refreshChatSessions: (preferredFocusId?: string | null) => Promise<void>;
   refreshHealth: () => Promise<void>;
   refreshReadiness: () => Promise<void>;
   setActionError: (err: unknown) => void;
@@ -56,22 +45,17 @@ export function useWorkspaceTerminalSessionActions({
   setSelectedProfileId,
   focusedSession,
   focusedIdRef,
-  focusedChatIdRef,
-  chatSessionsRef,
   outputs,
   setBusy,
   setError,
   setCommandBusy,
   setPortsBusy,
   setFocusedId,
-  setFocusedChatId,
-  setChatEvents,
   setPorts,
   setNextSeq,
   appendOutput,
   removeSessionOutput,
   refreshSessions,
-  refreshChatSessions,
   refreshHealth,
   refreshReadiness,
   setActionError,
@@ -86,53 +70,7 @@ export function useWorkspaceTerminalSessionActions({
       setNextSeq(session.id, 0);
       focusedIdRef.current = session.id;
       setFocusedId(session.id);
-      focusedChatIdRef.current = null;
-      setFocusedChatId(null);
       await refreshSessions(true, session.id);
-      await refreshHealth();
-      await refreshReadiness();
-    } catch (err) {
-      setActionError(err);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const createChatSession = async (provider: 'claude_code' | 'codex' | 'kimi_code' | 'local_llm', title?: string) => {
-    if (!workspaceId) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const session = await createAgentChatSession({ workspaceId, provider, title });
-      focusedChatIdRef.current = session.id;
-      setFocusedChatId(session.id);
-      focusedIdRef.current = null;
-      setFocusedId(null);
-      await refreshChatSessions(session.id);
-      await refreshHealth();
-      await refreshReadiness();
-    } catch (err) {
-      setActionError(err);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const closeChatSession = async (sessionId: string) => {
-    setBusy(true);
-    setError(null);
-    try {
-      await closeAgentChatSession(sessionId);
-      setChatEvents((current) => {
-        const next = { ...current };
-        delete next[sessionId];
-        return next;
-      });
-      const remaining = chatSessionsRef.current.filter((session) => session.id !== sessionId);
-      const nextFocus = remaining[0]?.id ?? null;
-      focusedChatIdRef.current = nextFocus;
-      setFocusedChatId(nextFocus);
-      await refreshChatSessions(nextFocus);
       await refreshHealth();
       await refreshReadiness();
     } catch (err) {
@@ -227,18 +165,12 @@ export function useWorkspaceTerminalSessionActions({
   };
 
   const interruptFocusedAgent = async () => {
-    const focusedChatId = focusedChatIdRef.current;
-    if (!focusedSession && !focusedChatId) return;
+    if (!focusedSession) return;
     setBusy(true);
     setError(null);
     try {
-      if (focusedChatId) {
-        await interruptAgentChatSession(focusedChatId);
-        await refreshChatSessions(focusedChatId);
-      } else if (focusedSession) {
-        await interruptWorkspaceTerminalSessionById(focusedSession.id);
-        await refreshSessions(false);
-      }
+      await interruptWorkspaceTerminalSessionById(focusedSession.id);
+      await refreshSessions(false);
       await refreshHealth();
       await refreshReadiness();
     } catch (err) {
@@ -253,8 +185,6 @@ export function useWorkspaceTerminalSessionActions({
     setBusy(true);
     setError(null);
     try {
-      focusedChatIdRef.current = null;
-      setFocusedChatId(null);
       focusedIdRef.current = session.id;
       setFocusedId(session.id);
       if (session.terminalKind === 'agent') setSelectedProfileId(session.profile);
@@ -315,8 +245,6 @@ export function useWorkspaceTerminalSessionActions({
 
   return {
     createTerminal,
-    createChatSession,
-    closeChatSession,
     runSetup,
     startRunCommand,
     stopRunCommands,

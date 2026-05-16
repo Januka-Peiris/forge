@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link2, ListChecks, Zap } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import type { AgentChatSession, AgentProfile, WorkspaceAgentContext, WorkspaceContextPreview, WorkspaceCoordinatorStatus } from '../../types';
+import type { AgentProfile, WorkspaceAgentContext, WorkspaceContextPreview, WorkspaceCoordinatorStatus } from '../../types';
 import type { PromptTemplate } from '../../types/prompt-template';
 import { getWorkspaceContextPreview, refreshWorkspaceRepoContext } from '../../lib/tauri-api/agent-context';
 import { saveWorkspacePastedImage } from '../../lib/tauri-api/workspace-file-tree';
@@ -25,13 +25,6 @@ const COORDINATOR_PROVIDER_OPTIONS = [
   { value: 'codex', label: 'Codex' },
   { value: 'kimi_code', label: 'Kimi' },
   { value: 'local_llm', label: 'Local' },
-];
-
-const CLAUDE_AGENT_OPTIONS = [
-  { value: 'general-purpose', label: 'general-purpose', hint: 'default' },
-  { value: 'Plan', label: 'Plan', hint: 'planning' },
-  { value: 'Explore', label: 'Explore', hint: 'haiku' },
-  { value: 'superpowers:code-reviewer', label: 'code-reviewer', hint: 'review' },
 ];
 
 const CLAUDE_THINKING_OPTIONS = [
@@ -125,7 +118,6 @@ function compactLabel(model: string, provider?: string) {
 }
 
 export interface ComposerSettings {
-  selectedClaudeAgent: string;
   selectedModel: string;
   selectedTaskMode: string;
   selectedReasoning: string;
@@ -146,7 +138,6 @@ export interface ComposerSettings {
 
 interface WorkspaceComposerProps {
   workspaceId: string;
-  focusedChatSession: AgentChatSession | null;
   busy: boolean;
   canInterrupt: boolean;
   queuedCount: number;
@@ -167,7 +158,6 @@ interface WorkspaceComposerProps {
 
 export function WorkspaceComposer({
   workspaceId,
-  focusedChatSession,
   busy,
   canInterrupt,
   queuedCount,
@@ -185,7 +175,7 @@ export function WorkspaceComposer({
   onInterrupt,
   onStopCoordinator,
 }: WorkspaceComposerProps) {
-  const draftKey = `${workspaceId}:${focusedChatSession?.id ?? 'terminal'}`;
+  const draftKey = workspaceId;
   const [promptInput, setPromptInput] = useState(() => COMPOSER_DRAFTS.get(draftKey) ?? '');
   const [composerHeight, setComposerHeight] = useState<number>(() => {
     const raw = window.localStorage.getItem(AGENT_COMPOSER_HEIGHT_KEY);
@@ -398,7 +388,7 @@ export function WorkspaceComposer({
     }
   };
 
-  const provider = focusedChatSession?.provider ?? 'claude_code';
+  const provider: string = 'claude_code';
   const providerLabel = provider === 'codex' ? 'Codex' : provider === 'kimi_code' ? 'Kimi' : 'Claude';
   const modelOptions = provider === 'codex'
     ? CODEX_MODEL_OPTIONS
@@ -641,8 +631,7 @@ export function WorkspaceComposer({
             )}
           </div>
 
-          {focusedChatSession && (
-            <div className="flex shrink-0 items-center gap-1 rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-muted">
+          <div className="flex shrink-0 items-center gap-1 rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-muted">
               {(provider === 'claude_code' || provider === 'codex' || provider === 'kimi_code') && (
                 <>
                   <button
@@ -700,7 +689,6 @@ export function WorkspaceComposer({
                 </>
               )}
             </div>
-          )}
 
           <WorkspaceComposerSettingsPopover
             provider={provider}
@@ -714,7 +702,6 @@ export function WorkspaceComposer({
             contextError={contextError}
             modelOptions={modelOptions}
             thinkingOptions={thinkingOptions}
-            claudeAgentOptions={CLAUDE_AGENT_OPTIONS}
           />
 
           {!!agentContext?.linkedWorktrees.length && (

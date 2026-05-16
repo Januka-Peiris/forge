@@ -29,50 +29,39 @@ import type {
   TerminalSession,
   Workspace,
 } from '../../types';
-import type { AgentChatSession } from '../../types/agent-chat';
 import { PROFILE_LABELS } from './workspace-terminal-constants';
 
 interface WorkspaceHeaderProps {
   workspace: Workspace;
   visibleSessions: TerminalSession[];
-  chatSessions: AgentChatSession[];
   dockOverflowSessions: TerminalSession[];
   busy: boolean;
   error: string | null;
   focusedSession: TerminalSession | null;
-  focusedChatId: string | null;
   agentProfiles: AgentProfile[];
   onOpenInCursor?: () => void;
-  onCreateChatSession: (provider: 'claude_code' | 'codex' | 'kimi_code' | 'local_llm', title?: string) => void;
   onCreateTerminal: (kind: 'agent' | 'shell', profile: TerminalProfile, title?: string, profileId?: string) => void;
   onCopyFocusedOutput: () => void;
   onInterruptFocusedAgent: () => void;
   onCloseTerminal: (sessionId: string) => void;
-  onCloseChatSession: (sessionId: string) => void;
   onAttachTerminal: (session: TerminalSession) => void;
-  onAttachChatSession: (sessionId: string) => void;
   onSetError: (message: string) => void;
 }
 
 export function WorkspaceHeader({
   workspace,
   visibleSessions,
-  chatSessions,
   dockOverflowSessions,
   busy,
   error,
   focusedSession,
-  focusedChatId,
   agentProfiles,
   onOpenInCursor,
-  onCreateChatSession,
   onCreateTerminal,
   onCopyFocusedOutput,
   onInterruptFocusedAgent,
   onCloseTerminal,
-  onCloseChatSession,
   onAttachTerminal,
-  onAttachChatSession,
   onSetError,
 }: WorkspaceHeaderProps) {
   const localAgentProfiles = agentProfiles.filter((profile) => profile.agent === 'local_llm' || profile.local);
@@ -146,7 +135,7 @@ export function WorkspaceHeader({
             variant="outline"
             size="xs"
             disabled={busy}
-            onClick={() => onCreateChatSession('claude_code', 'Claude Chat')}
+            onClick={() => onCreateTerminal('agent', 'claude_code', 'Claude')}
             className="h-7 px-2 text-[11px] border-forge-green/20 text-forge-green hover:bg-forge-green/5"
           >
             <span className="hidden sm:inline">New Claude</span>
@@ -163,13 +152,13 @@ export function WorkspaceHeader({
               <DropdownMenuItem disabled={busy} onSelect={() => onCreateTerminal('shell', 'shell', 'Shell')}>
                 New shell tab
               </DropdownMenuItem>
-              <DropdownMenuItem disabled={busy} onSelect={() => onCreateChatSession('codex', 'Codex Chat')}>
+              <DropdownMenuItem disabled={busy} onSelect={() => onCreateTerminal('agent', 'codex', 'Codex')}>
                 New Codex tab
               </DropdownMenuItem>
-              <DropdownMenuItem disabled={busy} onSelect={() => onCreateChatSession('kimi_code', 'Kimi Chat')}>
+              <DropdownMenuItem disabled={busy} onSelect={() => onCreateTerminal('agent', 'kimi_code', 'Kimi')}>
                 New Kimi tab
               </DropdownMenuItem>
-              <DropdownMenuItem disabled={busy} onSelect={() => onCreateChatSession('local_llm', 'Local LLM Chat')}>
+              <DropdownMenuItem disabled={busy} onSelect={() => onCreateTerminal('agent', 'local_llm', 'Local LLM')}>
                 New Local LLM tab
               </DropdownMenuItem>
               {localAgentProfiles.length > 0 && (
@@ -221,34 +210,8 @@ export function WorkspaceHeader({
         </div>
       </div>
 
-      {(chatSessions.length > 0 || visibleSessions.length > 0) && (
+      {visibleSessions.length > 0 && (
         <div className="flex items-center gap-1 overflow-x-auto px-4 py-1.5 bg-black/5">
-          {chatSessions.map((session) => {
-            const active = focusedChatId === session.id;
-            return (
-              <button
-                key={session.id}
-                type="button"
-                onClick={() => onAttachChatSession(session.id)}
-                className={`group flex max-w-[200px] shrink-0 items-center gap-2 rounded-md px-2.5 py-1 text-left transition-all ${active ? 'bg-forge-green/15 text-forge-text ring-1 ring-forge-green/30' : 'text-forge-muted hover:bg-white/5 hover:text-forge-text/85'}`}
-              >
-                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${session.status === 'running' ? 'bg-forge-green shadow-electric-glow animate-pulse' : session.status === 'failed' || session.status === 'interrupted' ? 'bg-forge-red' : 'bg-forge-muted/50'}`} />
-                <span className="truncate text-[11px] font-bold">{session.title}</span>
-                <span
-                  role="button"
-                  tabIndex={-1}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onCloseChatSession(session.id);
-                  }}
-                  className="rounded p-0.5 text-forge-muted opacity-0 group-hover:opacity-100 hover:bg-white/10 hover:text-forge-text"
-                >
-                  <X className="h-2.5 w-2.5" />
-                </span>
-              </button>
-            );
-          })}
-
           {visibleSessions.filter((s) => s.terminalKind !== 'agent').map((session) => {
             const title = session.title || PROFILE_LABELS[session.profile as TerminalProfile] || session.profile;
             const active = focusedSession?.id === session.id;
