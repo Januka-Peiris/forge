@@ -99,7 +99,7 @@ function TileSplitView({
         <Fragment key={child.id}>
           <div
             className="flex min-h-0 min-w-0"
-            style={{ flexBasis: `${split.sizes[index] ?? 100 / split.children.length}%`, flexGrow: 0, flexShrink: 0 }}
+            style={{ flexGrow: split.sizes[index] ?? 100 / split.children.length, flexBasis: 0, flexShrink: 0 }}
           >
             <TileNodeView
               node={child}
