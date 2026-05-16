@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link2, ListChecks, Zap } from 'lucide-react';
+import { FileText, Image, Link2, ListChecks, Paperclip, X, Zap } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import type { AgentProfile, WorkspaceAgentContext, WorkspaceContextPreview, WorkspaceCoordinatorStatus } from '../../types';
 import type { PromptTemplate } from '../../types/prompt-template';
 import { getWorkspaceContextPreview, refreshWorkspaceRepoContext } from '../../lib/tauri-api/agent-context';
-import { saveWorkspacePastedImage } from '../../lib/tauri-api/workspace-file-tree';
+import { saveWorkspaceAttachment, saveWorkspacePastedImage } from '../../lib/tauri-api/workspace-file-tree';
 import { agentProfilesForCoordinatorPicker } from '../../lib/tauri-api/agent-profiles';
 import { formatSessionError } from '../../lib/ui-errors';
 import {
@@ -18,6 +18,14 @@ import {
 import { WorkspaceComposerSettingsPopover } from './WorkspaceComposerSettingsPopover';
 
 const COMPOSER_DRAFTS = new Map<string, string>();
+
+interface ComposerAttachment {
+  id: string;
+  name: string;
+  path: string;
+  size: number;
+  kind: 'image' | 'text' | 'file';
+}
 
 const COORDINATOR_PROVIDER_OPTIONS = [
   { value: 'claude_code', label: 'Claude' },
@@ -117,6 +125,50 @@ function compactLabel(model: string, provider?: string) {
     ?? model.replace(/^claude-/, '').replace(/-/g, ' ').replace(/\b(opus|sonnet|haiku)\b/i, (m) => m[0].toUpperCase() + m.slice(1));
 }
 
+function isTextLikeFile(file: File): boolean {
+  if (file.type.startsWith('text/')) return true;
+  return /\.(c|cc|cpp|cs|css|csv|go|h|hpp|html|java|js|json|jsx|kt|md|mdx|py|rb|rs|sh|sql|swift|toml|ts|tsx|txt|yaml|yml|xml)$/i
+    .test(file.name);
+}
+
+function languageForFilename(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
+  const map: Record<string, string> = {
+    c: 'c',
+    cc: 'cpp',
+    cpp: 'cpp',
+    cs: 'csharp',
+    css: 'css',
+    go: 'go',
+    html: 'html',
+    java: 'java',
+    js: 'javascript',
+    json: 'json',
+    jsx: 'jsx',
+    md: 'markdown',
+    mdx: 'mdx',
+    py: 'python',
+    rb: 'ruby',
+    rs: 'rust',
+    sh: 'bash',
+    sql: 'sql',
+    swift: 'swift',
+    toml: 'toml',
+    ts: 'typescript',
+    tsx: 'tsx',
+    yaml: 'yaml',
+    yml: 'yaml',
+    xml: 'xml',
+  };
+  return map[ext] ?? '';
+}
+
+function formatBytes(size: number): string {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export interface ComposerSettings {
   selectedModel: string;
   selectedTaskMode: string;
@@ -186,6 +238,8 @@ export function WorkspaceComposer({
   const [contextBusy, setContextBusy] = useState(false);
   const [contextError, setContextError] = useState<string | null>(null);
   const [coordinatorModelsOpen, setCoordinatorModelsOpen] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const activeDraftKeyRef = useRef(draftKey);
 
@@ -331,6 +385,7 @@ export function WorkspaceComposer({
     if (!promptInput.trim() || busy) return;
     const text = promptInput.trim();
     updatePromptInput('');
+    setAttachments([]);
     onSend(text);
   };
 
@@ -359,6 +414,16 @@ export function WorkspaceComposer({
     const bytes = Array.from(new Uint8Array(buffer));
     const path = await saveWorkspacePastedImage(workspaceId, file.name || 'pasted-image.png', bytes);
     appendTextToPrompt(`![pasted image](${path})`);
+    setAttachments((current) => [
+      ...current,
+      {
+        id: `${path}-${Date.now()}`,
+        name: file.name || 'pasted-image.png',
+        path,
+        size: file.size,
+        kind: 'image',
+      },
+    ]);
   };
 
   const handleImageFiles = async (files: File[]) => {
@@ -366,6 +431,56 @@ export function WorkspaceComposer({
     if (imageFiles.length === 0) return false;
     try {
       await Promise.all(imageFiles.map(saveImageFile));
+    } catch (err) {
+      setContextError(formatSessionError(err));
+    }
+    return true;
+  };
+
+  const saveAttachmentFile = async (file: File) => {
+    const buffer = await file.arrayBuffer();
+    const bytes = Array.from(new Uint8Array(buffer));
+    const path = await saveWorkspaceAttachment(workspaceId, file.name || 'attachment', bytes);
+    const kind: ComposerAttachment['kind'] = file.type.startsWith('image/')
+      ? 'image'
+      : isTextLikeFile(file)
+        ? 'text'
+        : 'file';
+    setAttachments((current) => [
+      ...current,
+      {
+        id: `${path}-${Date.now()}`,
+        name: file.name || 'attachment',
+        path,
+        size: file.size,
+        kind,
+      },
+    ]);
+
+    if (kind === 'image') {
+      appendTextToPrompt(`![${file.name || 'attached image'}](${path})`);
+      return;
+    }
+
+    if (kind === 'text') {
+      const text = await file.text();
+      const truncated = text.length > 120_000
+        ? `${text.slice(0, 120_000)}\n\n… truncated at 120k chars …`
+        : text;
+      const language = languageForFilename(file.name);
+      appendTextToPrompt(`[attached: ${file.name}] (${path})\n\`\`\`${language}\n${truncated}\n\`\`\``);
+      return;
+    }
+
+    appendTextToPrompt(`[attached: ${file.name || 'attachment'}] (${path})`);
+  };
+
+  const handleAttachmentFiles = async (files: File[]) => {
+    if (files.length === 0) return false;
+    try {
+      for (const file of files) {
+        await saveAttachmentFile(file);
+      }
     } catch (err) {
       setContextError(formatSessionError(err));
     }
@@ -382,9 +497,10 @@ export function WorkspaceComposer({
 
   const handleDrop = (event: React.DragEvent<HTMLTextAreaElement>) => {
     const files = Array.from(event.dataTransfer.files);
-    if (files.some((file) => file.type.startsWith('image/'))) {
+    if (files.length > 0) {
       event.preventDefault();
-      void handleImageFiles(files);
+      setDragActive(false);
+      void handleAttachmentFiles(files);
     }
   };
 
@@ -786,32 +902,49 @@ export function WorkspaceComposer({
         )}
 
         <div className="flex min-h-0 flex-1 gap-2">
-          <textarea
-            ref={textareaRef}
-            data-forge-composer="true"
-            value={promptInput}
-            onChange={(e) => updatePromptInput(e.target.value)}
-            onPaste={handlePaste}
-            onDrop={handleDrop}
-            onDragOver={(e) => {
-              if (Array.from(e.dataTransfer.items).some((item) => item.type.startsWith('image/'))) e.preventDefault();
-            }}
-            rows={5}
-            placeholder={
-              settings.sendBehavior === 'interrupt_send'
-                ? 'Send instruction to agent (Enter interrupts agent if needed then sends, Shift+Enter for newline)…'
-                : 'Send instruction to agent (Enter to send, Shift+Enter for newline)…'
-            }
-            className="h-full min-h-0 w-0 flex-1 resize-none overflow-y-auto rounded-chat border border-forge-border bg-forge-bg px-3 py-2 text-sm leading-relaxed text-forge-text placeholder:text-forge-muted focus:border-forge-green/40 focus:outline-none"
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') { e.currentTarget.blur(); return; }
-              if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); onTogglePlanMode(); return; }
-              if (e.key !== 'Enter' || e.shiftKey) return;
-              if ('isComposing' in e.nativeEvent && e.nativeEvent.isComposing) return;
-              e.preventDefault();
-              handleSend();
-            }}
-          />
+          <div className="relative flex min-h-0 w-0 flex-1">
+            {dragActive && (
+              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-chat border-2 border-dashed border-forge-green/60 bg-forge-green/10 text-sm font-semibold text-forge-green shadow-inner">
+                <Paperclip className="mr-2 h-4 w-4" /> Drop files here
+              </div>
+            )}
+            <textarea
+              ref={textareaRef}
+              data-forge-composer="true"
+              value={promptInput}
+              onChange={(e) => updatePromptInput(e.target.value)}
+              onPaste={handlePaste}
+              onDrop={handleDrop}
+              onDragEnter={(event) => {
+                if (Array.from(event.dataTransfer.items).some((item) => item.kind === 'file')) {
+                  setDragActive(true);
+                }
+              }}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                  setDragActive(false);
+                }
+              }}
+              onDragOver={(e) => {
+                if (Array.from(e.dataTransfer.items).some((item) => item.kind === 'file')) e.preventDefault();
+              }}
+              rows={5}
+              placeholder={
+                settings.sendBehavior === 'interrupt_send'
+                  ? 'Send instruction to agent (Enter interrupts agent if needed then sends, Shift+Enter for newline)…'
+                  : 'Send instruction to agent (Enter to send, Shift+Enter for newline)…'
+              }
+              className="h-full min-h-0 w-full resize-none overflow-y-auto rounded-chat border border-forge-border bg-forge-bg px-3 py-2 text-sm leading-relaxed text-forge-text placeholder:text-forge-muted focus:border-forge-green/40 focus:outline-none"
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') { e.currentTarget.blur(); return; }
+                if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); onTogglePlanMode(); return; }
+                if (e.key !== 'Enter' || e.shiftKey) return;
+                if ('isComposing' in e.nativeEvent && e.nativeEvent.isComposing) return;
+                e.preventDefault();
+                handleSend();
+              }}
+            />
+          </div>
           <div className="flex flex-col gap-1.5">
             {canInterrupt && (
               <button
@@ -838,6 +971,32 @@ export function WorkspaceComposer({
             )}
           </div>
         </div>
+        {attachments.length > 0 && (
+          <div className="flex shrink-0 flex-wrap gap-1.5">
+            {attachments.map((attachment) => {
+              const Icon = attachment.kind === 'image' ? Image : attachment.kind === 'text' ? FileText : Paperclip;
+              return (
+                <span
+                  key={attachment.id}
+                  className="inline-flex max-w-[260px] items-center gap-1.5 rounded-full border border-forge-border bg-forge-bg px-2 py-1 text-[11px] text-forge-muted"
+                  title={attachment.path}
+                >
+                  <Icon className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{attachment.name}</span>
+                  <span className="shrink-0 text-forge-dim">{formatBytes(attachment.size)}</span>
+                  <button
+                    type="button"
+                    onClick={() => setAttachments((current) => current.filter((item) => item.id !== attachment.id))}
+                    className="rounded-full p-0.5 hover:bg-white/10 hover:text-forge-text"
+                    title="Remove chip (does not delete saved file or prompt text)"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

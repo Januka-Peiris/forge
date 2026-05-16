@@ -8,7 +8,7 @@ use crate::models::{TerminalOutputChunk, TerminalOutputEvent};
 use crate::repositories::terminal_repository;
 use crate::state::AppState;
 
-const OUTPUT_RETENTION_CHUNKS: u32 = 2000;
+const OUTPUT_RETENTION_CHUNKS: u32 = 5000;
 const OUTPUT_PRUNE_INTERVAL: u64 = 500;
 
 pub(super) fn append_output(

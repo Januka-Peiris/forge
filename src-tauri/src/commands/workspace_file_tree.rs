@@ -80,3 +80,13 @@ pub fn save_workspace_pasted_image(
         &bytes,
     )
 }
+
+#[tauri::command]
+pub fn save_workspace_attachment(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    filename: String,
+    bytes: Vec<u8>,
+) -> Result<String, String> {
+    workspace_file_tree_service::save_workspace_attachment(&state, &workspace_id, &filename, &bytes)
+}

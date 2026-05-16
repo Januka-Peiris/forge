@@ -108,6 +108,65 @@ pub fn save_workspace_pasted_image(
     Ok(relative)
 }
 
+pub fn save_workspace_attachment(
+    state: &AppState,
+    workspace_id: &str,
+    filename: &str,
+    bytes: &[u8],
+) -> Result<String, String> {
+    if bytes.is_empty() {
+        return Err("Attachment is empty.".to_string());
+    }
+    if bytes.len() > 50_000_000 {
+        return Err("Attachment is too large (max 50MB).".to_string());
+    }
+    let root = workspace_root_path(state, workspace_id)?;
+    let suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().to_string())
+        .unwrap_or_else(|_| "0".to_string());
+    let safe_name = sanitize_attachment_filename(filename);
+    let relative = format!(".forge/attachments/{workspace_id}/{suffix}-{safe_name}");
+    let file_path = resolve_target_path(&root, &relative)?;
+    let parent = file_path
+        .parent()
+        .ok_or_else(|| "Invalid attachment path.".to_string())?;
+    fs::create_dir_all(parent).map_err(|err| {
+        format!(
+            "Could not create attachment directory {}: {err}",
+            parent.display()
+        )
+    })?;
+    fs::write(&file_path, bytes)
+        .map_err(|err| format!("Could not write attachment {}: {err}", file_path.display()))?;
+    Ok(relative)
+}
+
+fn sanitize_attachment_filename(filename: &str) -> String {
+    let trimmed = filename
+        .trim()
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or("attachment");
+    let sanitized = trimmed
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_') {
+                ch
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .trim_matches(['.', '-'])
+        .to_string();
+    if sanitized.is_empty() {
+        "attachment".to_string()
+    } else {
+        sanitized
+    }
+}
+
 fn image_extension(filename: &str) -> Option<&'static str> {
     let lower = filename
         .rsplit('.')

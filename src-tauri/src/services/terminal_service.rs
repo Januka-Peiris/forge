@@ -22,6 +22,8 @@ mod prompts;
 mod queue;
 mod runtime;
 
+const RETAINED_OUTPUT_CHUNKS_ON_CLOSE: u32 = 5000;
+
 use activity::{
     command_preview, record_blocked_terminal_launch_activity, record_terminal_lifecycle_activity,
     record_terminal_start_activity,
@@ -628,6 +630,11 @@ pub fn close_workspace_terminal_session_by_id(
         session_id,
         "system",
         "[forge] Session closed in workspace view; history retained\r\n",
+    );
+    let _ = terminal_repository::prune_output_chunks(
+        &state.db,
+        session_id,
+        RETAINED_OUTPUT_CHUNKS_ON_CLOSE,
     );
     terminal_repository::get_session(&state.db, session_id)?
         .ok_or_else(|| format!("Terminal session {session_id} was not found"))
