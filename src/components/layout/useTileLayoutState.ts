@@ -25,12 +25,8 @@ function defaultState(content?: TileContent): TileLayoutState {
 }
 
 function mapNode(node: TileNode, mapper: (node: TileNode) => TileNode): TileNode {
-  const mapped = mapper(node);
-  if (mapped.type === 'leaf') return mapped;
-  return {
-    ...mapped,
-    children: mapped.children.map((child) => mapNode(child, mapper)),
-  };
+  if (node.type === 'leaf') return mapper(node);
+  return mapper({ ...node, children: node.children.map((child) => mapNode(child, mapper)) });
 }
 
 function normalizeSplit(split: TileSplit): TileNode {
@@ -100,6 +96,22 @@ function resizeSizes(sizes: number[], handleIndex: number, deltaPercent: number)
   next[handleIndex] = nextLeft;
   next[handleIndex + 1] = pairTotal - nextLeft;
   return normalizeSizes(next, next.length);
+}
+
+function collectLeafIds(node: TileNode, ids: TileId[] = []): TileId[] {
+  if (node.type === 'leaf') { ids.push(node.id); return ids; }
+  node.children.forEach((child) => collectLeafIds(child, ids));
+  return ids;
+}
+
+function findAdjacentLeafId(root: TileNode, currentId: TileId | null, direction: 'left' | 'right' | 'up' | 'down'): TileId | null {
+  const ids = collectLeafIds(root);
+  if (ids.length <= 1 || !currentId) return null;
+  const index = ids.indexOf(currentId);
+  if (index === -1) return null;
+  const delta = direction === 'right' || direction === 'down' ? 1 : -1;
+  const next = (index + delta + ids.length) % ids.length;
+  return ids[next] ?? null;
 }
 
 function safeParseState(raw: string | null): TileLayoutState | null {
@@ -186,12 +198,21 @@ export function useTileLayoutState(workspaceId: string | null, initialContent?: 
   const visibleTerminalSessionIds = useMemo(() => collectTerminalSessionIds(state.root), [state.root]);
   const focusedLeaf = useMemo(() => findLeaf(state.root, state.focusedTileId), [state.focusedTileId, state.root]);
 
+  const focusAdjacentTile = useCallback((direction: 'left' | 'right' | 'up' | 'down') => {
+    setState((current) => {
+      const nextId = findAdjacentLeafId(current.root, current.focusedTileId, direction);
+      if (!nextId) return current;
+      return { ...current, focusedTileId: nextId };
+    });
+  }, []);
+
   return {
     root: state.root,
     focusedTileId: state.focusedTileId,
     focusedLeaf,
     visibleTerminalSessionIds,
     focusTile,
+    focusAdjacentTile,
     setTileContent,
     splitTile,
     closeTile,

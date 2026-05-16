@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import * as ContextMenu from '@radix-ui/react-context-menu';
 import { Terminal as TerminalIcon } from 'lucide-react';
 import type { AgentProfile, ForgeWorkspaceConfig, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
 import type { AgentChatNextAction } from '../../types/agent-chat';
@@ -802,6 +803,21 @@ export function WorkspaceTerminal({
           focusedIdRef.current = nextContent.sessionId;
           setFocusedId(nextContent.sessionId);
         }
+      } else if (event.key === 'w') {
+        event.preventDefault();
+        tileLayout.closeTile(tileLayout.focusedTileId);
+      } else if (event.altKey && event.key === 'ArrowRight') {
+        event.preventDefault();
+        tileLayout.focusAdjacentTile('right');
+      } else if (event.altKey && event.key === 'ArrowLeft') {
+        event.preventDefault();
+        tileLayout.focusAdjacentTile('left');
+      } else if (event.altKey && event.key === 'ArrowDown') {
+        event.preventDefault();
+        tileLayout.focusAdjacentTile('down');
+      } else if (event.altKey && event.key === 'ArrowUp') {
+        event.preventDefault();
+        tileLayout.focusAdjacentTile('up');
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -838,72 +854,65 @@ export function WorkspaceTerminal({
     }
     const unusedSessions = visibleSessions.filter((item) => !tileLayout.visibleTerminalSessionIds.has(item.id));
 
+    const contextMenuProps = {
+      onSplitRight: () => splitTerminalTile(leaf.id, 'horizontal'),
+      onSplitDown: () => splitTerminalTile(leaf.id, 'vertical'),
+      onClose: () => tileLayout.closeTile(leaf.id),
+    };
+
     if (!session) {
       return (
-        <div
-          className={`flex min-h-0 flex-1 flex-col rounded-md border bg-forge-bg p-3 ${focused ? 'border-forge-green/50 shadow-lg shadow-emerald-950/20' : 'border-forge-border'}`}
-          onMouseDown={() => focusTerminalTile(leaf)}
-        >
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <div>
+        <TileContextMenu {...contextMenuProps}>
+          <div
+            className={`flex min-h-0 flex-1 flex-col rounded-md border bg-forge-bg p-3 ${focused ? 'border-forge-green/50 shadow-lg shadow-emerald-950/20' : 'border-forge-border'}`}
+            onMouseDown={() => focusTerminalTile(leaf)}
+          >
+            <div className="mb-3">
               <p className="text-sm font-semibold text-forge-text">Empty tile</p>
-              <p className="text-xs text-forge-muted">Attach a terminal session or split this tile.</p>
+              <p className="text-xs text-forge-muted">Attach a terminal session or right-click to split.</p>
             </div>
-            <TileControls
-              onSplitRight={() => splitTerminalTile(leaf.id, 'horizontal')}
-              onSplitDown={() => splitTerminalTile(leaf.id, 'vertical')}
-              onClose={() => tileLayout.closeTile(leaf.id)}
-            />
+            <div className="grid gap-2 overflow-y-auto">
+              {(unusedSessions.length > 0 ? unusedSessions : visibleSessions).map((candidate) => (
+                <button
+                  key={candidate.id}
+                  type="button"
+                  onClick={() => {
+                    tileLayout.setTileContent(leaf.id, { kind: 'terminal', sessionId: candidate.id });
+                    focusedIdRef.current = candidate.id;
+                    setFocusedId(candidate.id);
+                  }}
+                  className="rounded border border-forge-border bg-forge-surface px-3 py-2 text-left text-xs text-forge-muted hover:bg-white/5 hover:text-forge-text"
+                >
+                  <span className="font-semibold text-forge-text">{candidate.title || candidate.profile}</span>
+                  <span className="ml-2 text-forge-dim">{candidate.status}</span>
+                </button>
+              ))}
+              {visibleSessions.length === 0 && (
+                <p className="text-xs text-forge-muted">No terminal sessions available.</p>
+              )}
+            </div>
           </div>
-          <div className="grid gap-2 overflow-y-auto">
-            {(unusedSessions.length > 0 ? unusedSessions : visibleSessions).map((candidate) => (
-              <button
-                key={candidate.id}
-                type="button"
-                onClick={() => {
-                  tileLayout.setTileContent(leaf.id, { kind: 'terminal', sessionId: candidate.id });
-                  focusedIdRef.current = candidate.id;
-                  setFocusedId(candidate.id);
-                }}
-                className="rounded border border-forge-border bg-forge-surface px-3 py-2 text-left text-xs text-forge-muted hover:bg-white/5 hover:text-forge-text"
-              >
-                <span className="font-semibold text-forge-text">{candidate.title || candidate.profile}</span>
-                <span className="ml-2 text-forge-dim">{candidate.status}</span>
-              </button>
-            ))}
-            {visibleSessions.length === 0 && (
-              <p className="text-xs text-forge-muted">No terminal sessions available.</p>
-            )}
-          </div>
-        </div>
+        </TileContextMenu>
       );
     }
 
     return (
-      <div className="relative flex min-h-0 flex-1">
-        <div
-          className="absolute right-24 top-2 z-30 flex items-center gap-1"
-          onMouseDown={(event) => event.stopPropagation()}
-        >
-          <TileControls
-            onSplitRight={() => splitTerminalTile(leaf.id, 'horizontal')}
-            onSplitDown={() => splitTerminalTile(leaf.id, 'vertical')}
-            onClose={() => tileLayout.closeTile(leaf.id)}
+      <TileContextMenu {...contextMenuProps}>
+        <div className="relative flex min-h-0 flex-1">
+          <TerminalPane
+            key={session.id}
+            session={session}
+            chunks={outputs[session.id] ?? []}
+            focused={focused}
+            stuckSince={workspaceHealth?.terminals.find((t) => t.sessionId === session.id)?.stuckSince ?? null}
+            onFocus={() => focusTerminalTile(leaf, session.id)}
+            onStop={() => void stopTerminal(session.id)}
+            onClose={() => void closeTerminal(session.id)}
+            onData={(data) => void writeWorkspaceTerminalSessionInput(session.id, data).catch(setActionError)}
+            onResize={(cols, rows) => void resizeWorkspaceTerminalSession(session.id, cols, rows).catch(() => undefined)}
           />
         </div>
-        <TerminalPane
-          key={session.id}
-          session={session}
-          chunks={outputs[session.id] ?? []}
-          focused={focused}
-          stuckSince={workspaceHealth?.terminals.find((t) => t.sessionId === session.id)?.stuckSince ?? null}
-          onFocus={() => focusTerminalTile(leaf, session.id)}
-          onStop={() => void stopTerminal(session.id)}
-          onClose={() => void closeTerminal(session.id)}
-          onData={(data) => void writeWorkspaceTerminalSessionInput(session.id, data).catch(setActionError)}
-          onResize={(cols, rows) => void resizeWorkspaceTerminalSession(session.id, cols, rows).catch(() => undefined)}
-        />
-      </div>
+      </TileContextMenu>
     );
   };
 
@@ -1054,41 +1063,46 @@ export function WorkspaceTerminal({
   );
 }
 
-function TileControls({
+function TileContextMenu({
+  children,
   onSplitRight,
   onSplitDown,
   onClose,
 }: {
+  children: ReactNode;
   onSplitRight: () => void;
   onSplitDown: () => void;
   onClose: () => void;
 }) {
   return (
-    <div className="flex items-center gap-1 rounded border border-forge-border bg-forge-surface/95 p-0.5 shadow-md">
-      <button
-        type="button"
-        onClick={onSplitRight}
-        className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-forge-muted hover:bg-white/10 hover:text-forge-text"
-        title="Split right (Cmd/Ctrl+\\)"
-      >
-        Split →
-      </button>
-      <button
-        type="button"
-        onClick={onSplitDown}
-        className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-forge-muted hover:bg-white/10 hover:text-forge-text"
-        title="Split down (Cmd/Ctrl+-)"
-      >
-        Split ↓
-      </button>
-      <button
-        type="button"
-        onClick={onClose}
-        className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-forge-muted hover:bg-white/10 hover:text-forge-text"
-        title="Close tile"
-      >
-        ×
-      </button>
-    </div>
+    <ContextMenu.Root>
+      <ContextMenu.Trigger asChild>{children}</ContextMenu.Trigger>
+      <ContextMenu.Portal>
+        <ContextMenu.Content className="z-50 min-w-[180px] rounded-md border border-forge-border bg-forge-surface p-1 shadow-xl shadow-black/40">
+          <ContextMenu.Item
+            onSelect={onSplitRight}
+            className="flex cursor-pointer select-none items-center rounded px-2 py-1.5 text-xs text-forge-text outline-none hover:bg-white/10"
+          >
+            Split Right
+            <kbd className="ml-auto font-sans text-[10px] text-forge-dim">⌘\</kbd>
+          </ContextMenu.Item>
+          <ContextMenu.Item
+            onSelect={onSplitDown}
+            className="flex cursor-pointer select-none items-center rounded px-2 py-1.5 text-xs text-forge-text outline-none hover:bg-white/10"
+          >
+            Split Down
+            <kbd className="ml-auto font-sans text-[10px] text-forge-dim">⌘-</kbd>
+          </ContextMenu.Item>
+          <ContextMenu.Separator className="my-1 h-px bg-forge-border/60" />
+          <ContextMenu.Item
+            onSelect={onClose}
+            className="flex cursor-pointer select-none items-center rounded px-2 py-1.5 text-xs text-forge-red outline-none hover:bg-forge-red/10"
+          >
+            Close Pane
+            <kbd className="ml-auto font-sans text-[10px] text-forge-dim">⌘W</kbd>
+          </ContextMenu.Item>
+        </ContextMenu.Content>
+      </ContextMenu.Portal>
+    </ContextMenu.Root>
   );
 }
