@@ -62,7 +62,7 @@ pub fn list_output_chunks(
     session_id: &str,
     since_seq: u64,
 ) -> Result<Vec<TerminalOutputChunk>, String> {
-    const INITIAL_TAIL_LIMIT: i64 = 600;
+    const INITIAL_TAIL_LIMIT: i64 = 2000;
     const INCREMENTAL_LIMIT: i64 = 1000;
 
     db.with_connection(|connection| {

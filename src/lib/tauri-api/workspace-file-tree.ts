@@ -32,3 +32,7 @@ export function deleteWorkspacePath(workspaceId: string, path: string): Promise<
 export function saveWorkspacePastedImage(workspaceId: string, filename: string, bytes: number[]): Promise<string> {
   return invokeCommand<string>('save_workspace_pasted_image', { workspaceId, filename, bytes });
 }
+
+export function saveWorkspaceAttachment(workspaceId: string, filename: string, bytes: number[]): Promise<string> {
+  return invokeCommand<string>('save_workspace_attachment', { workspaceId, filename, bytes });
+}

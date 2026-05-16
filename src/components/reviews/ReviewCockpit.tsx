@@ -38,7 +38,7 @@ import {
   listWorkspaceAgentProfiles,
 } from '../../lib/tauri-api/agent-profiles';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { UnifiedDiffView } from './UnifiedDiffView';
+import { UnifiedDiffView, type DiffAnnotationPayload } from './UnifiedDiffView';
 import { useAgentProfile } from '../../lib/hooks/useAgentProfile';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { ReviewCockpitCommentItem } from './ReviewCockpitCommentItem';
@@ -188,6 +188,20 @@ export function ReviewCockpit({
     } finally {
       setBusy(false);
     }
+  };
+
+  const sendDiffAnnotation = async (payload: DiffAnnotationPayload) => {
+    if (!workspaceId) return;
+    const path = payload.filePath ?? selectedFile?.file.path ?? effectiveSelectedPath;
+    const action = [
+      `In file \`${path ?? 'selected file'}\`, lines ${payload.startLine}-${payload.endLine}:`,
+      '```diff',
+      payload.selectedDiff,
+      '```',
+      '',
+      `Instruction: ${payload.instruction}`,
+    ].join('\n');
+    await sendPrompt(action);
   };
 
   const refreshComments = async () => {
@@ -537,7 +551,10 @@ export function ReviewCockpit({
           {/* Diff content */}
           <UnifiedDiffView
             diff={cockpit?.selectedDiff?.diff}
+            filePath={selectedFile?.file.path ?? effectiveSelectedPath}
             emptyMessage={busy && !cockpit ? 'Loading review cockpit…' : 'Select a changed file to inspect its diff.'}
+            annotationBusy={busy}
+            onSendAnnotation={(payload) => void sendDiffAnnotation(payload)}
           />
         </div>
 

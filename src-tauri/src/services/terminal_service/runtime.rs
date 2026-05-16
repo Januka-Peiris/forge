@@ -13,6 +13,8 @@ use crate::state::{ActiveTerminal, AppState};
 
 use super::output::{append_log_line, append_output};
 
+const RETAINED_OUTPUT_CHUNKS_ON_EXIT: u32 = 5000;
+
 pub(super) fn active_for_workspace(
     state: &AppState,
     workspace_id: &str,
@@ -281,6 +283,11 @@ pub(super) fn spawn_terminal_monitor(
                     &session_id,
                     status,
                 );
+                let _ = terminal_repository::prune_output_chunks(
+                    &state.db,
+                    &session_id,
+                    RETAINED_OUTPUT_CHUNKS_ON_EXIT,
+                );
             }
             Err(err) => {
                 let status = if was_active { "failed" } else { "stopped" };
@@ -302,6 +309,11 @@ pub(super) fn spawn_terminal_monitor(
                     &state.db,
                     &session_id,
                     status,
+                );
+                let _ = terminal_repository::prune_output_chunks(
+                    &state.db,
+                    &session_id,
+                    RETAINED_OUTPUT_CHUNKS_ON_EXIT,
                 );
             }
         }

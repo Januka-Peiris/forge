@@ -10,7 +10,7 @@ export const PROFILE_LABELS: Record<TerminalProfile, string> = {
   local_llm: 'Local LLM',
 };
 
-export const OUTPUT_RETENTION_CHUNKS = 1200;
+export const OUTPUT_RETENTION_CHUNKS = 5000;
 
 export const AGENT_COMPOSER_HEIGHT_KEY = 'forge:agent-composer-height';
 export const AGENT_COMPOSER_SETTINGS_KEY = 'forge:agent-composer-settings';
