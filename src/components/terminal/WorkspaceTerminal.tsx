@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Terminal as TerminalIcon } from 'lucide-react';
 import type { AgentProfile, ForgeWorkspaceConfig, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
-import type { AgentChatEvent, AgentChatNextAction, AgentChatSession } from '../../types/agent-chat';
+import type { AgentChatNextAction } from '../../types/agent-chat';
 import type { WorkspaceCoordinatorStatus } from '../../types/coordinator';
 import type { WorkspaceChangedFile } from '../../types/git-review';
 import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
@@ -23,10 +23,6 @@ import { getWorkspaceReadiness } from '../../lib/tauri-api/workspace-readiness';
 import { getWorkspaceChangedFiles } from '../../lib/tauri-api/git-review';
 import { getWorkspaceReviewCockpit } from '../../lib/tauri-api/review-cockpit';
 import { createWorkspacePr } from '../../lib/tauri-api/pr-draft';
-import {
-  listAgentChatEvents,
-  listAgentChatSessions,
-} from '../../lib/tauri-api/agent-chat';
 import { getAiModelSettings } from '../../lib/tauri-api/settings';
 import {
   getWorkspaceCoordinatorStatus,
@@ -41,14 +37,7 @@ import {
 import { forgeWarn } from '../../lib/forge-log';
 import { useAgentProfile } from '../../lib/hooks/useAgentProfile';
 import { formatSessionError } from '../../lib/ui-errors';
-import {
-  deriveAgentRunSections,
-  deriveNextActions,
-  deriveWorkbenchSummary,
-  latestPlanEvent,
-} from '../../lib/agent-workbench';
 import { TerminalPane } from './WorkspaceTerminalPane';
-import { AgentChatPanel } from '../agent/AgentChatPanel';
 import { WorkspaceHeader } from './WorkspaceHeader';
 import { WorkspaceComposer, type ComposerSettings } from './WorkspaceComposer';
 import type { PromptTemplate } from '../../types/prompt-template';
@@ -57,7 +46,7 @@ import { useWorkspaceTerminalOutput } from './useWorkspaceTerminalOutput';
 import { WorkspaceTerminalEmptyState } from './WorkspaceTerminalEmptyState';
 import { WorkspaceContextFooter } from './WorkspaceContextFooter';
 import { CoordinatorTimeline } from './CoordinatorTimeline';
-import { useWorkspaceTerminalComposerActions, type AcceptedPlan } from './useWorkspaceTerminalComposerActions';
+import { useWorkspaceTerminalComposerActions } from './useWorkspaceTerminalComposerActions';
 import { useWorkspaceTerminalSessionActions } from './useWorkspaceTerminalSessionActions';
 import { useWorkspaceTerminalPolling } from './useWorkspaceTerminalPolling';
 import { useWorkspaceTerminalEvents } from './useWorkspaceTerminalEvents';
@@ -67,20 +56,12 @@ import { readWorkspaceFile, writeWorkspaceFile } from '../../lib/tauri-api/works
 const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-6';
 const DEFAULT_CODEX_MODEL = 'gpt-5.4';
 const DEFAULT_KIMI_MODEL = 'kimi-for-coding';
-const CODEX_REASONING_VALUES = new Set(['low', 'medium', 'high', 'xhigh']);
 const CLAUDE_REASONING_VALUES = new Set(['Default', 'Low', 'Medium', 'High', 'Extra High', 'Max']);
-const KIMI_THINKING_VALUES = new Set(['default', 'on', 'off']);
-
-function isLikelyCodexModel(model: string): boolean {
-  const lower = model.toLowerCase();
-  return lower.startsWith('gpt-') || lower.startsWith('o3') || lower.startsWith('o4') || lower.includes('codex');
-}
 
 const FILE_PREVIEW_WIDTH_KEY = 'forge:file-preview-width';
 const COMPOSER_SETTINGS_KEY = 'forge:composer-settings';
 
 const COMPOSER_SETTINGS_DEFAULTS: ComposerSettings = {
-  selectedClaudeAgent: 'general-purpose',
   selectedModel: '',
   selectedTaskMode: 'Act',
   selectedReasoning: 'Default',
@@ -128,10 +109,6 @@ export function WorkspaceTerminal({
 }: WorkspaceTerminalProps) {
   const [visibleSessions, setVisibleSessions] = useState<TerminalSession[]>([]);
   const [allSessions, setAllSessions] = useState<TerminalSession[]>([]);
-  const [chatSessions, setChatSessions] = useState<AgentChatSession[]>([]);
-  const [chatEvents, setChatEvents] = useState<Record<string, AgentChatEvent[]>>({});
-  const [chatEventsLoaded, setChatEventsLoaded] = useState<Set<string>>(new Set());
-  const [focusedChatId, setFocusedChatId] = useState<string | null>(null);
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [, setCommandBusy] = useState<string | null>(null);
@@ -142,16 +119,13 @@ export function WorkspaceTerminal({
   const [promptTemplates, setPromptTemplates] = useState<PromptTemplate[]>([]);
   const [agentContext, setAgentContext] = useState<WorkspaceAgentContext | null>(null);
   const [workspaceHealth, setWorkspaceHealth] = useState<WorkspaceHealth | null>(null);
-  const [workspaceReadiness, setWorkspaceReadiness] = useState<WorkspaceReadiness | null>(null);
+  const [, setWorkspaceReadiness] = useState<WorkspaceReadiness | null>(null);
   const [changedFiles, setChangedFiles] = useState<WorkspaceChangedFile[]>([]);
-  const [reviewCockpit, setReviewCockpit] = useState<WorkspaceReviewCockpit | null>(null);
-  const [acceptedPlans, setAcceptedPlans] = useState<Record<string, AcceptedPlan>>({});
-  const [planTransitionEligibleBySession, setPlanTransitionEligibleBySession] = useState<Record<string, boolean>>({});
+  const [, setReviewCockpit] = useState<WorkspaceReviewCockpit | null>(null);
   const [workflowHint, setWorkflowHint] = useState<string | null>(null);
   const [agentProfiles, setAgentProfiles] = useState<AgentProfile[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useAgentProfile();
   const [composerSettings, setComposerSettings] = useState<ComposerSettings>(loadComposerSettings);
-  const [queuedPrompts, setQueuedPrompts] = useState<Record<string, string[]>>({});
   const [providerModelDefaults, setProviderModelDefaults] = useState({
     claude: DEFAULT_CLAUDE_MODEL,
     codex: DEFAULT_CODEX_MODEL,
@@ -180,13 +154,9 @@ export function WorkspaceTerminal({
     resetOutputState,
   } = useWorkspaceTerminalOutput();
   const focusedIdRef = useSyncedRef(focusedId);
-  const focusedChatIdRef = useSyncedRef(focusedChatId);
   const visibleSessionsRef = useSyncedRef(visibleSessions);
-  const chatSessionsRef = useSyncedRef(chatSessions);
   /** Serializes agent prompt writes so rapid Enter / Send do not race attach + PTY. */
   const promptSendChainRef = useRef(Promise.resolve());
-  const chatEventsHistoryLoadedRef = useRef<Set<string>>(new Set());
-  const chatEventLoadInFlightRef = useRef<Set<string>>(new Set());
   const lastCoordinatorAutoStepEventRef = useRef<string | null>(null);
   const coordinatorAutoStepRunningRef = useRef(false);
   const coordinatorAutoStepQueuedRef = useRef(false);
@@ -213,37 +183,7 @@ export function WorkspaceTerminal({
     () => agentProfiles.filter((profile) => profile.agent === 'local_llm' || profile.local),
     [agentProfiles],
   );
-  const focusedChatSession = useMemo(
-    () => chatSessions.find((session) => session.id === focusedChatId) ?? null,
-    [chatSessions, focusedChatId],
-  );
-  const focusedIsAgent = !!focusedChatSession || focusedSession?.terminalKind === 'agent' || focusedSession?.sessionRole === 'agent';
-  const focusedChatEventsLoaded = !focusedChatSession || chatEventsLoaded.has(focusedChatSession.id);
-  const focusedChatEvents = useMemo(
-    () => focusedChatSession ? (chatEvents[focusedChatSession.id] ?? []) : [],
-    [chatEvents, focusedChatSession],
-  );
-  const focusedRunSections = useMemo(
-    () => deriveAgentRunSections(focusedChatEvents),
-    [focusedChatEvents],
-  );
-  const focusedWorkbenchSummary = useMemo(
-    () => deriveWorkbenchSummary(workspaceReadiness, changedFiles, reviewCockpit),
-    [changedFiles, reviewCockpit, workspaceReadiness],
-  );
-  const focusedNextActions = useMemo(
-    () => focusedChatSession ? deriveNextActions({
-      session: focusedChatSession,
-      events: focusedChatEvents,
-      hasAcceptedPlan: Boolean(acceptedPlans[focusedChatSession.id]),
-      readiness: workspaceReadiness,
-      changedFiles,
-      reviewCockpit,
-      hasRunCommands: (forgeConfig?.run.length ?? 0) > 0,
-      hasPr: !!workspace?.prNumber,
-    }) : [],
-    [acceptedPlans, changedFiles, focusedChatEvents, focusedChatSession, forgeConfig?.run.length, reviewCockpit, workspace?.prNumber, workspaceReadiness],
-  );
+  const focusedIsAgent = focusedSession?.terminalKind === 'agent' || focusedSession?.sessionRole === 'agent';
 
   /** Running sessions not shown in the main panes (for the attach overflow strip only). */
   const dockOverflowSessions = useMemo(() => {
@@ -283,55 +223,6 @@ export function WorkspaceTerminal({
     }
   }, [appendOutput, focusedIdRef, getNextSeq, setActionError, setNextSeq, workspaceId]);
 
-  const refreshChatSessions = useCallback(async (
-    preferredFocusId?: string | null,
-  ) => {
-    if (!workspaceId) return;
-    try {
-      const sessions = await listAgentChatSessions(workspaceId);
-      chatSessionsRef.current = sessions;
-      setChatSessions(sessions);
-      const nextFocusedChatId = preferredFocusId ?? focusedChatIdRef.current;
-      const focused = nextFocusedChatId && sessions.some((session) => session.id === nextFocusedChatId)
-        ? nextFocusedChatId
-        : sessions[0]?.id ?? null;
-      focusedChatIdRef.current = focused;
-      setFocusedChatId(focused);
-
-    } catch (err) {
-      setActionError(err);
-    }
-  }, [chatSessionsRef, focusedChatIdRef, setActionError, workspaceId]);
-
-  useEffect(() => {
-    if (!focusedChatSession) return;
-    const sessionId = focusedChatSession.id;
-    if (chatEventsHistoryLoadedRef.current.has(sessionId)) return;
-    if (chatEventLoadInFlightRef.current.has(sessionId)) return;
-
-    chatEventLoadInFlightRef.current.add(sessionId);
-    void listAgentChatEvents(sessionId)
-      .then((events) => {
-        setChatEvents((current) => {
-          const live = current[sessionId] ?? [];
-          const loadedIds = new Set(events.map((e) => e.id));
-          const merged = [...events, ...live.filter((e) => !loadedIds.has(e.id))]
-            .sort((a, b) => a.seq - b.seq);
-          return { ...current, [sessionId]: merged };
-        });
-      })
-      .catch(setActionError)
-      .finally(() => {
-        chatEventsHistoryLoadedRef.current.add(sessionId);
-        chatEventLoadInFlightRef.current.delete(sessionId);
-        setChatEventsLoaded((current) => {
-          if (current.has(sessionId)) return current;
-          const next = new Set(current);
-          next.add(sessionId);
-          return next;
-        });
-      });
-  }, [focusedChatSession?.id, setActionError]);
 
   const refreshForgeConfig = useCallback(async () => {
     if (!workspaceId) return;
@@ -554,16 +445,9 @@ export function WorkspaceTerminal({
   const resetWorkspaceState = useCallback(() => {
     resetOutputState();
     promptSendChainRef.current = Promise.resolve();
-    chatEventsHistoryLoadedRef.current.clear();
-    chatEventLoadInFlightRef.current.clear();
-    setChatEventsLoaded(new Set());
     focusedIdRef.current = null;
-    focusedChatIdRef.current = null;
     setVisibleSessions([]);
     setAllSessions([]);
-    setChatSessions([]);
-    setChatEvents({});
-    setFocusedChatId(null);
     setForgeConfig(null);
     setPorts([]);
     setPromptTemplateWarning(null);
@@ -572,8 +456,6 @@ export function WorkspaceTerminal({
     setWorkspaceReadiness(null);
     setChangedFiles([]);
     setReviewCockpit(null);
-    setAcceptedPlans({});
-    setQueuedPrompts({});
     setOpenEditors([]);
     setActiveEditorPath(null);
     setSavingEditorPaths(new Set());
@@ -590,8 +472,7 @@ export function WorkspaceTerminal({
       window.clearTimeout(coordinatorAutoStepTimerRef.current);
       coordinatorAutoStepTimerRef.current = null;
     }
-    setComposerSettings((current) => ({ ...current, selectedClaudeAgent: 'general-purpose' }));
-  }, [focusedChatIdRef, focusedIdRef, resetOutputState]);
+  }, [focusedIdRef, resetOutputState]);
 
   useEffect(() => {
     resetWorkspaceState();
@@ -602,7 +483,6 @@ export function WorkspaceTerminal({
       void refreshAgentProfiles();
       void refreshModelSettings();
       void refreshSessions(false);
-      void refreshChatSessions();
       void refreshWorkbenchState();
       void refreshCoordinatorStatus();
       const outputTimer = window.setTimeout(() => {
@@ -619,49 +499,20 @@ export function WorkspaceTerminal({
         window.clearTimeout(healthTimer);
       };
     }
-  }, [refreshAgentContext, refreshAgentProfiles, refreshChatSessions, refreshCoordinatorStatus, refreshForgeConfig, refreshHealth, refreshModelSettings, refreshReadiness, refreshPromptTemplates, refreshSessions, refreshWorkbenchState, resetWorkspaceState, workspaceId]);
+  }, [refreshAgentContext, refreshAgentProfiles, refreshCoordinatorStatus, refreshForgeConfig, refreshHealth, refreshModelSettings, refreshReadiness, refreshPromptTemplates, refreshSessions, refreshWorkbenchState, resetWorkspaceState, workspaceId]);
 
   useEffect(() => {
-    const provider = focusedChatSession?.provider;
-    if (!provider) return;
-
     setComposerSettings((current) => {
-      if (provider === 'codex') {
-        const nextModel = isLikelyCodexModel(current.selectedModel)
-          ? current.selectedModel
-          : providerModelDefaults.codex;
-        const nextReasoning = CODEX_REASONING_VALUES.has(current.selectedReasoning.toLowerCase())
-          ? current.selectedReasoning.toLowerCase()
-          : 'medium';
-        if (nextModel === current.selectedModel && nextReasoning === current.selectedReasoning) return current;
-        return { ...current, selectedModel: nextModel, selectedReasoning: nextReasoning };
-      }
-
-      if (provider === 'claude_code') {
-        const nextModel = current.selectedModel.startsWith('claude-')
-          ? current.selectedModel
-          : providerModelDefaults.claude;
-        const nextReasoning = CLAUDE_REASONING_VALUES.has(current.selectedReasoning)
-          ? current.selectedReasoning
-          : 'Default';
-        if (nextModel === current.selectedModel && nextReasoning === current.selectedReasoning) return current;
-        return { ...current, selectedModel: nextModel, selectedReasoning: nextReasoning };
-      }
-
-      if (provider === 'kimi_code') {
-        const nextModel = current.selectedModel.startsWith('kimi-')
-          ? current.selectedModel
-          : providerModelDefaults.kimi;
-        const nextReasoning = KIMI_THINKING_VALUES.has(current.selectedReasoning.toLowerCase())
-          ? current.selectedReasoning.toLowerCase()
-          : 'default';
-        if (nextModel === current.selectedModel && nextReasoning === current.selectedReasoning) return current;
-        return { ...current, selectedModel: nextModel, selectedReasoning: nextReasoning };
-      }
-
-      return current;
+      const nextModel = current.selectedModel.startsWith('claude-')
+        ? current.selectedModel
+        : providerModelDefaults.claude;
+      const nextReasoning = CLAUDE_REASONING_VALUES.has(current.selectedReasoning)
+        ? current.selectedReasoning
+        : 'Default';
+      if (nextModel === current.selectedModel && nextReasoning === current.selectedReasoning) return current;
+      return { ...current, selectedModel: nextModel, selectedReasoning: nextReasoning };
     });
-  }, [focusedChatSession?.provider, providerModelDefaults.claude, providerModelDefaults.codex, providerModelDefaults.kimi]);
+  }, [providerModelDefaults.claude]);
 
   useEffect(() => {
     window.localStorage.setItem(FILE_PREVIEW_WIDTH_KEY, String(filePreviewWidth));
@@ -676,9 +527,7 @@ export function WorkspaceTerminal({
   useWorkspaceTerminalPolling({
     workspaceId,
     visibleSessionsRef,
-    chatSessionsRef,
     refreshSessions,
-    refreshChatSessions,
     refreshHealth,
     refreshReadiness,
     refreshWorkbenchState,
@@ -764,9 +613,6 @@ export function WorkspaceTerminal({
     enqueueOutput,
     bumpNextSeqFromChunk,
     setPendingCommand,
-    setChatSessions,
-    setChatEvents,
-    refreshChatSessions,
     refreshReadiness,
     refreshWorkbenchState,
     refreshCoordinatorStatus,
@@ -796,8 +642,6 @@ export function WorkspaceTerminal({
 
   const {
     createTerminal,
-    createChatSession,
-    closeChatSession,
     startRunCommand,
     interruptFocusedAgent,
     attachTerminal,
@@ -809,22 +653,17 @@ export function WorkspaceTerminal({
     setSelectedProfileId,
     focusedSession,
     focusedIdRef,
-    focusedChatIdRef,
-    chatSessionsRef,
     outputs,
     setBusy,
     setError,
     setCommandBusy,
     setPortsBusy,
     setFocusedId,
-    setFocusedChatId,
-    setChatEvents,
     setPorts,
     setNextSeq,
     appendOutput,
     removeSessionOutput,
     refreshSessions,
-    refreshChatSessions,
     refreshHealth,
     refreshReadiness,
     setActionError,
@@ -837,49 +676,23 @@ export function WorkspaceTerminal({
     sendPrompt,
   } = useWorkspaceTerminalComposerActions({
     workspaceId,
-    focusedChatSession,
     focusedSession,
-    focusedChatEvents,
     selectedProfileId,
     composerSettings,
-    acceptedPlans,
-    planTransitionEligibleBySession,
     forgeConfig,
-    refreshChatSessions,
     refreshWorkbenchState,
     refreshReadiness,
     refreshCoordinatorStatus,
-    closeChatSession,
     startRunCommand,
     setReviewCockpit,
-    setAcceptedPlans,
     setComposerSettings,
-    setQueuedPrompts,
     setBusy,
     setError,
     setActionError,
     onCoordinatorInfo: showCoordinatorToast,
-    onPlanAutoActInfo: setWorkflowHint,
     promptSendChainRef,
   });
 
-  useEffect(() => {
-    if (!focusedChatSession || focusedChatSession.status === 'running') return;
-    const queue = queuedPrompts[focusedChatSession.id];
-    if (!queue || queue.length === 0) return;
-    const [nextPrompt, ...remaining] = queue;
-    setQueuedPrompts((current) => ({ ...current, [focusedChatSession.id]: remaining }));
-    sendPrompt(nextPrompt, { forceImmediate: true });
-  }, [focusedChatSession, queuedPrompts, sendPrompt]);
-
-  useEffect(() => {
-    if (!focusedChatSession) return;
-    const hasPlan = Boolean(latestPlanEvent(focusedChatEvents)?.body);
-    setPlanTransitionEligibleBySession((current) => {
-      if (current[focusedChatSession.id] === hasPlan) return current;
-      return { ...current, [focusedChatSession.id]: hasPlan };
-    });
-  }, [focusedChatEvents, focusedChatSession]);
 
   useEffect(() => {
     if (!workflowHint) return;
@@ -897,17 +710,13 @@ export function WorkspaceTerminal({
   }, [forgeConfig?.run, startRunCommand]);
 
   const handleCoordinatorAskReviewer = useCallback(() => {
-    if (!focusedChatSession) {
-      showCoordinatorToast('Open an agent chat to run reviewer prompts.');
-      return;
-    }
     const action: AgentChatNextAction = {
       id: 'coord-ask-reviewer',
       label: 'Ask reviewer',
       kind: 'ask_reviewer',
     };
     void handleWorkbenchAction(action);
-  }, [focusedChatSession, handleWorkbenchAction, showCoordinatorToast]);
+  }, [handleWorkbenchAction]);
 
   const handleCoordinatorCreatePr = useCallback(() => {
     if (!workspaceId) return;
@@ -971,29 +780,17 @@ export function WorkspaceTerminal({
       <WorkspaceHeader
         workspace={workspace}
         visibleSessions={visibleSessions}
-        chatSessions={chatSessions}
         dockOverflowSessions={dockOverflowSessions}
         busy={busy}
         error={error}
         focusedSession={focusedSession}
-        focusedChatId={focusedChatId}
         agentProfiles={agentProfiles}
         onOpenInCursor={onOpenInCursor}
-        onCreateChatSession={(provider, title) => void createChatSession(provider, title)}
         onCreateTerminal={(kind, profile, title, profileId) => void createTerminal(kind, profile, title, profileId)}
         onCopyFocusedOutput={() => void copyFocusedOutput()}
         onInterruptFocusedAgent={() => void interruptFocusedAgent()}
         onCloseTerminal={(sessionId) => void closeTerminal(sessionId)}
-        onCloseChatSession={(sessionId) => void closeChatSession(sessionId)}
         onAttachTerminal={(session) => void attachTerminal(session)}
-        onAttachChatSession={(sessionId) => {
-          focusedChatIdRef.current = sessionId;
-          setFocusedChatId(sessionId);
-          focusedIdRef.current = null;
-          setFocusedId(null);
-
-          if (!chatEvents[sessionId]) void listAgentChatEvents(sessionId).then((events) => setChatEvents((current) => ({ ...current, [sessionId]: events })));
-        }}
         onSetError={setError}
       />
       {coordinatorToast && (
@@ -1014,7 +811,7 @@ export function WorkspaceTerminal({
         onCreatePr={handleCoordinatorCreatePr}
         canReviewDiff={changedFiles.length > 0}
         canRunTests={Boolean(forgeConfig?.run[0])}
-        canAskReviewer={Boolean(focusedChatSession)}
+        canAskReviewer={false}
         canCreatePr={changedFiles.length > 0 && !workspace.prNumber}
         hasExistingPr={Boolean(workspace.prNumber)}
         onReplayAction={async (actionId, promptOverride) => {
@@ -1039,26 +836,15 @@ export function WorkspaceTerminal({
 
       <div className="flex min-h-0 flex-1 gap-2 p-2">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
-          {visibleSessions.length === 0 && chatSessions.length === 0 ? (
+          {visibleSessions.length === 0 ? (
             <WorkspaceTerminalEmptyState
               busy={busy}
               localAgentProfiles={localAgentProfiles}
-              onStartClaude={() => void createChatSession('claude_code', 'Claude Chat')}
-              onStartCodex={() => void createChatSession('codex', 'Codex Chat')}
-              onStartKimi={() => void createChatSession('kimi_code', 'Kimi Chat')}
+              onStartClaude={() => void createTerminal('agent', 'claude_code', 'Claude')}
+              onStartCodex={() => void createTerminal('agent', 'codex', 'Codex')}
+              onStartKimi={() => void createTerminal('agent', 'kimi_code', 'Kimi')}
               onStartLocalProfile={(profile) => void createTerminal('agent', profile.agent as TerminalProfile, profile.label, profile.id)}
               onStartShell={() => void createTerminal('shell', 'shell', 'Shell')}
-            />
-          ) : focusedChatSession ? (
-            <AgentChatPanel
-              session={focusedChatSession}
-              events={focusedChatEvents}
-              eventsLoaded={focusedChatEventsLoaded}
-              sections={focusedRunSections}
-              summary={focusedWorkbenchSummary.changedFileCount > 0 || focusedChatSession.status === 'succeeded' ? focusedWorkbenchSummary : null}
-              nextActions={focusedNextActions}
-              acceptedPlanId={acceptedPlans[focusedChatSession.id]?.eventId ?? null}
-              onAction={(action, event) => void handleWorkbenchAction(action, event)}
             />
           ) : focusedSession ? (
             <TerminalPane
@@ -1098,10 +884,9 @@ export function WorkspaceTerminal({
       {focusedIsAgent && (
         <WorkspaceComposer
           workspaceId={workspace.id}
-          focusedChatSession={focusedChatSession}
           busy={busy}
-          canInterrupt={focusedChatSession?.status === 'running' || false}
-          queuedCount={focusedChatSession ? (queuedPrompts[focusedChatSession.id]?.length ?? 0) : 0}
+          canInterrupt={focusedSession?.status === 'running' || false}
+          queuedCount={0}
           promptTemplateWarning={promptTemplateWarning}
           workflowHint={workflowHint}
           promptTemplates={promptTemplates}

@@ -25,6 +25,12 @@ pub fn create_agent_chat_session(
     state: &AppState,
     input: CreateAgentChatSessionInput,
 ) -> Result<AgentChatSession, String> {
+    let provider = normalize_provider(&input.provider);
+    if provider == "claude_code" {
+        return Err(
+            "Claude chat sessions are deprecated. Use the terminal session instead.".to_string(),
+        );
+    }
     let workspace = workspace_repository::get_detail(&state.db, &input.workspace_id)?
         .ok_or_else(|| format!("Workspace {} was not found", input.workspace_id))?;
     let cwd = workspace

@@ -22,7 +22,6 @@ interface WorkspaceComposerSettingsPopoverProps {
   contextError: string | null;
   modelOptions: Option[];
   thinkingOptions: Option[];
-  claudeAgentOptions: Option[];
 }
 
 export function WorkspaceComposerSettingsPopover({
@@ -37,7 +36,6 @@ export function WorkspaceComposerSettingsPopover({
   contextError,
   modelOptions,
   thinkingOptions,
-  claudeAgentOptions,
 }: WorkspaceComposerSettingsPopoverProps) {
   return (
     <Popover>
@@ -49,17 +47,6 @@ export function WorkspaceComposerSettingsPopover({
       <PopoverContent align="start" className="min-w-[240px] max-h-[min(480px,80vh)] overflow-y-auto">
         <p className="mb-2 text-xs font-bold uppercase tracking-widest text-forge-muted">{providerLabel} Agent Settings</p>
         <div className="space-y-2">
-          {provider === 'claude_code' && (
-            <div>
-              <label className="mb-1 block text-xs text-forge-muted">Claude agent</label>
-              <Select value={settings.selectedClaudeAgent} onValueChange={(v) => onSettingsChange({ selectedClaudeAgent: v })}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {claudeAgentOptions.map((a) => <SelectItem key={a.value} value={a.value}>{a.label} · {a.hint}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
           <div>
             <label className="mb-1 block text-xs text-forge-muted">Model</label>
             <Select value={settings.selectedModel} onValueChange={(v) => onSettingsChange({ selectedModel: v })}>
@@ -78,13 +65,7 @@ export function WorkspaceComposerSettingsPopover({
             <Select
               value={settings.selectedTaskMode}
               onValueChange={(next) => {
-                const patch: Partial<ComposerSettings> = { selectedTaskMode: next };
-                if (provider === 'claude_code') {
-                  if (next === 'Plan') patch.selectedClaudeAgent = 'Plan';
-                  if (next === 'Review') patch.selectedClaudeAgent = 'superpowers:code-reviewer';
-                  if (next === 'Act' && settings.selectedClaudeAgent === 'Plan') patch.selectedClaudeAgent = 'general-purpose';
-                }
-                onSettingsChange(patch);
+                onSettingsChange({ selectedTaskMode: next });
               }}
             >
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
