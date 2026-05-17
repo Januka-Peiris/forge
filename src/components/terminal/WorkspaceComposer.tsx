@@ -206,6 +206,7 @@ interface WorkspaceComposerProps {
   onApplyWorkflowPreset: (preset: 'plan-act' | 'plan-codex-review' | 'implement-review-pr', defaultPrompt: string) => void;
   onInterrupt: () => void;
   onStopCoordinator: () => void;
+  onModelChange?: (model: string) => void;
 }
 
 export function WorkspaceComposer({
@@ -226,6 +227,7 @@ export function WorkspaceComposer({
   onApplyWorkflowPreset,
   onInterrupt,
   onStopCoordinator,
+  onModelChange,
 }: WorkspaceComposerProps) {
   const draftKey = workspaceId;
   const [promptInput, setPromptInput] = useState(() => COMPOSER_DRAFTS.get(draftKey) ?? '');
@@ -747,22 +749,22 @@ export function WorkspaceComposer({
             )}
           </div>
 
-          <div className="flex shrink-0 items-center gap-1 rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-muted">
+          <div className="flex shrink-0 items-center gap-1.5 rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-muted">
               {(provider === 'claude_code' || provider === 'codex' || provider === 'kimi_code') && (
                 <>
                   <button
                     onClick={onTogglePlanMode}
                     title="Toggle Plan mode (Shift+Tab)"
-                    className={`flex items-center gap-1 rounded px-1 py-0.5 transition-colors ${settings.selectedTaskMode === 'Plan' ? 'text-forge-blue' : 'text-forge-muted/40 hover:text-forge-muted'}`}
+                    className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] transition-colors ${settings.selectedTaskMode === 'Plan' ? 'bg-forge-blue/15 text-forge-blue font-semibold' : 'text-forge-muted/50 hover:text-forge-muted'}`}
                   >
                     <ListChecks className="h-3 w-3" />
-                    {settings.selectedTaskMode === 'Plan' && <span className="font-semibold">Plan</span>}
+                    <span>Plan</span>
                   </button>
-                  <span>·</span>
+                  <div className="h-3.5 w-px bg-forge-border/50" />
                 </>
               )}
-              <Select value={settings.selectedModel} onValueChange={(v) => onSettingsChange({ selectedModel: v })}>
-                <SelectTrigger compact title={`${providerLabel} model`}><SelectValue /></SelectTrigger>
+              <Select value={settings.selectedModel} onValueChange={(v) => { onSettingsChange({ selectedModel: v }); onModelChange?.(v); }}>
+                <SelectTrigger compact title={`${providerLabel} model`} className="text-forge-green font-semibold"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {modelOptions.map((model) => (
                     <SelectItem key={model.value} value={model.value}>{compactLabel(model.value, provider)}</SelectItem>
@@ -772,24 +774,23 @@ export function WorkspaceComposer({
                   )}
                 </SelectContent>
               </Select>
-              <span>·</span>
-              <Select
-                value={settings.selectedReasoning}
-                onValueChange={(v) => onSettingsChange({ selectedReasoning: v })}
-              >
-                <SelectTrigger
-                  compact
-                  title={`${providerLabel} thinking / effort`}
-                  className={settings.selectedReasoning === 'Default' || settings.selectedReasoning === 'default' || settings.selectedReasoning === 'medium' ? 'text-forge-muted' : settings.selectedReasoning === 'Max' || settings.selectedReasoning === 'Extra High' || settings.selectedReasoning === 'high' || settings.selectedReasoning === 'on' ? 'bg-forge-violet/15 text-forge-violet' : 'bg-forge-blue/10 text-forge-blue'}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {thinkingOptions.map((level) => (
-                    <SelectItem key={level.value} value={level.value}>{provider === 'codex' ? '' : 'Thinking: '}{level.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="h-3.5 w-px bg-forge-border/50" />
+              <div className="flex items-center gap-0.5">
+                {thinkingOptions.map((level) => (
+                  <button
+                    key={level.value}
+                    onClick={() => onSettingsChange({ selectedReasoning: level.value })}
+                    title={level.hint ?? level.label}
+                    className={`rounded px-1.5 py-0.5 text-[10px] transition-colors ${
+                      settings.selectedReasoning === level.value
+                        ? 'bg-forge-violet/20 text-forge-violet font-semibold'
+                        : 'text-forge-muted/50 hover:text-forge-muted hover:bg-white/5'
+                    }`}
+                  >
+                    {level.label}
+                  </button>
+                ))}
+              </div>
               {promptMeter && (
                 <>
                   <span>·</span>

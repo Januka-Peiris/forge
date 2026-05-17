@@ -92,6 +92,7 @@ export function TerminalPane({
     setSearchTerm('');
     setSearchResults({ resultIndex: -1, resultCount: 0 });
     searchAddonRef.current?.clearDecorations();
+    window.setTimeout(() => searchAddonRef.current?.clearDecorations(), 50);
     window.setTimeout(() => terminalRef.current?.focus(), 0);
   };
 
@@ -145,9 +146,14 @@ export function TerminalPane({
       setSearchResults(event);
     });
     terminal.attachCustomKeyEventHandler((event) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
+      if (!(event.metaKey || event.ctrlKey)) return true;
+      const key = event.key.toLowerCase();
+      if (key === 'f') {
         event.preventDefault();
         openSearch();
+        return false;
+      }
+      if (key === 'w' || key === '\\' || key === '-') {
         return false;
       }
       return true;
@@ -187,7 +193,10 @@ export function TerminalPane({
       terminal.write(chunk.data);
       lastRenderedSeqRef.current = Math.max(lastRenderedSeqRef.current, chunk.seq);
     }
-  }, [chunks]);
+    if (!showSearch && next.length > 0) {
+      searchAddonRef.current?.clearDecorations();
+    }
+  }, [chunks, showSearch]);
 
   useEffect(() => {
     const searchAddon = searchAddonRef.current;
