@@ -167,6 +167,7 @@ export function WorkspaceTerminal({
   const coordinatorAutoStepQueuedInstructionRef = useRef<string | null>(null);
   const lastCoordinatorAutoStepAtRef = useRef<number>(0);
   const coordinatorAutoStepTimerRef = useRef<number | null>(null);
+  const pendingPlacementRef = useRef<Set<string>>(new Set());
   const workspaceId = workspace?.id ?? null;
   const tileLayout = useTileLayoutState(workspaceId);
 
@@ -746,6 +747,19 @@ export function WorkspaceTerminal({
     onActiveEditorFileChange?.(activeEditorPath);
   }, [activeEditorPath, onActiveEditorFileChange]);
 
+  // Sync focusedId FROM the tile layout when the focused tile changes (e.g. after closeTile)
+  useEffect(() => {
+    if (!tileLayout.focusedLeaf) return;
+    if (tileLayout.focusedLeaf.content.kind !== 'terminal') return;
+    const tileSessionId = tileLayout.focusedLeaf.content.sessionId;
+    if (tileSessionId && tileSessionId !== focusedId) {
+      focusedIdRef.current = tileSessionId;
+      setFocusedId(tileSessionId);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tileLayout.focusedLeaf]);
+
+  // Sync tile layout FROM focusedId — only auto-place if session is genuinely unplaced
   useEffect(() => {
     if (!workspaceId || visibleSessions.length === 0) return;
     const visibleIds = new Set(visibleSessions.map((session) => session.id));
@@ -758,10 +772,10 @@ export function WorkspaceTerminal({
       }
       return;
     }
-    if (focusedId && tileLayout.focusedLeaf && visibleIds.has(focusedId) && (
-      tileLayout.focusedLeaf.content.kind === 'empty'
-      || !tileLayout.visibleTerminalSessionIds.has(focusedId)
-    )) {
+    if (focusedId && tileLayout.focusedLeaf && visibleIds.has(focusedId)
+      && !tileLayout.visibleTerminalSessionIds.has(focusedId)
+      && !pendingPlacementRef.current.has(focusedId)
+    ) {
       tileLayout.setTileContent(tileLayout.focusedLeaf.id, { kind: 'terminal', sessionId: focusedId });
     }
   }, [focusedId, tileLayout, visibleSessions, workspaceId]);
@@ -789,22 +803,15 @@ export function WorkspaceTerminal({
       if (!tileLayout.focusedTileId) return;
       if (event.key === '\\') {
         event.preventDefault();
-        const nextContent = nextSplitTileContent();
-        tileLayout.splitTile(tileLayout.focusedTileId, 'horizontal', nextContent);
-        if (nextContent.kind === 'terminal') {
-          focusedIdRef.current = nextContent.sessionId;
-          setFocusedId(nextContent.sessionId);
-        }
+        event.stopPropagation();
+        splitTerminalTile(tileLayout.focusedTileId, 'horizontal');
       } else if (event.key === '-') {
         event.preventDefault();
-        const nextContent = nextSplitTileContent();
-        tileLayout.splitTile(tileLayout.focusedTileId, 'vertical', nextContent);
-        if (nextContent.kind === 'terminal') {
-          focusedIdRef.current = nextContent.sessionId;
-          setFocusedId(nextContent.sessionId);
-        }
+        event.stopPropagation();
+        splitTerminalTile(tileLayout.focusedTileId, 'vertical');
       } else if (event.key === 'w') {
         event.preventDefault();
+        event.stopPropagation();
         tileLayout.closeTile(tileLayout.focusedTileId);
       } else if (event.altKey && event.key === 'ArrowRight') {
         event.preventDefault();
@@ -820,14 +827,26 @@ export function WorkspaceTerminal({
         tileLayout.focusAdjacentTile('up');
       }
     };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
   });
 
   const nextSplitTileContent = (): TileContent => {
     const used = tileLayout.visibleTerminalSessionIds;
     const unused = visibleSessions.find((session) => !used.has(session.id));
     return unused ? { kind: 'terminal', sessionId: unused.id } : { kind: 'empty' };
+  };
+
+  const createTerminalWithSplit = async (kind: 'agent' | 'shell', profile: TerminalProfile, title?: string, profileId?: string) => {
+    const currentTileId = tileLayout.focusedTileId;
+    const hadExistingSession = tileLayout.focusedLeaf?.content.kind === 'terminal';
+    await createTerminal(kind, profile, title, profileId);
+    const newSessionId = focusedIdRef.current;
+    if (newSessionId && currentTileId && hadExistingSession) {
+      pendingPlacementRef.current.add(newSessionId);
+      tileLayout.splitTile(currentTileId, 'horizontal', { kind: 'terminal', sessionId: newSessionId });
+      pendingPlacementRef.current.delete(newSessionId);
+    }
   };
 
   const focusTerminalTile = (tile: TileLeaf, sessionId?: string) => {
@@ -858,6 +877,7 @@ export function WorkspaceTerminal({
       onSplitRight: () => splitTerminalTile(leaf.id, 'horizontal'),
       onSplitDown: () => splitTerminalTile(leaf.id, 'vertical'),
       onClose: () => tileLayout.closeTile(leaf.id),
+      onKillSession: session ? () => void closeTerminal(session.id) : undefined,
     };
 
     if (!session) {
@@ -907,7 +927,7 @@ export function WorkspaceTerminal({
             stuckSince={workspaceHealth?.terminals.find((t) => t.sessionId === session.id)?.stuckSince ?? null}
             onFocus={() => focusTerminalTile(leaf, session.id)}
             onStop={() => void stopTerminal(session.id)}
-            onClose={() => void closeTerminal(session.id)}
+            onClose={() => tileLayout.closeTile(leaf.id)}
             onData={(data) => void writeWorkspaceTerminalSessionInput(session.id, data).catch(setActionError)}
             onResize={(cols, rows) => void resizeWorkspaceTerminalSession(session.id, cols, rows).catch(() => undefined)}
           />
@@ -944,7 +964,7 @@ export function WorkspaceTerminal({
         focusedSession={focusedSession}
         agentProfiles={agentProfiles}
         onOpenInCursor={onOpenInCursor}
-        onCreateTerminal={(kind, profile, title, profileId) => void createTerminal(kind, profile, title, profileId)}
+        onCreateTerminal={(kind, profile, title, profileId) => void createTerminalWithSplit(kind, profile, title, profileId)}
         onCopyFocusedOutput={() => void copyFocusedOutput()}
         onInterruptFocusedAgent={() => void interruptFocusedAgent()}
         onCloseTerminal={(sessionId) => void closeTerminal(sessionId)}
@@ -1057,6 +1077,11 @@ export function WorkspaceTerminal({
               .then((status) => setCoordinatorStatus(status))
               .catch(setActionError);
           }}
+          onModelChange={(model) => {
+            if (focusedSession && (focusedSession.profile === 'claude_code' || focusedSession.profile === 'kimi_code')) {
+              void writeWorkspaceTerminalSessionInput(focusedSession.id, `/model ${model}\n`).catch(() => undefined);
+            }
+          }}
         />
       )}
     </div>
@@ -1068,11 +1093,13 @@ function TileContextMenu({
   onSplitRight,
   onSplitDown,
   onClose,
+  onKillSession,
 }: {
   children: ReactNode;
   onSplitRight: () => void;
   onSplitDown: () => void;
   onClose: () => void;
+  onKillSession?: () => void;
 }) {
   return (
     <ContextMenu.Root>
@@ -1096,11 +1123,19 @@ function TileContextMenu({
           <ContextMenu.Separator className="my-1 h-px bg-forge-border/60" />
           <ContextMenu.Item
             onSelect={onClose}
-            className="flex cursor-pointer select-none items-center rounded px-2 py-1.5 text-xs text-forge-red outline-none hover:bg-forge-red/10"
+            className="flex cursor-pointer select-none items-center rounded px-2 py-1.5 text-xs text-forge-text outline-none hover:bg-white/10"
           >
             Close Pane
             <kbd className="ml-auto font-sans text-[10px] text-forge-dim">⌘W</kbd>
           </ContextMenu.Item>
+          {onKillSession && (
+            <ContextMenu.Item
+              onSelect={onKillSession}
+              className="flex cursor-pointer select-none items-center rounded px-2 py-1.5 text-xs text-forge-red outline-none hover:bg-forge-red/10"
+            >
+              Kill Session
+            </ContextMenu.Item>
+          )}
         </ContextMenu.Content>
       </ContextMenu.Portal>
     </ContextMenu.Root>
