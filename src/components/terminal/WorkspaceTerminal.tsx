@@ -189,6 +189,10 @@ export function WorkspaceTerminal({
     [agentProfiles],
   );
   const focusedIsAgent = focusedSession?.terminalKind === 'agent' || focusedSession?.sessionRole === 'agent';
+  const hasAnyAgentSession = useMemo(
+    () => allSessions.some((s) => !s.closedAt && (s.terminalKind === 'agent' || s.sessionRole === 'agent')),
+    [allSessions],
+  );
 
   /** Running sessions not shown in the main panes (for the attach overflow strip only). */
   const dockOverflowSessions = useMemo(() => {
@@ -822,7 +826,16 @@ export function WorkspaceTerminal({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  });
+  }, [
+    tileLayout.focusedTileId,
+    tileLayout.splitTile,
+    tileLayout.closeTile,
+    tileLayout.focusAdjacentTile,
+    tileLayout.visibleTerminalSessionIds,
+    visibleSessions,
+    setFocusedId,
+    focusedIdRef,
+  ]);
 
   const nextSplitTileContent = (): TileContent => {
     const used = tileLayout.visibleTerminalSessionIds;
@@ -1034,7 +1047,7 @@ export function WorkspaceTerminal({
 
       <WorkspaceContextFooter workspaceId={workspace.id} />
 
-      {focusedIsAgent && (
+      {(focusedIsAgent || hasAnyAgentSession) && (
         <WorkspaceComposer
           workspaceId={workspace.id}
           busy={busy}

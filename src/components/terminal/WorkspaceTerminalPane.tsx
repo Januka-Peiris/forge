@@ -145,9 +145,12 @@ export function TerminalPane({
       setSearchResults(event);
     });
     terminal.attachCustomKeyEventHandler((event) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
-        event.preventDefault();
-        openSearch();
+      if (event.type !== 'keydown') return true;
+      if (event.metaKey || event.ctrlKey) {
+        if (event.key.toLowerCase() === 'f') {
+          event.preventDefault();
+          openSearch();
+        }
         return false;
       }
       return true;
@@ -162,7 +165,6 @@ export function TerminalPane({
     };
     const observer = new ResizeObserver(fit);
     observer.observe(containerRef.current);
-    window.setTimeout(fit, 30);
     return () => {
       disposable.dispose();
       searchDisposable.dispose();
@@ -217,11 +219,14 @@ export function TerminalPane({
     : '';
   return (
     <section
-      onMouseDown={onFocus}
+      onFocusCapture={onFocus}
       title={session.cwd}
       className={`relative flex min-h-0 flex-1 flex-col rounded-md border bg-forge-bg ${focused ? 'border-forge-green/50 shadow-lg shadow-emerald-950/20' : 'border-forge-border'}`}
     >
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-forge-border/70 bg-forge-surface px-2 py-1.5">
+      <div
+        onMouseDown={onFocus}
+        className="flex shrink-0 items-center justify-between gap-2 border-b border-forge-border/70 bg-forge-surface px-2 py-1.5"
+      >
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate text-[12px] font-bold text-forge-text">{title}</span>
           <Badge variant={sessionBadgeVariant(session)}>
