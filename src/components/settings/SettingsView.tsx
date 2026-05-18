@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { ChevronDown, Save } from 'lucide-react';
+import { ChevronDown, PlugZap, Save } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Switch } from '../ui/switch';
@@ -10,6 +10,11 @@ import { AgentProfilesCard } from './AgentProfilesCard';
 import { RepositoriesCard } from './RepositoriesCard';
 import { RepositoryRelationshipsCard } from './RepositoryRelationshipsCard';
 import { cn } from '../../lib/cn';
+import {
+  AGENT_PROVIDER_OPTIONS,
+  type AgentProviderId,
+} from '../../lib/active-agent-providers';
+import { useActiveAgentProviders } from '../../lib/hooks/useActiveAgentProviders';
 
 const CLAUDE_AGENT_MODELS = [
   { value: 'claude-opus-4-7', label: 'Claude Opus 4.7 (1M context)' },
@@ -95,7 +100,99 @@ function SettingsGroup({
   );
 }
 
-function AiModelsCard() {
+function AgentSetupCard({
+  activeProviderIds,
+  detectedProviderIds,
+  loading,
+  error,
+  hasSavedPreference,
+  onSave,
+}: {
+  activeProviderIds: ReadonlySet<AgentProviderId>;
+  detectedProviderIds: ReadonlySet<AgentProviderId>;
+  loading: boolean;
+  error: string | null;
+  hasSavedPreference: boolean;
+  onSave: (ids: readonly AgentProviderId[]) => Promise<void>;
+}) {
+  const [savingProviderId, setSavingProviderId] = useState<AgentProviderId | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const updateProvider = async (providerId: AgentProviderId, checked: boolean) => {
+    const next = new Set(activeProviderIds);
+    if (checked) next.add(providerId);
+    else next.delete(providerId);
+    setSavingProviderId(providerId);
+    setMessage(null);
+    try {
+      await onSave(Array.from(next));
+      const label = AGENT_PROVIDER_OPTIONS.find((option) => option.id === providerId)?.label ?? providerId;
+      setMessage(`${label} ${checked ? 'enabled' : 'disabled'}.`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingProviderId(null);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-forge-border bg-forge-card p-4">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <PlugZap className="h-4 w-4 text-forge-green" />
+            <h2 className="text-[14px] font-bold text-forge-text">Agent Setup</h2>
+          </div>
+          <p className="mt-0.5 text-[11px] text-forge-muted">
+            Pick the providers you actually use. Fresh installs default to detected tools only.
+          </p>
+        </div>
+        <span className="shrink-0 rounded-full border border-forge-border bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-forge-muted">
+          {activeProviderIds.size} active
+        </span>
+      </div>
+
+      <div className="grid gap-2 md:grid-cols-5">
+        {AGENT_PROVIDER_OPTIONS.map((provider) => {
+          const active = activeProviderIds.has(provider.id);
+          const detected = detectedProviderIds.has(provider.id);
+          return (
+            <div
+              key={provider.id}
+              className={cn(
+                'rounded-lg border p-3 transition-colors',
+                active ? 'border-forge-green/35 bg-forge-green/5' : 'border-forge-border/70 bg-black/10',
+              )}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-[12px] font-semibold text-forge-text">{provider.shortLabel}</p>
+                  <p className={cn('mt-0.5 text-[10px]', detected ? 'text-forge-green' : 'text-forge-muted')}>
+                    {detected ? 'Detected' : provider.id === 'openai' ? 'Manual' : 'Missing'}
+                  </p>
+                </div>
+                <Switch
+                  checked={active}
+                  disabled={loading || savingProviderId === provider.id}
+                  onCheckedChange={(checked) => void updateProvider(provider.id, checked)}
+                />
+              </div>
+              <p className="mt-2 line-clamp-2 text-[10px] leading-snug text-forge-muted">{provider.setupHint}</p>
+            </div>
+          );
+        })}
+      </div>
+
+      {(message || error || !hasSavedPreference) && (
+        <p className="mt-3 text-[12px] text-forge-muted">
+          {message || error || 'Using detected defaults until you toggle a provider.'}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function AiModelsCard({ activeProviderIds }: { activeProviderIds: ReadonlySet<AgentProviderId> }) {
   const [modelSettings, setModelSettings] = useState<AiModelSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -127,9 +224,10 @@ function AiModelsCard() {
     <div className="rounded-xl border border-forge-border bg-forge-card p-4">
       <div className="mb-4">
         <h2 className="text-[14px] font-bold text-forge-text">AI Models</h2>
-        <p className="text-[11px] text-forge-muted mt-0.5">Choose default models for Claude, Codex, Kimi, and orchestrator roles. Changes take effect immediately.</p>
+        <p className="text-[11px] text-forge-muted mt-0.5">Choose defaults for active providers. Disabled provider values stay saved but hidden.</p>
       </div>
       <div className="space-y-4">
+        {activeProviderIds.has('claude_code') && (
         <div>
           <label className="text-[12px] font-semibold text-forge-text block mb-1">Claude default model</label>
           <p className="text-[11px] text-forge-muted mb-2">Used when starting or focusing Claude chats.</p>
@@ -148,6 +246,8 @@ function AiModelsCard() {
             </SelectContent>
           </Select>
         </div>
+        )}
+        {activeProviderIds.has('codex') && (
         <div>
           <label className="text-[12px] font-semibold text-forge-text block mb-1">Codex default model</label>
           <p className="text-[11px] text-forge-muted mb-2">Used when starting or focusing Codex chats.</p>
@@ -166,6 +266,8 @@ function AiModelsCard() {
             </SelectContent>
           </Select>
         </div>
+        )}
+        {activeProviderIds.has('kimi_code') && (
         <div>
           <label className="text-[12px] font-semibold text-forge-text block mb-1">Kimi default model</label>
           <p className="text-[11px] text-forge-muted mb-2">Used when starting or focusing Kimi chats.</p>
@@ -184,6 +286,12 @@ function AiModelsCard() {
             </SelectContent>
           </Select>
         </div>
+        )}
+        {!activeProviderIds.has('claude_code') && !activeProviderIds.has('codex') && !activeProviderIds.has('kimi_code') && (
+          <p className="rounded-lg border border-forge-border/70 bg-black/10 p-3 text-[12px] text-forge-muted">
+            No CLI agent providers are active. Enable Claude, Codex, or Kimi in Agent Setup to edit their model defaults.
+          </p>
+        )}
         <div>
           <label className="text-[12px] font-semibold text-forge-text block mb-1">Orchestrator brain model</label>
           <p className="text-[11px] text-forge-muted mb-2">Used by the Orchestrator to analyse workspaces and dispatch agent prompts. Supports Claude and OpenAI models.</p>
@@ -421,6 +529,8 @@ export function SettingsView({
   onSettingsChange: (settings: AppSettings) => void;
   onRemoveRepository: (repositoryId: string) => void;
 }) {
+  const activeProviders = useActiveAgentProviders();
+
   return (
     <div className="flex flex-1 flex-col min-h-0">
       <div className="px-6 pt-6 pb-4 border-b border-forge-border shrink-0">
@@ -429,12 +539,21 @@ export function SettingsView({
       </div>
 
       <div className="flex-1 overflow-y-auto p-5 space-y-3">
+        <AgentSetupCard
+          activeProviderIds={activeProviders.activeProviderSet}
+          detectedProviderIds={activeProviders.detectedProviderSet}
+          loading={activeProviders.loading}
+          error={activeProviders.error}
+          hasSavedPreference={activeProviders.hasSavedPreference}
+          onSave={activeProviders.saveActiveProviderIds}
+        />
+
         <SettingsGroup
           title="Essentials"
           description="Models, notifications, repo context, and automation safety."
           meta="4 panels"
         >
-          <AiModelsCard />
+          <AiModelsCard activeProviderIds={activeProviders.activeProviderSet} />
           <NotificationSettingsCard />
           <RepoContextCard />
           <TrustAndSafetyCard />
@@ -445,7 +564,7 @@ export function SettingsView({
           description="Profiles, coordinator roles, and local model options."
           meta="1 panel"
         >
-          <AgentProfilesCard />
+          <AgentProfilesCard activeProviderIds={activeProviders.activeProviderSet} />
         </SettingsGroup>
 
         <SettingsGroup

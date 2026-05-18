@@ -46,6 +46,8 @@ import { WorkspaceHeader } from './WorkspaceHeader';
 import { WorkspaceComposer, type ComposerSettings } from './WorkspaceComposer';
 import type { PromptTemplate } from '../../types/prompt-template';
 import { useSyncedRef } from '../../lib/hooks/useSyncedRef';
+import { useActiveAgentProviders } from '../../lib/hooks/useActiveAgentProviders';
+import { isAgentProfileActive } from '../../lib/active-agent-providers';
 import { useWorkspaceTerminalOutput } from './useWorkspaceTerminalOutput';
 import { WorkspaceTerminalEmptyState } from './WorkspaceTerminalEmptyState';
 import { WorkspaceContextFooter } from './WorkspaceContextFooter';
@@ -140,6 +142,7 @@ export function WorkspaceTerminal({
   const [, setReviewCockpit] = useState<WorkspaceReviewCockpit | null>(null);
   const [workflowHint, setWorkflowHint] = useState<string | null>(null);
   const [agentProfiles, setAgentProfiles] = useState<AgentProfile[]>([]);
+  const activeProviders = useActiveAgentProviders(agentProfiles);
   const [selectedProfileId, setSelectedProfileId] = useAgentProfile();
   const [composerSettings, setComposerSettings] = useState<ComposerSettings>(loadComposerSettings);
   const [providerModelDefaults, setProviderModelDefaults] = useState({
@@ -197,8 +200,8 @@ export function WorkspaceTerminal({
     [focusedId, visibleSessions],
   );
   const localAgentProfiles = useMemo(
-    () => agentProfiles.filter((profile) => profile.agent === 'local_llm' || profile.local),
-    [agentProfiles],
+    () => agentProfiles.filter((profile) => (profile.agent === 'local_llm' || profile.local) && isAgentProfileActive(profile, activeProviders.activeProviderSet)),
+    [activeProviders.activeProviderSet, agentProfiles],
   );
   const focusedIsAgent = focusedSession?.terminalKind === 'agent' || focusedSession?.sessionRole === 'agent';
   const hasAnyAgentSession = useMemo(
@@ -892,6 +895,7 @@ export function WorkspaceTerminal({
         error={error}
         focusedSession={focusedSession}
         agentProfiles={agentProfiles}
+        activeProviderIds={activeProviders.activeProviderSet}
         onOpenInCursor={onOpenInCursor}
         onCreateTerminal={(kind, profile, title, profileId) => void createTerminal(kind, profile, title, profileId)}
         onCopyFocusedOutput={() => void copyFocusedOutput()}
@@ -955,6 +959,7 @@ export function WorkspaceTerminal({
             <WorkspaceTerminalEmptyState
               busy={busy}
               localAgentProfiles={localAgentProfiles}
+              activeProviderIds={activeProviders.activeProviderSet}
               onStartClaude={() => void createTerminal('agent', 'claude_code', 'Claude')}
               onStartCodex={() => void createTerminal('agent', 'codex', 'Codex')}
               onStartKimi={() => void createTerminal('agent', 'kimi_code', 'Kimi')}
@@ -1002,6 +1007,7 @@ export function WorkspaceTerminal({
           promptTemplates={promptTemplates}
           agentContext={agentContext}
           agentProfiles={agentProfiles}
+          activeProviderIds={activeProviders.activeProviderSet}
           coordinatorStatus={coordinatorStatus}
           settings={composerSettings}
           onSettingsChange={(patch) => setComposerSettings((current) => ({ ...current, ...patch }))}

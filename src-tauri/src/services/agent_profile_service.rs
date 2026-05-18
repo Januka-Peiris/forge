@@ -420,6 +420,60 @@ pub fn default_profiles() -> Vec<AgentProfile> {
             coordinator_eligible: Some(true),
         },
         AgentProfile {
+            id: "codex".to_string(),
+            label: "Codex".to_string(),
+            agent: "codex".to_string(),
+            command: "codex".to_string(),
+            args: vec![],
+            model: None,
+            reasoning: None,
+            mode: Some("act".to_string()),
+            provider: Some("openai".to_string()),
+            endpoint: None,
+            local: false,
+            description: Some("Codex CLI agent".to_string()),
+            skills: vec![],
+            templates: vec![],
+            role_preference: None,
+            coordinator_eligible: Some(true),
+        },
+        AgentProfile {
+            id: "kimi-code".to_string(),
+            label: "Kimi Code".to_string(),
+            agent: "kimi_code".to_string(),
+            command: "kimi".to_string(),
+            args: vec![],
+            model: None,
+            reasoning: None,
+            mode: Some("act".to_string()),
+            provider: Some("kimi".to_string()),
+            endpoint: None,
+            local: false,
+            description: Some("Kimi Code CLI agent".to_string()),
+            skills: vec![],
+            templates: vec![],
+            role_preference: None,
+            coordinator_eligible: Some(true),
+        },
+        AgentProfile {
+            id: "local-llm".to_string(),
+            label: "Local LLM".to_string(),
+            agent: "local_llm".to_string(),
+            command: "ollama".to_string(),
+            args: vec!["run".to_string(), "llama3.2".to_string()],
+            model: Some("llama3.2".to_string()),
+            reasoning: None,
+            mode: Some("act".to_string()),
+            provider: Some("ollama".to_string()),
+            endpoint: Some("http://localhost:11434".to_string()),
+            local: true,
+            description: Some("Default Ollama local agent".to_string()),
+            skills: vec![],
+            templates: vec![],
+            role_preference: Some("coder".to_string()),
+            coordinator_eligible: Some(true),
+        },
+        AgentProfile {
             id: "shell".to_string(),
             label: "Shell".to_string(),
             agent: "shell".to_string(),
@@ -492,13 +546,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn defaults_include_claude_and_shell() {
+    fn defaults_include_builtin_agents_and_shell() {
         let ids = default_profiles()
             .into_iter()
             .map(|profile| profile.id)
             .collect::<Vec<_>>();
-        assert_eq!(ids.len(), 2);
+        assert_eq!(ids.len(), 5);
         assert!(ids.contains(&"claude-code".to_string()));
+        assert!(ids.contains(&"codex".to_string()));
+        assert!(ids.contains(&"kimi-code".to_string()));
+        assert!(ids.contains(&"local-llm".to_string()));
         assert!(ids.contains(&"shell".to_string()));
     }
 

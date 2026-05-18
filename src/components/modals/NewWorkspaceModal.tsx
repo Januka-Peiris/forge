@@ -5,6 +5,8 @@ import { getRepositoryWorkspaceOptions } from '../../lib/tauri-api/workspaces';
 import { listWorkspaceTemplates, createWorkspaceTemplate } from '../../lib/tauri-api/workspace-templates';
 import { formatWorkspaceCreationError } from '../../lib/ui-errors';
 import { defaultBranchForWorkspaceLabel, suggestForgeWorkspaceLabel } from '../../lib/workspace-name-generator';
+import { agentTypeForProvider } from '../../lib/active-agent-providers';
+import { useActiveAgentProviders } from '../../lib/hooks/useActiveAgentProviders';
 import type { AgentType, CreateManyWorkspacesResult, CreateWorkspaceInput, DiscoveredRepository, RepositoryWorkspaceOptions } from '../../types';
 import type { RelevantRepositoriesSuggestionResult, RepositoryScopeSuggestion } from '../../types/repository-relationship';
 import type { WorkspaceTemplate } from '../../types/workspace-template';
@@ -56,11 +58,24 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
   const [createRelatedWorkspaces, setCreateRelatedWorkspaces] = useState(false);
   const [selectedScopeRepoIds, setSelectedScopeRepoIds] = useState<string[]>([]);
   const [createManyResult, setCreateManyResult] = useState<CreateManyWorkspacesResult | null>(null);
+  const { activeProviderIds, activeProviderSet, loading: activeProvidersLoading } = useActiveAgentProviders();
+  const activeAgentOptions = useMemo(() => (
+    activeProviderIds
+      .map(agentTypeForProvider)
+      .filter((value): value is AgentType => value === 'Claude Code' || value === 'Codex' || value === 'Kimi Code' || value === 'Local LLM')
+  ), [activeProviderIds]);
 
   useEffect(() => {
     if (!initialRepositoryId) return;
     setRepositoryId(initialRepositoryId);
   }, [initialRepositoryId]);
+
+  useEffect(() => {
+    if (activeProvidersLoading || activeAgentOptions.length === 0 || activeProviderSet.size === 0) return;
+    if (!activeAgentOptions.includes(agent)) {
+      setAgent(activeAgentOptions[0]);
+    }
+  }, [activeAgentOptions, activeProviderSet.size, activeProvidersLoading, agent]);
 
   useEffect(() => {
     listWorkspaceTemplates()
@@ -388,8 +403,9 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
             <label className="block text-[11px] font-semibold text-forge-muted uppercase tracking-wider mb-1.5">
               <div className="flex items-center gap-1.5"><Bot className="w-3 h-3" />Agent</div>
             </label>
+            {activeAgentOptions.length > 0 ? (
             <div className="grid grid-cols-3 gap-2">
-              {(['Claude Code', 'Codex', 'Kimi Code', 'Local LLM'] as const).map((a) => (
+              {activeAgentOptions.map((a) => (
                 <Button
                   key={a}
                   type="button"
@@ -401,6 +417,11 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
                 </Button>
               ))}
             </div>
+            ) : (
+              <p className="rounded-lg border border-forge-border/70 bg-black/10 p-3 text-[12px] text-forge-muted">
+                No active agent providers. Enable Claude, Codex, Kimi, or Local LLM in Settings → Agent Setup before creating an agent workspace.
+              </p>
+            )}
           </div>
 
           <div>
@@ -635,7 +656,7 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
           <Button
             onClick={() => void handleSubmit()}
-            disabled={submitting || !repositoryId}
+            disabled={submitting || !repositoryId || activeAgentOptions.length === 0}
           >
             <Zap className="w-3.5 h-3.5" />
             {submitting
