@@ -21,6 +21,7 @@ pub type TerminalRegistry = Arc<Mutex<HashMap<String, Arc<ActiveTerminal>>>>;
 pub type PendingCommandRegistry = Arc<Mutex<HashMap<String, String>>>;
 pub type CoordinatorStepRegistry = Arc<Mutex<HashSet<String>>>;
 pub type SchedulerJobRegistry = Arc<Mutex<HashSet<String>>>;
+pub type RepoIntelligenceRegistry = Arc<Mutex<HashSet<String>>>;
 
 pub struct ActiveTerminal {
     pub session_id: String,
@@ -51,6 +52,8 @@ pub struct AppState {
     pub coordinator_step_inflight: CoordinatorStepRegistry,
     /// Single-flight key set for scheduler jobs (`workspace_id:job_kind`).
     pub scheduler_job_inflight: SchedulerJobRegistry,
+    /// Single-flight key set for per-repo intelligence refresh jobs (`repo_id`).
+    pub repo_intelligence_inflight: RepoIntelligenceRegistry,
 }
 
 impl AppState {
@@ -107,6 +110,7 @@ impl AppState {
             orchestrator_last_actions: Arc::new(Mutex::new(Vec::new())),
             coordinator_step_inflight: Arc::new(Mutex::new(HashSet::new())),
             scheduler_job_inflight: Arc::new(Mutex::new(HashSet::new())),
+            repo_intelligence_inflight: Arc::new(Mutex::new(HashSet::new())),
         };
         let _ =
             settings_repository::ensure_default_value(&state.db, "notifications_min_level", "info");
@@ -114,6 +118,11 @@ impl AppState {
             &state.db,
             "notifications_dedupe_seconds",
             "30",
+        );
+        let _ = settings_repository::ensure_default_value(
+            &state.db,
+            "repo_intelligence_enabled",
+            "false",
         );
         Ok(state)
     }

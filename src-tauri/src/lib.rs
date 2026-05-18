@@ -17,7 +17,9 @@ use commands::{
     workspace_ports, workspace_readiness, workspace_scripts, workspace_tasks, workspace_templates,
     workspaces,
 };
-use services::{coordinator_service, orchestrator_service, rebase_service};
+use services::{
+    coordinator_service, orchestrator_service, rebase_service, repo_intelligence_service,
+};
 use state::AppState;
 use tauri::Manager;
 
@@ -71,6 +73,7 @@ pub fn run() {
 
             rebase_service::start_auto_rebase_loop(state.clone());
             orchestrator_service::start_orchestrator_loop(state.clone());
+            repo_intelligence_service::start_repo_intelligence_loop(state.clone());
             app.manage(state);
             Ok(())
         })

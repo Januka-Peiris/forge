@@ -478,6 +478,26 @@ pub fn run(connection: &Connection) -> Result<(), String> {
                 created_at TEXT NOT NULL,
                 PRIMARY KEY (blob_oid, parser_version)
             );
+
+            CREATE TABLE IF NOT EXISTS repo_intelligence_state (
+                repo_id TEXT PRIMARY KEY,
+                repository_path TEXT NOT NULL,
+                default_branch TEXT NOT NULL,
+                ref_name TEXT NOT NULL,
+                indexed_commit TEXT NOT NULL,
+                artifact_path TEXT NOT NULL,
+                files_indexed INTEGER NOT NULL DEFAULT 0,
+                symbol_count INTEGER NOT NULL DEFAULT 0,
+                edge_count INTEGER NOT NULL DEFAULT 0,
+                generated_at TEXT NOT NULL,
+                refreshed_at TEXT NOT NULL,
+                stale INTEGER NOT NULL DEFAULT 1,
+                last_error TEXT,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_repo_intelligence_state_refreshed
+                ON repo_intelligence_state(refreshed_at DESC);
             "#,
         )
         .map_err(|err| format!("Failed to run SQLite migrations: {err}"))?;

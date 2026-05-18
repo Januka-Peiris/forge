@@ -17,6 +17,7 @@ pub mod local_llm_service;
 pub mod merge_readiness_service;
 pub mod pr_draft_service;
 pub mod prompt_template_service;
+pub mod repo_intelligence_service;
 pub mod repo_scanner_service;
 pub mod review_cockpit_service;
 pub mod review_summary_service;

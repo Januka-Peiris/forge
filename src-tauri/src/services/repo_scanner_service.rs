@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::models::{DiscoveredRepository, ScanRepositoriesResult};
 use crate::repositories::{repository_repository, settings_repository};
-use crate::services::worktree_discovery_service;
+use crate::services::{repo_intelligence_service, worktree_discovery_service};
 use crate::state::AppState;
 
 const MAX_SCAN_DEPTH: usize = 5;
@@ -68,6 +68,17 @@ pub fn scan_repositories(state: &AppState) -> Result<ScanRepositoriesResult, Str
 
     repository_repository::replace_all(&state.db, &repositories)?;
 
+    if repo_intelligence_service::repo_intelligence_enabled(state) {
+        for repository in &repositories {
+            let _ = repo_intelligence_service::refresh_repository_intelligence(
+                state,
+                &repository.id,
+                &repository.path,
+                false,
+            );
+        }
+    }
+
     Ok(ScanRepositoriesResult {
         repo_roots,
         repositories,
@@ -90,7 +101,16 @@ pub fn refresh_repository_by_id(state: &AppState, repository_id: &str) -> Result
     let (worktrees, _warnings) =
         worktree_discovery_service::discover_worktrees(&repository.id, Path::new(&repository.path));
     repository.worktrees = worktrees;
-    repository_repository::upsert(&state.db, &repository)
+    repository_repository::upsert(&state.db, &repository)?;
+    if repo_intelligence_service::repo_intelligence_enabled(state) {
+        let _ = repo_intelligence_service::refresh_repository_intelligence(
+            state,
+            &repository.id,
+            &repository.path,
+            false,
+        );
+    }
+    Ok(())
 }
 
 fn collect_git_repositories(

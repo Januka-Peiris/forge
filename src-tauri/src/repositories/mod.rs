@@ -8,6 +8,7 @@ pub mod workspace_repository;
 
 pub mod merge_readiness_repository;
 pub mod pr_draft_repository;
+pub mod repo_intelligence_repository;
 pub mod repository_repository;
 pub mod review_cockpit_repository;
 pub mod review_summary_repository;

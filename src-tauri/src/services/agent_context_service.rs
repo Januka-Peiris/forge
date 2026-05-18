@@ -2,6 +2,7 @@ use crate::models::{
     AgentContextWorktree, WorkspaceAgentContext, WorkspaceContextItem, WorkspaceContextPreview,
 };
 use crate::repositories::workspace_repository;
+use crate::services::repo_intelligence_service;
 use crate::state::AppState;
 
 pub fn get_workspace_agent_context(
@@ -26,7 +27,20 @@ pub fn get_workspace_agent_context(
 }
 
 pub fn build_session_open_context(state: &AppState, workspace_id: &str) -> Option<String> {
-    crate::context::preview::build_session_context_string(state, workspace_id)
+    if repo_intelligence_service::repo_intelligence_enabled(state) {
+        let cfg = crate::context::schema::SelectConfig::default();
+        if let Ok(preview) = repo_intelligence_service::build_workspace_context_preview(
+            state,
+            workspace_id,
+            None,
+            &cfg,
+        ) {
+            return build_session_context_string_from_preview(state, workspace_id, &preview);
+        }
+        crate::context::preview::build_session_context_string(state, workspace_id)
+    } else {
+        crate::context::preview::build_session_context_string(state, workspace_id)
+    }
 }
 
 pub fn get_workspace_context_preview(
@@ -34,7 +48,31 @@ pub fn get_workspace_context_preview(
     workspace_id: &str,
 ) -> Result<WorkspaceContextPreview, String> {
     let cfg = crate::context::schema::SelectConfig::default();
-    let preview = crate::context::preview::build_context_preview(state, workspace_id, None, &cfg)?;
+    let preview = if repo_intelligence_service::repo_intelligence_enabled(state) {
+        match repo_intelligence_service::build_workspace_context_preview(
+            state,
+            workspace_id,
+            None,
+            &cfg,
+        ) {
+            Ok(preview) => preview,
+            Err(err) => {
+                let mut fallback = crate::context::preview::build_context_preview(
+                    state,
+                    workspace_id,
+                    None,
+                    &cfg,
+                )?;
+                fallback.warning = match fallback.warning {
+                    Some(current) => Some(format!("{current} | Repo intelligence fallback: {err}")),
+                    None => Some(format!("Repo intelligence fallback: {err}")),
+                };
+                fallback
+            }
+        }
+    } else {
+        crate::context::preview::build_context_preview(state, workspace_id, None, &cfg)?
+    };
 
     // Map new ContextPreview → old WorkspaceContextPreview for frontend compat
     let items = preview
@@ -110,16 +148,57 @@ pub fn refresh_workspace_repo_context(
     state: &AppState,
     workspace_id: &str,
 ) -> Result<WorkspaceContextPreview, String> {
-    let workspace = workspace_repository::get_detail(&state.db, workspace_id)?
-        .ok_or_else(|| format!("Workspace {workspace_id} not found"))?;
-    let primary_path = workspace
-        .summary
-        .workspace_root_path
-        .clone()
-        .unwrap_or_else(|| workspace.worktree_path.clone());
-    let root = std::path::Path::new(&primary_path);
-    let _ = crate::context::discovery::build_repo_map(root, true, &state.db);
+    if repo_intelligence_service::repo_intelligence_enabled(state) {
+        let _ = repo_intelligence_service::ensure_workspace_repo_intelligence(
+            state,
+            workspace_id,
+            true,
+        );
+    } else {
+        let workspace = workspace_repository::get_detail(&state.db, workspace_id)?
+            .ok_or_else(|| format!("Workspace {workspace_id} not found"))?;
+        let primary_path = workspace
+            .summary
+            .workspace_root_path
+            .clone()
+            .unwrap_or_else(|| workspace.worktree_path.clone());
+        let root = std::path::Path::new(&primary_path);
+        let _ = crate::context::discovery::build_repo_map(root, true, &state.db);
+    }
     get_workspace_context_preview(state, workspace_id)
+}
+
+pub fn get_context_preview_with_hint(
+    state: &AppState,
+    workspace_id: &str,
+    prompt_hint: Option<&str>,
+) -> Result<crate::context::schema::ContextPreview, String> {
+    let cfg = crate::context::schema::SelectConfig::default();
+    if repo_intelligence_service::repo_intelligence_enabled(state) {
+        match repo_intelligence_service::build_workspace_context_preview(
+            state,
+            workspace_id,
+            prompt_hint,
+            &cfg,
+        ) {
+            Ok(preview) => Ok(preview),
+            Err(err) => {
+                let mut fallback = crate::context::preview::build_context_preview(
+                    state,
+                    workspace_id,
+                    prompt_hint,
+                    &cfg,
+                )?;
+                fallback.warning = match fallback.warning {
+                    Some(current) => Some(format!("{current} | Repo intelligence fallback: {err}")),
+                    None => Some(format!("Repo intelligence fallback: {err}")),
+                };
+                Ok(fallback)
+            }
+        }
+    } else {
+        crate::context::preview::build_context_preview(state, workspace_id, prompt_hint, &cfg)
+    }
 }
 
 pub fn format_prompt_preamble(primary_path: &str, linked: &[AgentContextWorktree]) -> String {
@@ -156,6 +235,73 @@ fn linked_worktrees(
             })
             .collect::<Vec<_>>(),
     )
+}
+
+fn build_session_context_string_from_preview(
+    state: &AppState,
+    workspace_id: &str,
+    preview: &crate::context::schema::ContextPreview,
+) -> Option<String> {
+    if preview.included.is_empty() {
+        return None;
+    }
+
+    let branch_info = {
+        let root = workspace_root(state, workspace_id)?;
+        crate::context::discovery::resolve_default_ref(&root)
+            .map(|r| {
+                format!(
+                    "{}@{}",
+                    r.branch,
+                    &r.commit_hash[..8.min(r.commit_hash.len())]
+                )
+            })
+            .unwrap_or_else(|_| "unknown".to_string())
+    };
+
+    let mut parts: Vec<String> = vec![format!("[FORGE CONTEXT — {}]", branch_info)];
+
+    if let Some(warn) = &preview.warning {
+        parts.push(format!("⚠ {}", warn));
+    }
+
+    let mandatory: Vec<&crate::context::schema::ContextSegment> = preview
+        .included
+        .iter()
+        .filter(|s| s.tier == "mandatory")
+        .collect();
+    if !mandatory.is_empty() {
+        parts.push("Mandatory context:".to_string());
+        for seg in &mandatory {
+            parts.push(seg.content.clone());
+        }
+    }
+
+    let related: Vec<&crate::context::schema::ContextSegment> = preview
+        .included
+        .iter()
+        .filter(|s| s.tier == "related")
+        .collect();
+    if !related.is_empty() {
+        parts.push("Related files:".to_string());
+        for seg in &related {
+            parts.push(seg.content.clone());
+        }
+    }
+
+    parts.push("[END FORGE CONTEXT]".to_string());
+
+    Some(parts.join("\n\n"))
+}
+
+fn workspace_root(state: &AppState, workspace_id: &str) -> Option<std::path::PathBuf> {
+    let workspace = workspace_repository::get_detail(&state.db, workspace_id).ok()??;
+    let path = workspace
+        .summary
+        .workspace_root_path
+        .clone()
+        .unwrap_or_else(|| workspace.worktree_path.clone());
+    Some(std::path::PathBuf::from(path))
 }
 
 #[cfg(test)]
