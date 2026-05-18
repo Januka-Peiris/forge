@@ -6,11 +6,15 @@ interface WorkspaceContextFooterProps {
 }
 
 export function WorkspaceContextFooter({ workspaceId }: WorkspaceContextFooterProps) {
+  const [mode, setMode] = useState<string>('repo_map');
   const [stale, setStale] = useState(false);
 
   useEffect(() => {
     getContextStatus(workspaceId)
-      .then((next) => setStale(next.stale))
+      .then((next) => {
+        setStale(next.stale);
+        setMode(next.mode ?? 'repo_map');
+      })
       .catch(() => {});
   }, [workspaceId]);
 
@@ -18,7 +22,9 @@ export function WorkspaceContextFooter({ workspaceId }: WorkspaceContextFooterPr
 
   return (
     <div className="flex items-center gap-2 border-t border-white/5 px-3 py-0.5 text-xs text-white/30">
-      <span className="text-amber-400/70">context stale</span>
+      <span className="text-amber-400/70">
+        {mode === 'repo_intelligence' ? 'repo intelligence stale' : 'context stale'}
+      </span>
     </div>
   );
 }
