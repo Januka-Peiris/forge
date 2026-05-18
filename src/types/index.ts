@@ -46,6 +46,17 @@ export type { PromptTemplate, WorkspacePromptTemplates } from './prompt-template
 export type { ReviewFileStatus, WorkspaceChangedFile, WorkspaceFileDiff } from './git-review';
 export type { AgentRunStatus, AgentRunStreamType, AgentRunType, StartWorkspaceRunInput, WorkspaceRun, WorkspaceRunLog } from './agent-run';
 export type { DiscoveredRepository, DiscoveredWorktree, ScanRepositoriesResult } from './repository';
+export type {
+  CreateRepositoryRelationshipInput,
+  RelevantRepositoriesSuggestionResult,
+  RepositoryRelationship,
+  RepositoryRelationshipKind,
+  RepositoryRelationshipSource,
+  RepositoryRelationshipsResult,
+  RepositoryScopeSuggestion,
+  SuggestRelevantRepositoriesInput,
+  UpdateRepositoryRelationshipInput,
+} from './repository-relationship';
 export type { AppSettings, SaveRepoRootsInput } from './settings';
 export type { EnvironmentCheckItem, EnvironmentCheckStatus } from './environment';
 export type {

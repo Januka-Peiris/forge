@@ -257,6 +257,32 @@ Validation notes:
 - MCP env keys are parsed as config metadata, but env values are redacted before being returned to the frontend.
 - MCP env values are not injected into agent prompt metadata.
 
+## Repository Relationships
+
+Use `repositoryRelationships` or `repository_relationships` to describe lightweight links to other repositories known to Forge. These links are federation metadata only: each repo keeps its own independent intelligence index, cache, graph, summaries, and workspace overlays.
+
+```json
+{
+  "repositoryRelationships": [
+    {
+      "to": "backend-repo-name-or-path",
+      "kind": "frontend_backend",
+      "label": "Frontend calls backend API",
+      "notes": "Consumes REST routes and shared auth assumptions"
+    }
+  ]
+}
+```
+
+Relationship fields:
+
+- `to`: target repository id, name, absolute path, or path relative to the current repo.
+- `kind`: one of `frontend_backend`, `sdk_api`, `shared_schema`, `deployment_dependency`, `event_flow`, `depends_on`, or `related`.
+- `label`: optional short human-readable description.
+- `notes`: optional longer coordination notes.
+
+Config-managed relationships are read-only in Forge. App-managed relationships can be created and removed from Settings, and Forge merges duplicate app/config relationships by source + target + kind.
+
 ## Full Example
 
 ```json

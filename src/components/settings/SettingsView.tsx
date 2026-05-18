@@ -8,6 +8,7 @@ import type { AiModelSettings } from '../../types/settings';
 import type { AppSettings } from '../../types';
 import { AgentProfilesCard } from './AgentProfilesCard';
 import { RepositoriesCard } from './RepositoriesCard';
+import { RepositoryRelationshipsCard } from './RepositoryRelationshipsCard';
 
 const CLAUDE_AGENT_MODELS = [
   { value: 'claude-opus-4-7', label: 'Claude Opus 4.7 (1M context)' },
@@ -385,6 +386,7 @@ export function SettingsView({
         <NotificationSettingsCard />
         <AgentProfilesCard />
         <RepoContextCard />
+        <RepositoryRelationshipsCard repositories={settings?.discoveredRepositories ?? []} />
         <TrustAndSafetyCard />
         <RepositoriesCard
           settings={settings}

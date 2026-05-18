@@ -15,6 +15,7 @@ pub mod orchestrator;
 pub mod pr_draft;
 pub mod prompt_template;
 pub mod repository;
+pub mod repository_relationship;
 pub mod review;
 pub mod review_cockpit;
 pub mod review_summary;
@@ -59,6 +60,11 @@ pub use orchestrator::{OrchestratorAction, OrchestratorStatus};
 pub use pr_draft::{WorkspacePrCheck, WorkspacePrDraft, WorkspacePrResult, WorkspacePrStatus};
 pub use prompt_template::{PromptTemplate, WorkspacePromptTemplates};
 pub use repository::{DiscoveredRepository, DiscoveredWorktree, ScanRepositoriesResult};
+pub use repository_relationship::{
+    CreateRepositoryRelationshipInput, ForgeRepositoryRelationshipConfig,
+    RelevantRepositoriesSuggestionResult, RepositoryRelationship, RepositoryRelationshipsResult,
+    RepositoryScopeSuggestion, SuggestRelevantRepositoriesInput, UpdateRepositoryRelationshipInput,
+};
 pub use review::ReviewItem;
 pub use review_cockpit::{
     MarkWorkspaceFileReviewedInput, QueueReviewAgentPromptInput, ReviewCockpitFile,

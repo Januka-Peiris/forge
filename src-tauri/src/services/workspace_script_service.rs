@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 
 use crate::models::workspace_script::RawForgeWorkspaceConfig;
 use crate::models::{
-    CreateWorkspaceTerminalInput, ForgeMcpServerConfig, ForgeWorkspaceConfig, TerminalSession,
+    CreateWorkspaceTerminalInput, ForgeMcpServerConfig, ForgeRepositoryRelationshipConfig,
+    ForgeWorkspaceConfig, TerminalSession,
 };
 use crate::repositories::{
     activity_repository, settings_repository, terminal_repository, workspace_repository,
@@ -266,6 +267,8 @@ pub fn load_config_from_root(root: &Path) -> ForgeWorkspaceConfig {
     match serde_json::from_str::<RawForgeWorkspaceConfig>(&text) {
         Ok(raw) => {
             let (mcp_servers, mcp_warnings) = parse_mcp_servers(raw.mcp_servers);
+            let (repository_relationships, repository_relationship_warnings) =
+                parse_repository_relationships(raw.repository_relationships);
             ForgeWorkspaceConfig {
                 exists: true,
                 path: Some(display_path),
@@ -280,6 +283,8 @@ pub fn load_config_from_root(root: &Path) -> ForgeWorkspaceConfig {
                     .collect(),
                 mcp_servers,
                 mcp_warnings,
+                repository_relationships,
+                repository_relationship_warnings,
                 warning: None,
             }
         }
@@ -335,6 +340,46 @@ fn sanitize_hooks(
         pre_ship: sanitize_commands(raw.pre_ship),
         post_ship: sanitize_commands(raw.post_ship),
     }
+}
+
+fn parse_repository_relationships(
+    relationships: Vec<crate::models::workspace_script::RawForgeRepositoryRelationshipConfig>,
+) -> (Vec<ForgeRepositoryRelationshipConfig>, Vec<String>) {
+    let mut parsed = Vec::new();
+    let mut warnings = Vec::new();
+
+    for (index, relationship) in relationships.into_iter().enumerate() {
+        let to = relationship.to.trim().to_string();
+        let kind = relationship.kind.trim().to_string();
+        if to.is_empty() {
+            warnings.push(format!(
+                "repositoryRelationships[{}] is missing a target repository.",
+                index
+            ));
+            continue;
+        }
+        if !crate::models::repository_relationship::is_valid_relationship_kind(&kind) {
+            warnings.push(format!(
+                "repositoryRelationships[{}] has unsupported kind `{}`.",
+                index, kind
+            ));
+            continue;
+        }
+        parsed.push(ForgeRepositoryRelationshipConfig {
+            to,
+            kind,
+            label: relationship
+                .label
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty()),
+            notes: relationship
+                .notes
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty()),
+        });
+    }
+
+    (parsed, warnings)
 }
 
 fn parse_mcp_servers(value: serde_json::Value) -> (Vec<ForgeMcpServerConfig>, Vec<String>) {
@@ -532,7 +577,7 @@ mod tests {
         fs::create_dir_all(dir.join(".forge")).expect("forge dir");
         fs::write(
             dir.join(CONFIG_RELATIVE_PATH),
-            r#"{"setup":[" npm install ", ""],"run":["npm run dev"],"teardown":["kill-port 3000"],"hooks":{"preRun":[" echo pre "],"postRun":["echo post"],"preTool":["echo tool"],"postTool":["echo tool-post"],"preShip":["echo ship"],"postShip":["echo ship-post"]},"agentProfiles":[{"id":"ollama-qwen","agent":"ollama","provider":"ollama","endpoint":"http://localhost:11434","command":"ollama","args":["run","qwen2.5-coder"],"model":"qwen2.5-coder"}],"mcpServers":{"linear":{"command":"npx","args":["-y","linear-mcp"],"env":{"LINEAR_API_KEY":"test"}}}}"#,
+            r#"{"setup":[" npm install ", ""],"run":["npm run dev"],"teardown":["kill-port 3000"],"hooks":{"preRun":[" echo pre "],"postRun":["echo post"],"preTool":["echo tool"],"postTool":["echo tool-post"],"preShip":["echo ship"],"postShip":["echo ship-post"]},"agentProfiles":[{"id":"ollama-qwen","agent":"ollama","provider":"ollama","endpoint":"http://localhost:11434","command":"ollama","args":["run","qwen2.5-coder"],"model":"qwen2.5-coder"}],"mcpServers":{"linear":{"command":"npx","args":["-y","linear-mcp"],"env":{"LINEAR_API_KEY":"test"}}},"repositoryRelationships":[{"to":"backend","kind":"frontend_backend","label":"Calls API","notes":"REST"}]}"#,
         )
         .expect("write config");
 
@@ -563,7 +608,35 @@ mod tests {
             Some("<redacted>")
         );
         assert!(config.mcp_warnings.is_empty());
+        assert_eq!(config.repository_relationships.len(), 1);
+        assert_eq!(config.repository_relationships[0].to, "backend");
+        assert_eq!(config.repository_relationships[0].kind, "frontend_backend");
+        assert_eq!(
+            config.repository_relationships[0].label.as_deref(),
+            Some("Calls API")
+        );
+        assert!(config.repository_relationship_warnings.is_empty());
         assert!(config.warning.is_none());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn repository_relationships_accept_snake_case_alias_and_warn_on_invalid() {
+        let dir = temp_root("repo-rel");
+        fs::create_dir_all(dir.join(".forge")).expect("forge dir");
+        fs::write(
+            dir.join(CONFIG_RELATIVE_PATH),
+            r#"{"repository_relationships":[{"to":"api","kind":"sdk_api"},{"to":"bad","kind":"unknown"},{"kind":"related"}]}"#,
+        )
+        .expect("write config");
+
+        let config = load_config_from_root(&dir);
+        assert_eq!(config.repository_relationships.len(), 1);
+        assert_eq!(config.repository_relationships[0].to, "api");
+        assert_eq!(config.repository_relationships[0].kind, "sdk_api");
+        assert_eq!(config.repository_relationship_warnings.len(), 2);
+        assert!(config.repository_relationship_warnings[0].contains("unsupported kind"));
+        assert!(config.repository_relationship_warnings[1].contains("missing a target"));
         let _ = fs::remove_dir_all(dir);
     }
 

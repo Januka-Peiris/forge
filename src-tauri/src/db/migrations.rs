@@ -498,6 +498,26 @@ pub fn run(connection: &Connection) -> Result<(), String> {
 
             CREATE INDEX IF NOT EXISTS idx_repo_intelligence_state_refreshed
                 ON repo_intelligence_state(refreshed_at DESC);
+
+            CREATE TABLE IF NOT EXISTS app_repository_relationships (
+                id TEXT PRIMARY KEY,
+                from_repo_id TEXT NOT NULL,
+                to_repo_id TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                label TEXT,
+                notes TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (from_repo_id) REFERENCES repositories(id) ON DELETE CASCADE,
+                FOREIGN KEY (to_repo_id) REFERENCES repositories(id) ON DELETE CASCADE,
+                UNIQUE(from_repo_id, to_repo_id, kind)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_app_repository_relationships_from
+                ON app_repository_relationships(from_repo_id);
+
+            CREATE INDEX IF NOT EXISTS idx_app_repository_relationships_to
+                ON app_repository_relationships(to_repo_id);
             "#,
         )
         .map_err(|err| format!("Failed to run SQLite migrations: {err}"))?;
@@ -773,5 +793,16 @@ mod tests {
             .any(|name| name == "replayed_from_action_id"));
         let worker_columns = table_columns(&connection, "workspace_coordinator_workers");
         assert!(worker_columns.iter().any(|name| name == "notified_status"));
+    }
+
+    #[test]
+    fn creates_app_repository_relationship_tables() {
+        let connection = Connection::open_in_memory().expect("open in-memory db");
+        run(&connection).expect("run migrations");
+
+        let columns = table_columns(&connection, "app_repository_relationships");
+        assert!(columns.iter().any(|name| name == "from_repo_id"));
+        assert!(columns.iter().any(|name| name == "to_repo_id"));
+        assert!(columns.iter().any(|name| name == "kind"));
     }
 }

@@ -1,5 +1,5 @@
 import { memo, useMemo, type MouseEvent } from 'react';
-import { GitBranch, GitPullRequest } from 'lucide-react';
+import { GitBranch, GitPullRequest, Network } from 'lucide-react';
 import type { Workspace } from '../../types';
 import { Tooltip } from '../ui/tooltip';
 
@@ -97,7 +97,7 @@ function WorkspaceListItemBase({
             )}
           </div>
           
-          {(showRepo || workspace.status === 'Running') && (
+          {(showRepo || workspace.status === 'Running' || workspace.parentWorkspaceId) && (
             <div className="flex items-center gap-2 mt-0.5">
               {showRepo && (
                 <span className="text-[10px] text-forge-muted truncate max-w-[120px]">
@@ -112,6 +112,14 @@ function WorkspaceListItemBase({
                   <span className="flex items-center gap-1 text-[10px] text-forge-orange animate-pulse cursor-help">
                     <span className="w-1 h-1 rounded-full bg-forge-orange" />
                     running
+                  </span>
+                </Tooltip>
+              )}
+              {workspace.parentWorkspaceId && (
+                <Tooltip content={`Federated task member · parent ${workspace.parentWorkspaceId}`} side="bottom">
+                  <span className="flex items-center gap-1 text-[10px] text-forge-violet cursor-help">
+                    <Network className="h-2.5 w-2.5" />
+                    federated
                   </span>
                 </Tooltip>
               )}
@@ -135,6 +143,7 @@ export const WorkspaceListItem = memo(WorkspaceListItemBase, (prev, next) => (
   && prev.workspace.repo === next.workspace.repo
   && prev.workspace.status === next.workspace.status
   && prev.workspace.prStatus === next.workspace.prStatus
+  && prev.workspace.parentWorkspaceId === next.workspace.parentWorkspaceId
   && prev.isSelected === next.isSelected
   && prev.isHovered === next.isHovered
   && prev.showRepo === next.showRepo

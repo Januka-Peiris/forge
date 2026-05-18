@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 
 use crate::models::agent_profile::RawAgentProfile;
-use crate::models::AgentProfile;
+use crate::models::{AgentProfile, ForgeRepositoryRelationshipConfig};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
@@ -17,6 +17,8 @@ pub struct ForgeWorkspaceConfig {
     pub agent_profiles: Vec<AgentProfile>,
     pub mcp_servers: Vec<ForgeMcpServerConfig>,
     pub mcp_warnings: Vec<String>,
+    pub repository_relationships: Vec<ForgeRepositoryRelationshipConfig>,
+    pub repository_relationship_warnings: Vec<String>,
     pub warning: Option<String>,
 }
 
@@ -58,6 +60,12 @@ pub(crate) struct RawForgeWorkspaceConfig {
     pub agent_profiles: Vec<RawAgentProfile>,
     #[serde(default, alias = "mcpServers", alias = "mcp")]
     pub mcp_servers: Value,
+    #[serde(
+        default,
+        alias = "repositoryRelationships",
+        alias = "repository_relationships"
+    )]
+    pub repository_relationships: Vec<RawForgeRepositoryRelationshipConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -75,4 +83,17 @@ pub(crate) struct RawForgeWorkspaceHooks {
     pub pre_ship: Vec<String>,
     #[serde(default)]
     pub post_ship: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RawForgeRepositoryRelationshipConfig {
+    #[serde(default)]
+    pub to: String,
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default)]
+    pub notes: Option<String>,
 }

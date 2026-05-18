@@ -17,6 +17,7 @@ pub mod perf;
 pub mod pr_draft;
 pub mod prompt_templates;
 pub mod repositories;
+pub mod repository_relationships;
 pub mod review_cockpit;
 pub mod review_summary;
 pub mod settings;

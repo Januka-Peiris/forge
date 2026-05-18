@@ -254,6 +254,8 @@ export function WorkspaceTerminal({
         agentProfiles: [],
         mcpServers: [],
         mcpWarnings: [],
+        repositoryRelationships: [],
+        repositoryRelationshipWarnings: [],
         warning: formatSessionError(err),
       });
     }

@@ -492,12 +492,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn defaults_include_shell_only() {
+    fn defaults_include_claude_and_shell() {
         let ids = default_profiles()
             .into_iter()
             .map(|profile| profile.id)
             .collect::<Vec<_>>();
-        assert_eq!(ids.len(), 1);
+        assert_eq!(ids.len(), 2);
+        assert!(ids.contains(&"claude-code".to_string()));
         assert!(ids.contains(&"shell".to_string()));
     }
 
