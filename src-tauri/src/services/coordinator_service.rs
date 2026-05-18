@@ -571,6 +571,7 @@ pub fn replay_workspace_coordinator_action(
                     task_mode: Some("Act".to_string()),
                     reasoning: Some("coordinator-replay".to_string()),
                     mode: Some("send_now".to_string()),
+                    model: None,
                 },
             )?;
             coordinator_repository::insert_action_with_metadata(
@@ -780,6 +781,7 @@ pub fn step_workspace_coordinator(
                         task_mode: Some("Act".to_string()),
                         reasoning: Some("coordinator-worker".to_string()),
                         mode: Some("send_now".to_string()),
+                        model: None,
                     },
                 )?;
                 let worker = CoordinatorWorker {
@@ -827,6 +829,7 @@ pub fn step_workspace_coordinator(
                         task_mode: Some("Act".to_string()),
                         reasoning: Some("coordinator-worker".to_string()),
                         mode: Some("send_now".to_string()),
+                        model: None,
                     },
                 )?;
                 let mut worker = chosen.clone();

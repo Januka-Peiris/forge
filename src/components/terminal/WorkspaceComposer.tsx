@@ -206,7 +206,6 @@ interface WorkspaceComposerProps {
   onApplyWorkflowPreset: (preset: 'plan-act' | 'plan-codex-review' | 'implement-review-pr', defaultPrompt: string) => void;
   onInterrupt: () => void;
   onStopCoordinator: () => void;
-  onModelChange?: (model: string) => void;
 }
 
 export function WorkspaceComposer({
@@ -227,7 +226,6 @@ export function WorkspaceComposer({
   onApplyWorkflowPreset,
   onInterrupt,
   onStopCoordinator,
-  onModelChange,
 }: WorkspaceComposerProps) {
   const draftKey = workspaceId;
   const [promptInput, setPromptInput] = useState(() => COMPOSER_DRAFTS.get(draftKey) ?? '');
@@ -763,7 +761,7 @@ export function WorkspaceComposer({
                   <div className="h-3.5 w-px bg-forge-border/50" />
                 </>
               )}
-              <Select value={settings.selectedModel} onValueChange={(v) => { onSettingsChange({ selectedModel: v }); onModelChange?.(v); }}>
+              <Select value={settings.selectedModel} onValueChange={(v) => onSettingsChange({ selectedModel: v })}>
                 <SelectTrigger compact title={`${providerLabel} model`} className="text-forge-green font-semibold"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {modelOptions.map((model) => (

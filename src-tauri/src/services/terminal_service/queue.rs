@@ -261,6 +261,7 @@ pub(super) fn queue_workspace_agent_prompt(
     };
     terminal_repository::insert_prompt_entry(&state.db, &entry)?;
 
+    let requested_model = input.model.clone();
     let mode = input.mode.unwrap_or_else(|| "send_now".to_string());
     if mode == "send_now" {
         let hook_context = serde_json::json!({
@@ -276,7 +277,7 @@ pub(super) fn queue_workspace_agent_prompt(
             hook_service::HookPhase::Pre,
             &hook_context,
         )?;
-        dispatch_prompt_entry(state, &mut entry, system_prompt_file)?;
+        dispatch_prompt_entry(state, &mut entry, system_prompt_file, requested_model.as_deref())?;
         let _ = hook_service::run_workspace_hooks(
             state,
             &entry.workspace_id,
@@ -319,6 +320,7 @@ pub(super) fn batch_dispatch_workspace_agent_prompt(
                 task_mode: input.task_mode.clone(),
                 reasoning: input.reasoning.clone(),
                 mode: Some("send_now".to_string()),
+                model: None,
             },
         );
         match result {
@@ -341,7 +343,7 @@ pub(super) fn run_next_workspace_agent_prompt(
             Some(entry) => entry,
             None => return Ok(None),
         };
-    dispatch_prompt_entry(state, &mut entry, None)?;
+    dispatch_prompt_entry(state, &mut entry, None, None)?;
     Ok(Some(entry))
 }
 
@@ -357,6 +359,7 @@ fn dispatch_prompt_entry(
     state: &AppState,
     entry: &mut AgentPromptEntry,
     system_prompt_file: Option<String>,
+    requested_model: Option<&str>,
 ) -> Result<(), String> {
     checkpoint_service::create_checkpoint_if_dirty_in_background(
         state.clone(),
@@ -364,14 +367,22 @@ fn dispatch_prompt_entry(
         "before agent prompt".to_string(),
     );
 
-    let extra_args = system_prompt_file.map(|path| {
-        vec![
-            "--append-system-prompt-file".to_string(),
-            path,
-        ]
-    });
+    let mut extra_args: Vec<String> = Vec::new();
+    if let Some(path) = system_prompt_file {
+        extra_args.push("--append-system-prompt-file".to_string());
+        extra_args.push(path);
+    }
+    if let Some(model) = requested_model {
+        extra_args.push("--model".to_string());
+        extra_args.push(model.to_string());
+    }
+    let extra_args = if extra_args.is_empty() {
+        None
+    } else {
+        Some(extra_args)
+    };
 
-    let session =
+    let (session, _is_new_session) =
         ensure_agent_session_for_prompt(state, &entry.workspace_id, &entry.profile, extra_args)?;
 
     let active = active_for_workspace(state, &entry.workspace_id, "agent")?
@@ -380,6 +391,7 @@ fn dispatch_prompt_entry(
         .writer
         .lock()
         .map_err(|_| "Terminal writer lock poisoned".to_string())?;
+
     writer
         .write_all(terminal_prompt_payload_for_session(&session, &entry.prompt).as_bytes())
         .map_err(|err| format!("Failed to write prompt to terminal: {err}"))?;

@@ -115,6 +115,7 @@ pub struct QueueAgentPromptInput {
     pub task_mode: Option<String>,
     pub reasoning: Option<String>,
     pub mode: Option<String>,
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

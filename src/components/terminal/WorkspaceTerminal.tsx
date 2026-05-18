@@ -362,7 +362,10 @@ export function WorkspaceTerminal({
       const codexModel = settings.codexAgentModel || DEFAULT_CODEX_MODEL;
       const kimiModel = settings.kimiAgentModel || DEFAULT_KIMI_MODEL;
       setProviderModelDefaults({ claude: claudeModel, codex: codexModel, kimi: kimiModel });
-      setComposerSettings((current) => ({ ...current, selectedModel: claudeModel }));
+      setComposerSettings((current) => {
+        if (current.selectedModel && current.selectedModel.startsWith('claude-')) return current;
+        return { ...current, selectedModel: claudeModel };
+      });
     } catch (err) {
       forgeWarn('agent-models', 'load error', { err });
     }
@@ -529,9 +532,7 @@ export function WorkspaceTerminal({
   }, [filePreviewWidth]);
 
   useEffect(() => {
-    const toSave = { ...composerSettings };
-    delete (toSave as Partial<typeof composerSettings>).selectedModel;
-    window.localStorage.setItem(COMPOSER_SETTINGS_KEY, JSON.stringify(toSave));
+    window.localStorage.setItem(COMPOSER_SETTINGS_KEY, JSON.stringify(composerSettings));
   }, [composerSettings]);
 
   useWorkspaceTerminalPolling({
@@ -1089,11 +1090,6 @@ export function WorkspaceTerminal({
             void stopWorkspaceCoordinator(workspace.id)
               .then((status) => setCoordinatorStatus(status))
               .catch(setActionError);
-          }}
-          onModelChange={(model) => {
-            if (focusedSession && (focusedSession.profile === 'claude_code' || focusedSession.profile === 'kimi_code')) {
-              void writeWorkspaceTerminalSessionInput(focusedSession.id, `/model ${model}\n`).catch(() => undefined);
-            }
           }}
         />
       )}

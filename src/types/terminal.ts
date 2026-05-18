@@ -97,6 +97,7 @@ export interface QueueAgentPromptInput {
   profileId?: string;
   taskMode?: string;
   reasoning?: string;
+  model?: string;
   /** Optional; server always dispatches to the agent terminal after recording the prompt. */
   mode?: 'send_now' | 'interrupt_send';
 }
