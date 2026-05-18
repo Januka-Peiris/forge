@@ -1,4 +1,5 @@
-import { GitPullRequest, Loader2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { GitPullRequest, Loader2, Network, Plus } from 'lucide-react';
 import type { ActivityItem as ForgeActivityItem, Workspace } from '../../types';
 import type { WorkspaceCockpitSummary } from '../../lib/workspace-cockpit';
 import { cockpitToneClass } from '../../lib/workspace-cockpit';
@@ -14,6 +15,9 @@ import type { WorkspaceHealth, WorkspaceSessionRecoveryResult } from '../../type
 import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
 import type { WorkspaceSchedulerJob, WorkspaceTaskSnapshot } from '../../types/task-lifecycle';
 import type { WorkspaceHookInspector } from '../../types/workspace-hooks';
+import type { CoordinationArtifact, CoordinationArtifactKind } from '../../types/coordination-artifact';
+import { createCoordinationArtifact, listCoordinationArtifacts } from '../../lib/tauri-api/coordination-artifacts';
+import { Button } from '../ui/button';
 
 interface DetailPanelStatusTabProps {
   workspace: Workspace;
@@ -82,6 +86,196 @@ interface DetailPanelStatusTabProps {
   onAbandonCheckpoint: (checkpoint: WorkspaceCheckpoint) => void;
   onToggleActivityOpen: () => void;
   onToggleTimelineExpanded: () => void;
+}
+
+
+const COORDINATION_ARTIFACT_KIND_OPTIONS: Array<{ value: CoordinationArtifactKind; label: string }> = [
+  { value: 'api_diff', label: 'API diff' },
+  { value: 'schema_change', label: 'Schema change' },
+  { value: 'decision_summary', label: 'Decision summary' },
+  { value: 'dependency_note', label: 'Dependency note' },
+  { value: 'release_ordering_note', label: 'Release ordering' },
+];
+
+function artifactKindLabel(kind: CoordinationArtifactKind): string {
+  return COORDINATION_ARTIFACT_KIND_OPTIONS.find((option) => option.value === kind)?.label ?? kind;
+}
+
+function statusClass(status: CoordinationArtifact['status']): string {
+  switch (status) {
+    case 'active':
+      return 'border-forge-blue/30 bg-forge-blue/10 text-forge-blue';
+    case 'resolved':
+      return 'border-forge-green/30 bg-forge-green/10 text-forge-green';
+    case 'dismissed':
+      return 'border-forge-muted/30 bg-white/5 text-forge-muted';
+    case 'draft':
+    default:
+      return 'border-forge-yellow/30 bg-forge-yellow/10 text-forge-yellow';
+  }
+}
+
+function CoordinationArtifactsSection({ workspace }: { workspace: Workspace }) {
+  const [artifacts, setArtifacts] = useState<CoordinationArtifact[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [artifactKind, setArtifactKind] = useState<CoordinationArtifactKind>('decision_summary');
+  const [targetWorkspaceId, setTargetWorkspaceId] = useState('');
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+
+  const loadArtifacts = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setArtifacts(await listCoordinationArtifacts(workspace.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [workspace.id]);
+
+  useEffect(() => {
+    setArtifacts([]);
+    setTitle('');
+    setBody('');
+    setTargetWorkspaceId('');
+    void loadArtifacts();
+  }, [loadArtifacts]);
+
+  const canCreate = useMemo(() => title.trim().length > 0 && !saving, [saving, title]);
+
+  const handleCreate = useCallback(async () => {
+    if (!canCreate) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const created = await createCoordinationArtifact({
+        sourceWorkspaceId: workspace.id,
+        targetWorkspaceId: targetWorkspaceId.trim() || null,
+        artifactKind,
+        title: title.trim(),
+        body: body.trim(),
+        status: 'active',
+      });
+      setArtifacts((current) => [created, ...current.filter((artifact) => artifact.id !== created.id)]);
+      setTitle('');
+      setBody('');
+      setTargetWorkspaceId('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  }, [artifactKind, body, canCreate, targetWorkspaceId, title, workspace.id]);
+
+  return (
+    <div className="px-4 pb-4">
+      <div className="rounded-xl border border-forge-border bg-forge-card/70 p-3">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <Network className="h-3.5 w-3.5 text-forge-orange" />
+              <p className="text-xs font-semibold uppercase tracking-widest text-forge-muted">Coordination artifacts</p>
+            </div>
+            <p className="mt-0.5 text-xs text-forge-muted">Group handoffs for this federated task.</p>
+          </div>
+          <Button type="button" variant="ghost" size="xs" onClick={() => void loadArtifacts()} disabled={loading || saving}>
+            {loading ? 'Loading…' : 'Refresh'}
+          </Button>
+        </div>
+
+        <div className="space-y-2">
+          {artifacts.length === 0 && !loading ? (
+            <p className="rounded-lg border border-dashed border-forge-border/70 bg-black/10 px-2 py-2 text-xs text-forge-muted">
+              No coordination artifacts yet. Add one when another repo needs a structured handoff.
+            </p>
+          ) : null}
+
+          {artifacts.slice(0, 5).map((artifact) => (
+            <div key={artifact.id} className="rounded-lg border border-forge-border/60 bg-black/10 px-2 py-2">
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="rounded border border-forge-border/60 bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-forge-muted">
+                      {artifactKindLabel(artifact.artifactKind)}
+                    </span>
+                    <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${statusClass(artifact.status)}`}>
+                      {artifact.status}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm font-semibold text-forge-text">{artifact.title}</p>
+                </div>
+              </div>
+              <p className="mt-1 text-xs text-forge-muted">
+                Source <span className="font-mono text-forge-text/80">{artifact.sourceWorkspaceId}</span>
+                {artifact.targetWorkspaceId ? (
+                  <> · Target <span className="font-mono text-forge-text/80">{artifact.targetWorkspaceId}</span></>
+                ) : (
+                  <> · Group-wide</>
+                )}
+              </p>
+              {artifact.body.trim() && (
+                <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-forge-text/80">{artifact.body}</p>
+              )}
+            </div>
+          ))}
+
+          {artifacts.length > 5 && (
+            <p className="text-[11px] text-forge-muted">Showing 5 of {artifacts.length} artifacts.</p>
+          )}
+        </div>
+
+        <div className="mt-3 space-y-2 rounded-lg border border-forge-border/60 bg-black/10 p-2">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            <label className="space-y-1 text-xs text-forge-muted">
+              Kind
+              <select
+                value={artifactKind}
+                onChange={(event) => setArtifactKind(event.target.value as CoordinationArtifactKind)}
+                className="w-full rounded border border-forge-border bg-forge-card px-2 py-1 text-xs text-forge-text"
+              >
+                {COORDINATION_ARTIFACT_KIND_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 text-xs text-forge-muted">
+              Target workspace ID <span className="text-forge-muted/60">optional</span>
+              <input
+                value={targetWorkspaceId}
+                onChange={(event) => setTargetWorkspaceId(event.target.value)}
+                placeholder="Group-wide"
+                className="w-full rounded border border-forge-border bg-forge-card px-2 py-1 text-xs text-forge-text placeholder:text-forge-muted/50"
+              />
+            </label>
+          </div>
+          <input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Artifact title"
+            className="w-full rounded border border-forge-border bg-forge-card px-2 py-1 text-xs text-forge-text placeholder:text-forge-muted/50"
+          />
+          <textarea
+            value={body}
+            onChange={(event) => setBody(event.target.value)}
+            placeholder="Brief handoff details…"
+            rows={2}
+            className="w-full resize-none rounded border border-forge-border bg-forge-card px-2 py-1 text-xs text-forge-text placeholder:text-forge-muted/50"
+          />
+          {error && <p className="text-xs text-forge-red">{error}</p>}
+          <div className="flex justify-end">
+            <Button type="button" variant="default" size="xs" disabled={!canCreate} onClick={() => void handleCreate()}>
+              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+              {saving ? 'Adding…' : 'Add artifact'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function DetailPanelStatusTab({
@@ -196,6 +390,8 @@ export function DetailPanelStatusTab({
           <p className="text-sm text-forge-text/90 leading-relaxed">{workspace.currentTask}</p>
         </div>
       )}
+
+      <CoordinationArtifactsSection workspace={workspace} />
 
       {statusDepth === 'simple' ? (
         <SimpleNextActionsPanel

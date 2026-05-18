@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as ContextMenu from '@radix-ui/react-context-menu';
 import { Terminal as TerminalIcon } from 'lucide-react';
-import type { AgentProfile, ForgeWorkspaceConfig, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
+import type { AgentProfile, DiscoveredRepository, ForgeWorkspaceConfig, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
 import type { AgentChatNextAction } from '../../types/agent-chat';
 import type { WorkspaceCoordinatorStatus } from '../../types/coordinator';
 import type { WorkspaceChangedFile } from '../../types/git-review';
 import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
+import type { RepositoryRelationship } from '../../types/repository-relationship';
 import {
   getWorkspaceTerminalOutputForSession,
   listWorkspaceTerminalSessions,
@@ -54,6 +55,7 @@ import { useWorkspaceTerminalSessionActions } from './useWorkspaceTerminalSessio
 import { useWorkspaceTerminalPolling } from './useWorkspaceTerminalPolling';
 import { useWorkspaceTerminalEvents } from './useWorkspaceTerminalEvents';
 import { WorkspaceTerminalEditorPanel, type EditorTab } from './WorkspaceTerminalEditorPanel';
+import { FederatedTaskCockpit } from '../federation/FederatedTaskCockpit';
 import { readWorkspaceFile, writeWorkspaceFile } from '../../lib/tauri-api/workspace-file-tree';
 import type { TileLeaf } from '../../types/tile-layout';
 
@@ -96,20 +98,30 @@ function loadComposerSettings(): ComposerSettings {
 
 interface WorkspaceTerminalProps {
   workspace: Workspace | null;
+  workspaces?: Workspace[];
+  repositories?: DiscoveredRepository[];
+  repositoryRelationships?: RepositoryRelationship[];
   requestedFilePath: string | null;
   onRequestedFilePathHandled: () => void;
   onActiveEditorFileChange?: (path: string | null) => void;
   onOpenInCursor?: () => void;
   onOpenReviewCockpit?: (path?: string | null) => void;
+  onSelectWorkspace?: (workspaceId: string) => void;
+  onCreateWorkspaceForRepo?: (repositoryId: string, parentWorkspaceId?: string, sourceWorkspaceId?: string) => void;
 }
 
 export function WorkspaceTerminal({
   workspace,
+  workspaces = [],
+  repositories = [],
+  repositoryRelationships = [],
   requestedFilePath,
   onRequestedFilePathHandled,
   onActiveEditorFileChange,
   onOpenInCursor,
   onOpenReviewCockpit,
+  onSelectWorkspace,
+  onCreateWorkspaceForRepo,
 }: WorkspaceTerminalProps) {
   const [visibleSessions, setVisibleSessions] = useState<TerminalSession[]>([]);
   const [allSessions, setAllSessions] = useState<TerminalSession[]>([]);
@@ -887,6 +899,14 @@ export function WorkspaceTerminal({
         onCloseTerminal={(sessionId) => void closeTerminal(sessionId)}
         onAttachTerminal={(session) => void attachTerminal(session)}
         onSetError={setError}
+      />
+      <FederatedTaskCockpit
+        workspace={workspace}
+        workspaces={workspaces}
+        repositories={repositories}
+        relationships={repositoryRelationships}
+        onSelectWorkspace={onSelectWorkspace ?? (() => undefined)}
+        onCreateWorkspaceForRepo={onCreateWorkspaceForRepo}
       />
       {coordinatorToast && (
         <div className="mx-2 mt-2 rounded border border-forge-blue/30 bg-forge-blue/10 px-3 py-1.5 text-xs text-forge-blue">

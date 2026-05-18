@@ -22,6 +22,7 @@ import {
   Network,
 } from 'lucide-react';
 import type { DiscoveredRepository, Workspace, WorkspaceAttention } from '../../types';
+import type { RepositoryRelationship } from '../../types/repository-relationship';
 import type { OrchestratorStatus } from '../../types/orchestrator';
 import { batchDispatchWorkspaceAgentPrompt } from '../../lib/tauri-api/terminal';
 import { getOrchestratorStatus, setOrchestratorEnabled } from '../../lib/tauri-api/orchestrator';
@@ -37,8 +38,9 @@ import {
 } from '../ui/select';
 import { Tooltip } from '../ui/tooltip';
 import { WorkspaceListItem } from '../workspaces/WorkspaceListItem';
+import { deriveCompanionWarnings } from '../../lib/federation';
 
-export type NavView = 'workspaces' | 'files' | 'reviews' | 'settings' | 'memory';
+export type NavView = 'workspaces' | 'files' | 'reviews' | 'federation' | 'settings' | 'memory';
 
 type WorkspaceFilter = 'all' | 'active' | 'archived';
 
@@ -57,6 +59,7 @@ interface SidebarProps {
   workspaceAttention: Record<string, WorkspaceAttention>;
   conflictingWorkspaceIds: Set<string>;
   archivedWorkspaceIds: string[];
+  repositoryRelationships?: RepositoryRelationship[];
   selectedWorkspaceId: string | null;
   onSelectWorkspace: (workspaceId: string) => void;
   onArchiveWorkspace: (workspaceId: string) => void;
@@ -74,6 +77,7 @@ interface SidebarProps {
 const primaryNav: { id: NavView; label: string; icon: ElementType }[] = [
   { id: 'workspaces', label: 'Workspaces', icon: LayoutGrid },
   { id: 'reviews', label: 'Reviews', icon: ClipboardCheck },
+  { id: 'federation', label: 'Federation', icon: Network },
 ];
 const secondaryNav: { id: NavView; label: string; icon: ElementType }[] = [
   { id: 'memory', label: 'Memory', icon: Brain },
@@ -88,6 +92,7 @@ export function Sidebar({
   workspaceAttention,
   conflictingWorkspaceIds,
   archivedWorkspaceIds,
+  repositoryRelationships = [],
   selectedWorkspaceId,
   onSelectWorkspace,
   onArchiveWorkspace,
@@ -279,10 +284,11 @@ export function Sidebar({
         parent: workspaceById.get(parentId),
         members: members.filter((member) => visibleIds.has(member.id)),
         totalMembers: members.length,
+        warnings: deriveCompanionWarnings({ parentId, parent: workspaceById.get(parentId)!, members }, repositoryRelationships, repositories),
       }))
       .filter((group) => group.parent && group.members.length > 1)
       .slice(0, 3);
-  }, [repoGroups, workspaces]);
+  }, [repoGroups, workspaces, repositoryRelationships, repositories]);
 
   useEffect(() => {
     if (!onFilteredWorkspacesChange) return;
@@ -423,6 +429,7 @@ export function Sidebar({
               const running = group.members.filter((workspace) => workspace.status === 'Running').length;
               const review = group.members.filter((workspace) => workspace.status === 'Review Ready').length;
               const blocked = group.members.filter((workspace) => workspace.status === 'Blocked').length;
+              const warnings = group.warnings.length;
               return (
                 <button
                   key={group.parentId}
@@ -444,7 +451,8 @@ export function Sidebar({
                     {running > 0 && <span>{running} running</span>}
                     {review > 0 && <span>{review} review</span>}
                     {blocked > 0 && <span className="text-forge-red">{blocked} blocked</span>}
-                    {running === 0 && review === 0 && blocked === 0 && <span>{group.members.length} waiting/active</span>}
+                    {warnings > 0 && <span className="text-forge-yellow">{warnings} warning{warnings === 1 ? '' : 's'}</span>}
+                    {running === 0 && review === 0 && blocked === 0 && warnings === 0 && <span>{group.members.length} waiting/active</span>}
                   </div>
                 </button>
               );

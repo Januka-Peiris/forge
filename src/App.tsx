@@ -11,11 +11,14 @@ import { measureAsync, perfMark, perfMeasure } from './lib/perf';
 import { listWorkspaces, openInCursor as openWorkspaceInCursorById } from './lib/tauri-api/workspaces';
 import { runWorkspaceSetup } from './lib/tauri-api/workspace-scripts';
 import { syncWorkspacePrThreads } from './lib/tauri-api/review-cockpit';
-import type { CreateWorkspaceInput } from './types';
+import { listRepositoryRelationships } from './lib/tauri-api/repository-relationships';
+import type { CreateManyWorkspacesResult, CreateWorkspaceInput } from './types';
+import type { RepositoryRelationship } from './types/repository-relationship';
 import { LoadingView, ErrorView } from './components/views/LoadingView';
 import { EnvironmentSetupModal } from './components/modals/EnvironmentSetupModal';
 import { SettingsView } from './components/settings/SettingsView';
 import { MemoryView } from './components/memory/MemoryView';
+import { FederatedTasksView } from './components/federation/FederatedTasksView';
 import { KeyboardShortcutsModal } from './components/shortcuts/KeyboardShortcutsModal';
 import { useAppKeyboardShortcuts } from './lib/hooks/useAppKeyboardShortcuts';
 import { useEnvironmentCheck } from './lib/hooks/useEnvironmentCheck';
@@ -51,6 +54,8 @@ export default function App() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalRepositoryId, setModalRepositoryId] = useState<string | undefined>(undefined);
   const [branchFromWorkspaceId, setBranchFromWorkspaceId] = useState<string | null>(null);
+  const [modalFederatedParentWorkspaceId, setModalFederatedParentWorkspaceId] = useState<string | null>(null);
+  const [modalFederatedSourceWorkspaceId, setModalFederatedSourceWorkspaceId] = useState<string | null>(null);
   const [deepLinkNotice, setDeepLinkNotice] = useState<string | null>(null);
   const [, setActivityItems] = useState<unknown[]>([]);
   const [selectedReviewPath, setSelectedReviewPath] = useState<string | null>(null);
@@ -58,6 +63,7 @@ export default function App() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [reviewTargetCommentId, setReviewTargetCommentId] = useState<string | null>(null);
   const [requestedEditorFilePath, setRequestedEditorFilePath] = useState<string | null>(null);
+  const [repositoryRelationships, setRepositoryRelationships] = useState<RepositoryRelationship[]>([]);
 
   const {
     addRepositoryToSettings,
@@ -119,6 +125,13 @@ export default function App() {
   const setWorkspacesView = useCallback(() => setView('workspaces'), []);
   const toggleCommandPalette = useCallback(() => setCommandPaletteOpen((open) => !open), []);
   const toggleInspector = useCallback(() => setInspectorCollapsed((collapsed) => !collapsed), [setInspectorCollapsed]);
+  const openNewWorkspaceModal = useCallback((repositoryId?: string, parentWorkspaceId?: string, sourceWorkspaceId?: string) => {
+    setModalRepositoryId(repositoryId);
+    setBranchFromWorkspaceId(null);
+    setModalFederatedParentWorkspaceId(parentWorkspaceId ?? null);
+    setModalFederatedSourceWorkspaceId(sourceWorkspaceId ?? parentWorkspaceId ?? null);
+    setModalOpen(true);
+  }, []);
 
   useAppKeyboardShortcuts({
     commandPaletteOpen,
@@ -175,9 +188,10 @@ export default function App() {
       await measureAsync('app:backend-load', async () => {
         replaceWorkspaces(await withLoadTimeout('list_workspaces', listWorkspaces()));
 
-        const [settingsResult, activityResult] = await Promise.allSettled([
+        const [settingsResult, activityResult, relationshipsResult] = await Promise.allSettled([
           withLoadTimeout('get_settings', getSettings()),
           withLoadTimeout('list_activity', listActivity()),
+          withLoadTimeout('list_repository_relationships', listRepositoryRelationships()),
         ]);
         if (settingsResult.status === 'fulfilled') {
           setSettingsState(settingsResult.value);
@@ -188,6 +202,11 @@ export default function App() {
           setActivityItems(activityResult.value);
         } else {
           forgeWarn('startup', 'activity load failed', { err: activityResult.reason });
+        }
+        if (relationshipsResult.status === 'fulfilled') {
+          setRepositoryRelationships(relationshipsResult.value.relationships);
+        } else {
+          forgeWarn('startup', 'repository relationship load failed', { err: relationshipsResult.reason });
         }
         scheduleAttentionLoad();
       });
@@ -241,28 +260,62 @@ export default function App() {
     setModalOpen(false);
     setModalRepositoryId(undefined);
     setBranchFromWorkspaceId(null);
+    setModalFederatedParentWorkspaceId(null);
+    setModalFederatedSourceWorkspaceId(null);
   };
 
-  const handleCreateWorkspaces = async (inputs: CreateWorkspaceInput[]) => {
-    let parentWorkspaceId: string | null = null;
+  const handleCreateWorkspaces = async (inputs: CreateWorkspaceInput[]): Promise<CreateManyWorkspacesResult> => {
+    const result: CreateManyWorkspacesResult = { created: [], failed: [] };
+    let parentWorkspaceId: string | null = inputs[0]?.parentWorkspaceId ?? null;
+    const retryingRelatedWorkspaces = Boolean(parentWorkspaceId);
+
     for (const [index, input] of inputs.entries()) {
-      const workspace = await createWorkspaceFromInput(
-        index === 0 || !parentWorkspaceId
-          ? input
-          : {
-              ...input,
-              parentWorkspaceId,
-              sourceWorkspaceId: parentWorkspaceId,
-            },
-        index === 0 ? branchFromWorkspaceId : null,
-      );
-      if (index === 0) {
-        parentWorkspaceId = workspace.id;
+      if (!retryingRelatedWorkspaces && index > 0 && !parentWorkspaceId) {
+        result.failed.push({
+          input,
+          name: input.name,
+          repo: input.repo,
+          error: 'Skipped because the parent workspace was not created.',
+        });
+        continue;
+      }
+
+      const effectiveInput = retryingRelatedWorkspaces || index === 0
+        ? input
+        : {
+            ...input,
+            parentWorkspaceId: parentWorkspaceId ?? undefined,
+            sourceWorkspaceId: parentWorkspaceId ?? undefined,
+          };
+
+      try {
+        const workspace = await createWorkspaceFromInput(
+          effectiveInput,
+          retryingRelatedWorkspaces || index > 0 ? null : branchFromWorkspaceId,
+        );
+        result.created.push({ workspaceId: workspace.id, name: workspace.name, repo: workspace.repo });
+        if (!parentWorkspaceId) {
+          parentWorkspaceId = workspace.id;
+          result.parentWorkspaceId = workspace.id;
+        }
+      } catch (err) {
+        result.failed.push({
+          input: effectiveInput,
+          name: effectiveInput.name,
+          repo: effectiveInput.repo,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
-    setModalOpen(false);
-    setModalRepositoryId(undefined);
-    setBranchFromWorkspaceId(null);
+
+    if (result.failed.length === 0) {
+      setModalOpen(false);
+      setModalRepositoryId(undefined);
+      setBranchFromWorkspaceId(null);
+      setModalFederatedParentWorkspaceId(null);
+      setModalFederatedSourceWorkspaceId(null);
+    }
+    return result;
   };
 
   const mainContent = () => {
@@ -273,6 +326,9 @@ export default function App() {
       return (
         <WorkspaceTerminal
           workspace={selected}
+          workspaces={workspaces}
+          repositories={settingsState?.discoveredRepositories ?? []}
+          repositoryRelationships={repositoryRelationships}
           requestedFilePath={requestedEditorFilePath}
           onRequestedFilePathHandled={() => setRequestedEditorFilePath(null)}
           onOpenInCursor={() => void openWorkspaceInCursor()}
@@ -280,6 +336,8 @@ export default function App() {
             setSelectedReviewPath(path ?? null);
             setView('reviews');
           }}
+          onSelectWorkspace={setSelectedId}
+          onCreateWorkspaceForRepo={openNewWorkspaceModal}
         />
       );
     }
@@ -296,6 +354,19 @@ export default function App() {
             onBackToWorkspaces={() => setView('workspaces')}
           />
         </Suspense>
+      );
+    }
+
+    if (view === 'federation') {
+      return (
+        <FederatedTasksView
+          workspaces={workspaces}
+          repositories={settingsState?.discoveredRepositories ?? []}
+          relationships={repositoryRelationships}
+          onSelectWorkspace={setSelectedId}
+          onOpenWorkspace={() => setView('workspaces')}
+          onCreateWorkspaceForRepo={openNewWorkspaceModal}
+        />
       );
     }
 
@@ -358,13 +429,10 @@ export default function App() {
           onRefreshWorkspaceThreads={(workspaceId) => syncWorkspacePrThreads(workspaceId).then(() => undefined)}
           onCreateWorkspacePr={(workspaceId) => markPrCreated(workspaceId)}
           onRemoveRepository={(repositoryId) => void removeRepositoryFromSettings(repositoryId)}
-          onNewWorkspace={(repositoryId) => {
-            setModalRepositoryId(repositoryId);
-            setBranchFromWorkspaceId(null);
-            setModalOpen(true);
-          }}
+          onNewWorkspace={(repositoryId) => openNewWorkspaceModal(repositoryId)}
           onAddRepository={() => void addRepositoryToSettings()}
           onCollapse={() => setSidebarCollapsed(true)}
+          repositoryRelationships={repositoryRelationships}
           onFilteredWorkspacesChange={setDisplayedWorkspaces}
         />
         )}
@@ -417,11 +485,16 @@ export default function App() {
               setModalOpen(false);
               setModalRepositoryId(undefined);
               setBranchFromWorkspaceId(null);
+              setModalFederatedParentWorkspaceId(null);
+              setModalFederatedSourceWorkspaceId(null);
             }}
             onCreate={handleCreateWorkspace}
             onCreateMany={handleCreateWorkspaces}
             repositories={settingsState?.discoveredRepositories ?? []}
             initialRepositoryId={modalRepositoryId}
+            initialParentWorkspaceId={modalFederatedParentWorkspaceId ?? undefined}
+            initialSourceWorkspaceId={modalFederatedSourceWorkspaceId ?? undefined}
+            initialFederatedTaskName={workspaces.find((workspace) => workspace.id === modalFederatedParentWorkspaceId)?.name}
           />
         </Suspense>
       )}

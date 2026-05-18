@@ -4,6 +4,7 @@ pub mod agent_memory;
 pub mod agent_profile;
 pub mod agent_run;
 pub mod checkpoint;
+pub mod coordination_artifact;
 pub mod coordinator;
 pub mod deep_link;
 pub mod environment;
@@ -44,6 +45,11 @@ pub use agent_run::{StartWorkspaceRunInput, WorkspaceRun, WorkspaceRunLog};
 pub use checkpoint::{
     WorkspaceCheckpoint, WorkspaceCheckpointBranchResult, WorkspaceCheckpointDeleteResult,
     WorkspaceCheckpointDiff, WorkspaceCheckpointRestorePlan, WorkspaceCheckpointRestoreResult,
+};
+pub use coordination_artifact::{
+    is_valid_coordination_artifact_kind, is_valid_coordination_artifact_status,
+    CoordinationArtifact, CreateCoordinationArtifactInput, UpdateCoordinationArtifactInput,
+    UpdateCoordinationArtifactStatusInput,
 };
 pub use coordinator::{
     CoordinatorAction, CoordinatorActionLog, CoordinatorResultArtifact, CoordinatorResultPayload,

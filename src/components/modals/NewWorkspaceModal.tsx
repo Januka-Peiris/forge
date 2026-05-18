@@ -5,7 +5,7 @@ import { getRepositoryWorkspaceOptions } from '../../lib/tauri-api/workspaces';
 import { listWorkspaceTemplates, createWorkspaceTemplate } from '../../lib/tauri-api/workspace-templates';
 import { formatWorkspaceCreationError } from '../../lib/ui-errors';
 import { defaultBranchForWorkspaceLabel, suggestForgeWorkspaceLabel } from '../../lib/workspace-name-generator';
-import type { AgentType, CreateWorkspaceInput, DiscoveredRepository, RepositoryWorkspaceOptions } from '../../types';
+import type { AgentType, CreateManyWorkspacesResult, CreateWorkspaceInput, DiscoveredRepository, RepositoryWorkspaceOptions } from '../../types';
 import type { RelevantRepositoriesSuggestionResult, RepositoryScopeSuggestion } from '../../types/repository-relationship';
 import type { WorkspaceTemplate } from '../../types/workspace-template';
 import { Badge } from '../ui/badge';
@@ -19,12 +19,15 @@ import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogTi
 interface NewWorkspaceModalProps {
   onClose: () => void;
   onCreate: (input: CreateWorkspaceInput) => Promise<void>;
-  onCreateMany: (inputs: CreateWorkspaceInput[]) => Promise<void>;
+  onCreateMany: (inputs: CreateWorkspaceInput[]) => Promise<CreateManyWorkspacesResult>;
   repositories: DiscoveredRepository[];
   initialRepositoryId?: string;
+  initialParentWorkspaceId?: string;
+  initialSourceWorkspaceId?: string;
+  initialFederatedTaskName?: string;
 }
 
-export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositories, initialRepositoryId }: NewWorkspaceModalProps) {
+export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositories, initialRepositoryId, initialParentWorkspaceId, initialSourceWorkspaceId, initialFederatedTaskName }: NewWorkspaceModalProps) {
   const firstRepo = repositories[0];
   const [name, setName] = useState(() => suggestForgeWorkspaceLabel());
   const nameRef = useRef(name);
@@ -52,6 +55,7 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
   const [scopeResult, setScopeResult] = useState<RelevantRepositoriesSuggestionResult | null>(null);
   const [createRelatedWorkspaces, setCreateRelatedWorkspaces] = useState(false);
   const [selectedScopeRepoIds, setSelectedScopeRepoIds] = useState<string[]>([]);
+  const [createManyResult, setCreateManyResult] = useState<CreateManyWorkspacesResult | null>(null);
 
   useEffect(() => {
     if (!initialRepositoryId) return;
@@ -95,6 +99,7 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
     setScopeResult(null);
     setSelectedScopeRepoIds([]);
     setCreateRelatedWorkspaces(false);
+    setCreateManyResult(null);
   }, [repositoryId]);
 
   const shuffleWorkspaceLabel = () => {
@@ -126,6 +131,10 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
     relatedScopeSuggestions.filter((suggestion) => selectedScopeRepoIds.includes(suggestion.repoId))
   ), [relatedScopeSuggestions, selectedScopeRepoIds]);
 
+  const unselectedLikelySuggestions = useMemo(() => (
+    relatedScopeSuggestions.filter((suggestion) => suggestion.selectedByDefault && !selectedScopeRepoIds.includes(suggestion.repoId))
+  ), [relatedScopeSuggestions, selectedScopeRepoIds]);
+
   const primaryInput = (): CreateWorkspaceInput => ({
     name: name.trim() || suggestForgeWorkspaceLabel(),
     repo,
@@ -136,6 +145,8 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
     runTests,
     createPr: createPR,
     repositoryId: repositoryId || undefined,
+    parentWorkspaceId: initialParentWorkspaceId,
+    sourceWorkspaceId: initialSourceWorkspaceId ?? initialParentWorkspaceId,
     ...selectedSource,
   });
 
@@ -197,10 +208,36 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
             .map(relatedWorkspaceInput)
             .filter((input): input is CreateWorkspaceInput => input !== null)
         : [];
+      setCreateManyResult(null);
       if (relatedInputs.length > 0) {
-        await onCreateMany([primaryInput(), ...relatedInputs]);
+        const result = await onCreateMany([primaryInput(), ...relatedInputs]);
+        setCreateManyResult(result);
+        if (result.failed.length > 0) {
+          setError(`Created ${result.created.length} workspace${result.created.length === 1 ? '' : 's'}; ${result.failed.length} failed. Retry failed workspaces below.`);
+        }
       } else {
         await onCreate(primaryInput());
+      }
+    } catch (err) {
+      setError(formatWorkspaceCreationError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRetryFailed = async () => {
+    if (!createManyResult?.failed.length) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const result = await onCreateMany(createManyResult.failed.map((failure) => failure.input));
+      setCreateManyResult({
+        parentWorkspaceId: result.parentWorkspaceId ?? createManyResult.parentWorkspaceId,
+        created: [...createManyResult.created, ...result.created],
+        failed: result.failed,
+      });
+      if (result.failed.length > 0) {
+        setError(`Retry created ${result.created.length} workspace${result.created.length === 1 ? '' : 's'}; ${result.failed.length} still failed.`);
       }
     } catch (err) {
       setError(formatWorkspaceCreationError(err));
@@ -376,7 +413,21 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
             />
           </div>
 
-          {repositories.length > 1 && (
+          {initialParentWorkspaceId && (
+            <div className="rounded-lg border border-forge-blue/30 bg-forge-blue/10 p-3">
+              <div className="flex items-start gap-2">
+                <Network className="mt-0.5 h-3.5 w-3.5 text-forge-blue" />
+                <div>
+                  <p className="text-[12px] font-semibold text-forge-blue">Joining existing federated task</p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-forge-muted">
+                    This workspace will be linked under {initialFederatedTaskName ? <span className="font-semibold text-forge-text">{initialFederatedTaskName}</span> : 'the selected parent workspace'} and will appear in the federation cockpit immediately after creation.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {repositories.length > 1 && !initialParentWorkspaceId && (
             <div className="rounded-lg border border-forge-border/70 bg-forge-card/50 p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -448,8 +499,49 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
                           </label>
                         ))}
                       </div>
+                      {unselectedLikelySuggestions.length > 0 && (
+                        <p className="rounded border border-forge-yellow/30 bg-forge-yellow/10 px-2 py-1.5 text-[11px] text-forge-yellow">
+                          Companion warning: {unselectedLikelySuggestions.map((suggestion) => suggestion.repoName).join(', ')} look related but are not selected for workspace creation.
+                        </p>
+                      )}
                     </>
                   )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {createManyResult && (createManyResult.created.length > 0 || createManyResult.failed.length > 0) && (
+            <div className="rounded-lg border border-forge-border/70 bg-forge-card/50 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-forge-muted">Federated creation progress</p>
+                  <p className="mt-1 text-[11px] text-forge-muted">
+                    {createManyResult.created.length} created · {createManyResult.failed.length} failed
+                  </p>
+                </div>
+                {createManyResult.failed.length > 0 && (
+                  <Button type="button" size="xs" variant="outline" disabled={submitting} onClick={() => void handleRetryFailed()}>
+                    Retry failed
+                  </Button>
+                )}
+              </div>
+              {createManyResult.created.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {createManyResult.created.map((created) => (
+                    <p key={created.workspaceId} className="truncate text-[11px] text-forge-green">
+                      Created {created.repo}: <span className="font-mono">{created.workspaceId}</span>
+                    </p>
+                  ))}
+                </div>
+              )}
+              {createManyResult.failed.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {createManyResult.failed.map((failure, index) => (
+                    <p key={`${failure.repo}-${index}`} className="text-[11px] text-forge-red">
+                      Failed {failure.repo}: {failure.error}
+                    </p>
+                  ))}
                 </div>
               )}
             </div>

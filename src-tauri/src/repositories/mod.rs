@@ -1,6 +1,7 @@
 pub mod activity_repository;
 pub mod agent_memory_repository;
 pub mod agent_run_repository;
+pub mod coordination_artifact_repository;
 pub mod coordinator_repository;
 pub mod orchestrator_repository;
 pub mod review_repository;
