@@ -324,6 +324,7 @@ Rules:
                         task_mode: None,
                         reasoning: Some("orchestrator".to_string()),
                         mode: Some("send_now".to_string()),
+                        model: None,
                     };
                     if let Err(err) = terminal_service::queue_workspace_agent_prompt(state, input) {
                         log::warn!(

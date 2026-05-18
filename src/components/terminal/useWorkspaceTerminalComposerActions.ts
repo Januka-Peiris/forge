@@ -139,6 +139,7 @@ export function useWorkspaceTerminalComposerActions({
           profileId: terminalProfileId,
           taskMode: selectedTaskMode,
           reasoning: selectedReasoning,
+          model: composerSettings.selectedModel,
         });
         await refreshCoordinatorStatus().catch(() => undefined);
       } catch (err) {

@@ -131,6 +131,7 @@ pub fn queue_review_agent_prompt(
             task_mode: input.task_mode,
             reasoning: input.reasoning,
             mode: input.mode,
+            model: None,
         },
     )
 }

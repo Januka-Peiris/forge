@@ -150,6 +150,7 @@ fn send_prompt_if_present(
             task_mode: None,
             reasoning: None,
             mode: Some("send_now".to_string()),
+            model: None,
         },
     )?;
     Ok(true)

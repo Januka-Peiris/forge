@@ -325,10 +325,11 @@ pub(super) fn ensure_agent_session_for_prompt(
     workspace_id: &str,
     profile: &str,
     extra_args: Option<Vec<String>>,
-) -> Result<TerminalSession, String> {
+) -> Result<(TerminalSession, bool), String> {
     if let Some(active) = active_for_workspace(state, workspace_id, "agent")? {
-        return terminal_repository::get_session(&state.db, &active.session_id)?
-            .ok_or_else(|| "Active agent session record was not found".to_string());
+        let session = terminal_repository::get_session(&state.db, &active.session_id)?
+            .ok_or_else(|| "Active agent session record was not found".to_string())?;
+        return Ok((session, false));
     }
 
     terminal_service::start_workspace_terminal_session(
@@ -343,4 +344,5 @@ pub(super) fn ensure_agent_session_for_prompt(
             extra_args,
         },
     )
+    .map(|s| (s, true))
 }

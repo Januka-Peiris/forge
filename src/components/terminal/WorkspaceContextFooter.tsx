@@ -6,24 +6,19 @@ interface WorkspaceContextFooterProps {
 }
 
 export function WorkspaceContextFooter({ workspaceId }: WorkspaceContextFooterProps) {
-  const [status, setStatus] = useState<{ stale: boolean; tokens: number; engine: string } | null>(null);
+  const [stale, setStale] = useState(false);
 
   useEffect(() => {
     getContextStatus(workspaceId)
-      .then((next) => {
-        setStatus({ stale: next.stale, tokens: (next.symbolCount ?? 0) * 3, engine: next.engine });
-      })
+      .then((next) => setStale(next.stale))
       .catch(() => {});
   }, [workspaceId]);
 
-  if (!status) return null;
+  if (!stale) return null;
 
   return (
     <div className="flex items-center gap-2 border-t border-white/5 px-3 py-0.5 text-xs text-white/30">
-      <span>ctx {status.engine}</span>
-      {status.stale && (
-        <span className="text-amber-400/70">[stale]</span>
-      )}
+      <span className="text-amber-400/70">context stale</span>
     </div>
   );
 }
