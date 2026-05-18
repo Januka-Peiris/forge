@@ -324,6 +324,7 @@ pub(super) fn ensure_agent_session_for_prompt(
     state: &AppState,
     workspace_id: &str,
     profile: &str,
+    extra_args: Option<Vec<String>>,
 ) -> Result<TerminalSession, String> {
     if let Some(active) = active_for_workspace(state, workspace_id, "agent")? {
         return terminal_repository::get_session(&state.db, &active.session_id)?
@@ -339,6 +340,7 @@ pub(super) fn ensure_agent_session_for_prompt(
             cols: None,
             rows: None,
             replace_existing: Some(false),
+            extra_args,
         },
     )
 }
