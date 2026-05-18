@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Save } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { ChevronDown, Save } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Switch } from '../ui/switch';
@@ -9,6 +9,7 @@ import type { AppSettings } from '../../types';
 import { AgentProfilesCard } from './AgentProfilesCard';
 import { RepositoriesCard } from './RepositoriesCard';
 import { RepositoryRelationshipsCard } from './RepositoryRelationshipsCard';
+import { cn } from '../../lib/cn';
 
 const CLAUDE_AGENT_MODELS = [
   { value: 'claude-opus-4-7', label: 'Claude Opus 4.7 (1M context)' },
@@ -47,6 +48,52 @@ const NOTIFICATION_MIN_LEVELS = [
   { value: 'warn', label: 'Warn (warnings + errors)' },
   { value: 'error', label: 'Error only' },
 ];
+
+function SettingsGroup({
+  title,
+  description,
+  meta,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  description: string;
+  meta: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-forge-border bg-forge-card/70">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-4 px-4 py-2.5 text-left transition-colors hover:bg-white/[0.03]"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <ChevronDown
+              className={cn(
+                'h-4 w-4 shrink-0 text-forge-muted transition-transform',
+                !open && '-rotate-90',
+              )}
+            />
+            <h2 className="text-[14px] font-bold text-forge-text">{title}</h2>
+          </div>
+          <p className="mt-0.5 pl-6 text-[11px] text-forge-muted">{description}</p>
+        </div>
+        <span className="shrink-0 rounded-full border border-forge-border bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-forge-muted">
+          {meta}
+        </span>
+      </button>
+      <div className={cn('space-y-4 border-t border-forge-border/60 bg-forge-bg/20 p-3', !open && 'hidden')}>
+        {children}
+      </div>
+    </section>
+  );
+}
 
 function AiModelsCard() {
   const [modelSettings, setModelSettings] = useState<AiModelSettings | null>(null);
@@ -378,21 +425,41 @@ export function SettingsView({
     <div className="flex flex-1 flex-col min-h-0">
       <div className="px-6 pt-6 pb-4 border-b border-forge-border shrink-0">
         <h1 className="text-[22px] font-bold text-forge-text tracking-tight">Settings</h1>
-        <p className="text-[12px] text-forge-muted mt-1.5">Manage repositories and AI model configuration</p>
+        <p className="text-[12px] text-forge-muted mt-1.5">Open a section only when you need to edit it.</p>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-5 space-y-5">
-        <AiModelsCard />
-        <NotificationSettingsCard />
-        <AgentProfilesCard />
-        <RepoContextCard />
-        <RepositoryRelationshipsCard repositories={settings?.discoveredRepositories ?? []} />
-        <TrustAndSafetyCard />
-        <RepositoriesCard
-          settings={settings}
-          onSettingsChange={onSettingsChange}
-          onRemoveRepository={onRemoveRepository}
-        />
+      <div className="flex-1 overflow-y-auto p-5 space-y-3">
+        <SettingsGroup
+          title="Essentials"
+          description="Models, notifications, repo context, and automation safety."
+          meta="4 panels"
+        >
+          <AiModelsCard />
+          <NotificationSettingsCard />
+          <RepoContextCard />
+          <TrustAndSafetyCard />
+        </SettingsGroup>
+
+        <SettingsGroup
+          title="Agents"
+          description="Profiles, coordinator roles, and local model options."
+          meta="1 panel"
+        >
+          <AgentProfilesCard />
+        </SettingsGroup>
+
+        <SettingsGroup
+          title="Repositories & Federation"
+          description="Registered repos, worktrees, relationships, and scope previews."
+          meta={`${settings?.discoveredRepositories.length ?? 0} repos`}
+        >
+          <RepositoriesCard
+            settings={settings}
+            onSettingsChange={onSettingsChange}
+            onRemoveRepository={onRemoveRepository}
+          />
+          <RepositoryRelationshipsCard repositories={settings?.discoveredRepositories ?? []} />
+        </SettingsGroup>
       </div>
     </div>
   );

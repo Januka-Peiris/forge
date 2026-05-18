@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
-use std::process::Child;
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Mutex};
 
@@ -15,7 +14,6 @@ use crate::repositories::{
     activity_repository, agent_run_repository, settings_repository, terminal_repository,
 };
 
-pub type ProcessRegistry = Arc<Mutex<HashMap<String, Arc<Mutex<Option<Child>>>>>>;
 pub type TerminalRegistry = Arc<Mutex<HashMap<String, Arc<ActiveTerminal>>>>;
 /// Maps session_id → raw PTY input bytes that are pending user approval.
 pub type PendingCommandRegistry = Arc<Mutex<HashMap<String, String>>>;
@@ -37,7 +35,6 @@ pub struct ActiveTerminal {
 pub struct AppState {
     pub app_handle: AppHandle,
     pub db: Database,
-    pub processes: ProcessRegistry,
     pub terminals: TerminalRegistry,
     pub pending_commands: PendingCommandRegistry,
     /// Whether the Opus orchestrator loop is running.
@@ -101,7 +98,6 @@ impl AppState {
         let state = Self {
             app_handle: app_handle.clone(),
             db,
-            processes: Arc::new(Mutex::new(HashMap::new())),
             terminals: Arc::new(Mutex::new(HashMap::new())),
             pending_commands: Arc::new(Mutex::new(HashMap::new())),
             orchestrator_enabled: Arc::new(AtomicBool::new(false)),
