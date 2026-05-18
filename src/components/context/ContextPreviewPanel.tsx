@@ -110,11 +110,11 @@ export function ContextPreviewPanel({ workspaceId }: Props) {
           {preview && !loading && (
             <>
               <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
-                <MetricCard label="Signal" value={`${Math.round(preview.signalScore * 100)}%`} detail={preview.lowSignal ? 'low-signal fallback active' : 'repo map contributing'} />
+                <MetricCard label="Signal" value={`${Math.round(preview.signalScore * 100)}%`} detail={preview.lowSignal ? 'low-signal fallback active' : 'context index contributing'} />
                 <MetricCard label="Included" value={`${preview.included.length}`} detail={`${mandatoryCount} mandatory · ${relatedCount} related`} />
                 <MetricCard label="Excluded" value={`${preview.excluded.length}`} detail={preview.excluded.length > 0 ? 'trimmed for budget' : 'nothing trimmed'} />
                 <MetricCard
-                  label="Map status"
+                  label="Index status"
                   value={preview.staleMap ? 'Stale' : 'Fresh'}
                   detail={status?.engine ? `${status.engine} · ${status.filesIndexed ?? 0} files indexed` : 'context status unavailable'}
                 />
@@ -141,13 +141,24 @@ export function ContextPreviewPanel({ workspaceId }: Props) {
 
               {status && (
                 <div className="rounded border border-white/5 bg-white/5 p-3">
-                  <p className="text-xs font-semibold text-white/70">Repo map health</p>
-                  <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-white/50 md:grid-cols-4">
-                    <span>Engine: <span className="text-white/70">{status.engine}</span></span>
-                    <span>Files: <span className="text-white/70">{status.filesIndexed ?? 0}</span></span>
-                    <span>Symbols: <span className="text-white/70">{status.symbolCount ?? 0}</span></span>
-                    <span>Coverage: <span className="text-white/70">{Math.round((status.symbolCoverage ?? 0) * 100)}%</span></span>
-                  </div>
+                  <p className="text-xs font-semibold text-white/70">
+                    {status.mode === 'repo_intelligence' ? 'Repo intelligence health' : 'Repo map health'}
+                  </p>
+                  {status.mode === 'repo_intelligence' && status.repoIntelligence ? (
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-white/50 md:grid-cols-4">
+                      <span>Engine: <span className="text-white/70">{status.engine}</span></span>
+                      <span>Files: <span className="text-white/70">{status.repoIntelligence.filesIndexed ?? 0}</span></span>
+                      <span>Symbols: <span className="text-white/70">{status.repoIntelligence.symbolCount ?? 0}</span></span>
+                      <span>Commit: <span className="text-white/70">{(status.repoIntelligence.indexedCommit ?? '').slice(0, 8) || 'n/a'}</span></span>
+                    </div>
+                  ) : (
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-white/50 md:grid-cols-4">
+                      <span>Engine: <span className="text-white/70">{status.engine}</span></span>
+                      <span>Files: <span className="text-white/70">{status.filesIndexed ?? 0}</span></span>
+                      <span>Symbols: <span className="text-white/70">{status.symbolCount ?? 0}</span></span>
+                      <span>Coverage: <span className="text-white/70">{Math.round((status.symbolCoverage ?? 0) * 100)}%</span></span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -190,8 +201,8 @@ export function ContextPreviewPanel({ workspaceId }: Props) {
                   <span className="text-[11px] text-white/40">{preview.included.length} segment(s)</span>
                 </div>
                 <div className="space-y-1">
-                  {preview.included.length === 0 ? (
-                    <p className="text-xs italic text-white/40">No context entries yet — build or refresh the repo map.</p>
+              {preview.included.length === 0 ? (
+                    <p className="text-xs italic text-white/40">No context entries yet — build or refresh the context index.</p>
                   ) : preview.included.map((segment) => (
                     <SegmentRow key={`${segment.path}-${segment.renderMode}-${segment.tier}`} seg={segment} />
                   ))}
@@ -218,7 +229,7 @@ export function ContextPreviewPanel({ workspaceId }: Props) {
               disabled={loading || building || refreshing}
               className="text-white/40 hover:text-white/70"
             >
-              {building ? 'Rebuilding…' : 'Rebuild repo map'}
+              {building ? 'Rebuilding…' : 'Rebuild context index'}
             </Button>
           </div>
         </div>

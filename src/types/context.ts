@@ -34,6 +34,7 @@ export interface ContextPreview {
 }
 
 export interface ContextStatus {
+  mode?: 'repo_map' | 'repo_intelligence' | string;
   stale: boolean;
   signalScore: number;
   symbolCoverage?: number;
@@ -42,4 +43,18 @@ export interface ContextStatus {
   symbolCount?: number;
   defaultBranch?: string;
   baseCommit?: string;
+  repoIntelligence?: {
+    enabled: boolean;
+    repoId?: string;
+    repoRoot?: string;
+    indexed?: boolean;
+    indexedCommit?: string;
+    filesIndexed?: number;
+    symbolCount?: number;
+    edgeCount?: number;
+    generatedAt?: string;
+    refreshedAt?: string;
+    stale?: boolean;
+    lastError?: string | null;
+  };
 }
