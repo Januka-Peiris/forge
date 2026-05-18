@@ -131,7 +131,12 @@ export function useTileLayoutState(workspaceId: string | null, initialContent?: 
 
   useEffect(() => {
     const restored = storageKey ? safeParseState(window.localStorage.getItem(storageKey)) : null;
-    setState(restored ?? defaultState(initialContent));
+    if (restored && restored.root.type === 'split') {
+      const firstLeaf = findFirstLeaf(restored.root);
+      setState(defaultState(firstLeaf?.content));
+    } else {
+      setState(restored ?? defaultState(initialContent));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storageKey]);
 

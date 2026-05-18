@@ -55,7 +55,7 @@ import { useWorkspaceTerminalPolling } from './useWorkspaceTerminalPolling';
 import { useWorkspaceTerminalEvents } from './useWorkspaceTerminalEvents';
 import { WorkspaceTerminalEditorPanel, type EditorTab } from './WorkspaceTerminalEditorPanel';
 import { readWorkspaceFile, writeWorkspaceFile } from '../../lib/tauri-api/workspace-file-tree';
-import type { TileContent, TileLeaf } from '../../types/tile-layout';
+import type { TileLeaf } from '../../types/tile-layout';
 
 const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-6';
 const DEFAULT_CODEX_MODEL = 'gpt-5.4';
@@ -167,7 +167,6 @@ export function WorkspaceTerminal({
   const coordinatorAutoStepQueuedInstructionRef = useRef<string | null>(null);
   const lastCoordinatorAutoStepAtRef = useRef<number>(0);
   const coordinatorAutoStepTimerRef = useRef<number | null>(null);
-  const pendingPlacementRef = useRef<Set<string>>(new Set());
   const workspaceId = workspace?.id ?? null;
   const tileLayout = useTileLayoutState(workspaceId);
 
@@ -764,26 +763,26 @@ export function WorkspaceTerminal({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tileLayout.focusedLeaf]);
 
-  // Sync tile layout FROM focusedId — only auto-place if session is genuinely unplaced
+  // Sync the single tile to show the focused session (tabbed terminal model)
+  const { visibleTerminalSessionIds, focusedLeaf, resetLayout, setTileContent } = tileLayout;
   useEffect(() => {
     if (!workspaceId || visibleSessions.length === 0) return;
     const visibleIds = new Set(visibleSessions.map((session) => session.id));
-    const layoutHasVisibleTerminal = Array.from(tileLayout.visibleTerminalSessionIds)
+    const layoutHasVisibleTerminal = Array.from(visibleTerminalSessionIds)
       .some((sessionId) => visibleIds.has(sessionId));
     if (!layoutHasVisibleTerminal) {
       const nextSessionId = focusedId ?? visibleSessions[0]?.id;
       if (nextSessionId) {
-        tileLayout.resetLayout({ kind: 'terminal', sessionId: nextSessionId });
+        resetLayout({ kind: 'terminal', sessionId: nextSessionId });
       }
       return;
     }
-    if (focusedId && tileLayout.focusedLeaf && visibleIds.has(focusedId)
-      && !tileLayout.visibleTerminalSessionIds.has(focusedId)
-      && !pendingPlacementRef.current.has(focusedId)
+    if (focusedId && focusedLeaf && visibleIds.has(focusedId)
+      && !visibleTerminalSessionIds.has(focusedId)
     ) {
-      tileLayout.setTileContent(tileLayout.focusedLeaf.id, { kind: 'terminal', sessionId: focusedId });
+      setTileContent(focusedLeaf.id, { kind: 'terminal', sessionId: focusedId });
     }
-  }, [focusedId, tileLayout, visibleSessions, workspaceId]);
+  }, [focusedId, focusedLeaf, visibleTerminalSessionIds, resetLayout, setTileContent, visibleSessions, workspaceId]);
 
   useEffect(() => {
     if (!activeEditorPath) return;
@@ -805,79 +804,15 @@ export function WorkspaceTerminal({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey)) return;
-      if (!tileLayout.focusedTileId) return;
-      if (event.key === '\\') {
+      if (event.key === 'w') {
         event.preventDefault();
         event.stopPropagation();
-        splitTerminalTile(tileLayout.focusedTileId, 'horizontal');
-      } else if (event.key === '-') {
-        event.preventDefault();
-        event.stopPropagation();
-        splitTerminalTile(tileLayout.focusedTileId, 'vertical');
-      } else if (event.key === 'w') {
-        event.preventDefault();
-        event.stopPropagation();
-        tileLayout.closeTile(tileLayout.focusedTileId);
-      } else if (event.altKey && event.key === 'ArrowRight') {
-        event.preventDefault();
-        tileLayout.focusAdjacentTile('right');
-      } else if (event.altKey && event.key === 'ArrowLeft') {
-        event.preventDefault();
-        tileLayout.focusAdjacentTile('left');
-      } else if (event.altKey && event.key === 'ArrowDown') {
-        event.preventDefault();
-        tileLayout.focusAdjacentTile('down');
-      } else if (event.altKey && event.key === 'ArrowUp') {
-        event.preventDefault();
-        tileLayout.focusAdjacentTile('up');
+        if (focusedSession) void closeTerminal(focusedSession.id);
       }
     };
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [
-    tileLayout.focusedTileId,
-    tileLayout.splitTile,
-    tileLayout.closeTile,
-    tileLayout.focusAdjacentTile,
-    tileLayout.visibleTerminalSessionIds,
-    visibleSessions,
-    setFocusedId,
-    focusedIdRef,
-  ]);
-
-  const nextSplitTileContent = (): TileContent => {
-    const used = tileLayout.visibleTerminalSessionIds;
-    const unused = visibleSessions.find((session) => !used.has(session.id));
-    return unused ? { kind: 'terminal', sessionId: unused.id } : { kind: 'empty' };
-  };
-
-  const createTerminalWithSplit = async (kind: 'agent' | 'shell', profile: TerminalProfile, title?: string, profileId?: string) => {
-    const currentTileId = tileLayout.focusedTileId;
-    const hadExistingSession = tileLayout.focusedLeaf?.content.kind === 'terminal';
-    await createTerminal(kind, profile, title, profileId);
-    const newSessionId = focusedIdRef.current;
-    if (newSessionId && currentTileId && hadExistingSession) {
-      pendingPlacementRef.current.add(newSessionId);
-      tileLayout.splitTile(currentTileId, 'horizontal', { kind: 'terminal', sessionId: newSessionId });
-      pendingPlacementRef.current.delete(newSessionId);
-    }
-  };
-
-  const focusTerminalTile = (tile: TileLeaf, sessionId?: string) => {
-    tileLayout.focusTile(tile.id);
-    if (!sessionId) return;
-    focusedIdRef.current = sessionId;
-    setFocusedId(sessionId);
-  };
-
-  const splitTerminalTile = (tileId: string, direction: 'horizontal' | 'vertical') => {
-    const nextContent = nextSplitTileContent();
-    tileLayout.splitTile(tileId, direction, nextContent);
-    if (nextContent.kind === 'terminal') {
-      focusedIdRef.current = nextContent.sessionId;
-      setFocusedId(nextContent.sessionId);
-    }
-  };
+  }, [focusedSession, closeTerminal]);
 
   const renderTileLeaf = (leaf: TileLeaf, focused: boolean) => {
     let session: TerminalSession | null = null;
@@ -885,53 +820,19 @@ export function WorkspaceTerminal({
       const sessionId = leaf.content.sessionId;
       session = visibleSessions.find((item) => item.id === sessionId) ?? null;
     }
-    const unusedSessions = visibleSessions.filter((item) => !tileLayout.visibleTerminalSessionIds.has(item.id));
-
-    const contextMenuProps = {
-      onSplitRight: () => splitTerminalTile(leaf.id, 'horizontal'),
-      onSplitDown: () => splitTerminalTile(leaf.id, 'vertical'),
-      onClose: () => tileLayout.closeTile(leaf.id),
-      onKillSession: session ? () => void closeTerminal(session.id) : undefined,
-    };
 
     if (!session) {
       return (
-        <TileContextMenu {...contextMenuProps}>
-          <div
-            className={`flex min-h-0 flex-1 flex-col rounded-md border bg-forge-bg p-3 ${focused ? 'border-forge-green/50 shadow-lg shadow-emerald-950/20' : 'border-forge-border'}`}
-            onMouseDown={() => focusTerminalTile(leaf)}
-          >
-            <div className="mb-3">
-              <p className="text-sm font-semibold text-forge-text">Empty tile</p>
-              <p className="text-xs text-forge-muted">Attach a terminal session or right-click to split.</p>
-            </div>
-            <div className="grid gap-2 overflow-y-auto">
-              {(unusedSessions.length > 0 ? unusedSessions : visibleSessions).map((candidate) => (
-                <button
-                  key={candidate.id}
-                  type="button"
-                  onClick={() => {
-                    tileLayout.setTileContent(leaf.id, { kind: 'terminal', sessionId: candidate.id });
-                    focusedIdRef.current = candidate.id;
-                    setFocusedId(candidate.id);
-                  }}
-                  className="rounded border border-forge-border bg-forge-surface px-3 py-2 text-left text-xs text-forge-muted hover:bg-white/5 hover:text-forge-text"
-                >
-                  <span className="font-semibold text-forge-text">{candidate.title || candidate.profile}</span>
-                  <span className="ml-2 text-forge-dim">{candidate.status}</span>
-                </button>
-              ))}
-              {visibleSessions.length === 0 && (
-                <p className="text-xs text-forge-muted">No terminal sessions available.</p>
-              )}
-            </div>
-          </div>
-        </TileContextMenu>
+        <div
+          className={`flex min-h-0 flex-1 flex-col rounded-md border bg-forge-bg p-3 ${focused ? 'border-forge-green/50 shadow-lg shadow-emerald-950/20' : 'border-forge-border'}`}
+        >
+          <p className="text-sm text-forge-muted">No session selected. Create a terminal above.</p>
+        </div>
       );
     }
 
     return (
-      <TileContextMenu {...contextMenuProps}>
+      <TerminalContextMenu onKillSession={() => void closeTerminal(session.id)}>
         <div className="relative flex min-h-0 flex-1">
           <TerminalPane
             key={session.id}
@@ -939,14 +840,14 @@ export function WorkspaceTerminal({
             chunks={outputs[session.id] ?? []}
             focused={focused}
             stuckSince={workspaceHealth?.terminals.find((t) => t.sessionId === session.id)?.stuckSince ?? null}
-            onFocus={() => focusTerminalTile(leaf, session.id)}
+            onFocus={() => undefined}
             onStop={() => void stopTerminal(session.id)}
-            onClose={() => tileLayout.closeTile(leaf.id)}
+            onClose={() => void closeTerminal(session.id)}
             onData={(data) => void writeWorkspaceTerminalSessionInput(session.id, data).catch(setActionError)}
             onResize={(cols, rows) => void resizeWorkspaceTerminalSession(session.id, cols, rows).catch(() => undefined)}
           />
         </div>
-      </TileContextMenu>
+      </TerminalContextMenu>
     );
   };
 
@@ -978,7 +879,7 @@ export function WorkspaceTerminal({
         focusedSession={focusedSession}
         agentProfiles={agentProfiles}
         onOpenInCursor={onOpenInCursor}
-        onCreateTerminal={(kind, profile, title, profileId) => void createTerminalWithSplit(kind, profile, title, profileId)}
+        onCreateTerminal={(kind, profile, title, profileId) => void createTerminal(kind, profile, title, profileId)}
         onCopyFocusedOutput={() => void copyFocusedOutput()}
         onInterruptFocusedAgent={() => void interruptFocusedAgent()}
         onCloseTerminal={(sessionId) => void closeTerminal(sessionId)}
@@ -1097,18 +998,12 @@ export function WorkspaceTerminal({
   );
 }
 
-function TileContextMenu({
+function TerminalContextMenu({
   children,
-  onSplitRight,
-  onSplitDown,
-  onClose,
   onKillSession,
 }: {
   children: ReactNode;
-  onSplitRight: () => void;
-  onSplitDown: () => void;
-  onClose: () => void;
-  onKillSession?: () => void;
+  onKillSession: () => void;
 }) {
   return (
     <ContextMenu.Root>
@@ -1116,35 +1011,12 @@ function TileContextMenu({
       <ContextMenu.Portal>
         <ContextMenu.Content className="z-50 min-w-[180px] rounded-md border border-forge-border bg-forge-surface p-1 shadow-xl shadow-black/40">
           <ContextMenu.Item
-            onSelect={onSplitRight}
-            className="flex cursor-pointer select-none items-center rounded px-2 py-1.5 text-xs text-forge-text outline-none hover:bg-white/10"
+            onSelect={onKillSession}
+            className="flex cursor-pointer select-none items-center rounded px-2 py-1.5 text-xs text-forge-red outline-none hover:bg-forge-red/10"
           >
-            Split Right
-            <kbd className="ml-auto font-sans text-[10px] text-forge-dim">⌘\</kbd>
-          </ContextMenu.Item>
-          <ContextMenu.Item
-            onSelect={onSplitDown}
-            className="flex cursor-pointer select-none items-center rounded px-2 py-1.5 text-xs text-forge-text outline-none hover:bg-white/10"
-          >
-            Split Down
-            <kbd className="ml-auto font-sans text-[10px] text-forge-dim">⌘-</kbd>
-          </ContextMenu.Item>
-          <ContextMenu.Separator className="my-1 h-px bg-forge-border/60" />
-          <ContextMenu.Item
-            onSelect={onClose}
-            className="flex cursor-pointer select-none items-center rounded px-2 py-1.5 text-xs text-forge-text outline-none hover:bg-white/10"
-          >
-            Close Pane
+            Kill Session
             <kbd className="ml-auto font-sans text-[10px] text-forge-dim">⌘W</kbd>
           </ContextMenu.Item>
-          {onKillSession && (
-            <ContextMenu.Item
-              onSelect={onKillSession}
-              className="flex cursor-pointer select-none items-center rounded px-2 py-1.5 text-xs text-forge-red outline-none hover:bg-forge-red/10"
-            >
-              Kill Session
-            </ContextMenu.Item>
-          )}
         </ContextMenu.Content>
       </ContextMenu.Portal>
     </ContextMenu.Root>
