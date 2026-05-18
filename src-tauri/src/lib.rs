@@ -9,7 +9,7 @@ mod state;
 use std::sync::atomic::Ordering;
 
 use commands::{
-    activity, agent_context, agent_memory, agent_profiles, checkpoints,
+    activity, agent_context, agent_memory, agent_profiles, checkpoints, coordination_artifacts,
     coordinator as coordinator_commands, deep_links, environment, git_review, local_llms,
     merge_readiness, orchestrator as orchestrator_commands, pr_draft, prompt_templates,
     repositories as repository_commands, repository_relationships, review_cockpit, review_summary,
@@ -133,6 +133,11 @@ pub fn run() {
             repository_relationships::update_app_repository_relationship,
             repository_relationships::delete_app_repository_relationship,
             repository_relationships::suggest_relevant_repositories_for_task,
+            coordination_artifacts::list_coordination_artifacts,
+            coordination_artifacts::create_coordination_artifact,
+            coordination_artifacts::update_coordination_artifact,
+            coordination_artifacts::delete_coordination_artifact,
+            coordination_artifacts::update_coordination_artifact_status,
             checkpoints::list_workspace_checkpoints,
             checkpoints::create_workspace_checkpoint,
             checkpoints::get_workspace_checkpoint_diff,

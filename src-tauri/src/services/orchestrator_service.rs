@@ -6,7 +6,8 @@ use tauri::Emitter;
 
 use crate::models::{OrchestratorAction, QueueAgentPromptInput};
 use crate::repositories::{
-    activity_repository, orchestrator_repository, terminal_repository, workspace_repository,
+    activity_repository, coordination_artifact_repository, orchestrator_repository,
+    terminal_repository, workspace_repository,
 };
 use crate::services::{
     conflict_detection_service, coordinator_service, task_lifecycle_service, terminal_service,
@@ -223,6 +224,53 @@ fn run_orchestrator_pass(state: &AppState) -> Result<(), String> {
             stuck_label,
             files_summary,
         );
+        let parent_workspace_id = ws
+            .parent_workspace_id
+            .as_deref()
+            .filter(|id| !id.trim().is_empty())
+            .unwrap_or(&ws.id)
+            .to_string();
+        let group_members = active
+            .iter()
+            .filter(|candidate| {
+                candidate.id == parent_workspace_id
+                    || candidate.parent_workspace_id.as_deref()
+                        == Some(parent_workspace_id.as_str())
+            })
+            .map(|candidate| format!("{} ({})", candidate.id, candidate.repo))
+            .collect::<Vec<_>>();
+        if group_members.len() > 1 {
+            block.push_str(&format!("\nFederated group: {}", group_members.join(", ")));
+        }
+        let unresolved_artifacts = coordination_artifact_repository::list_by_parent_workspace(
+            &state.db,
+            &parent_workspace_id,
+        )
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|artifact| matches!(artifact.status.as_str(), "draft" | "active"))
+        .take(5)
+        .map(|artifact| {
+            format!(
+                "{} [{}] from {}{}: {}",
+                artifact.title,
+                artifact.artifact_kind,
+                artifact.source_workspace_id,
+                artifact
+                    .target_workspace_id
+                    .as_deref()
+                    .map(|target| format!(" to {target}"))
+                    .unwrap_or_default(),
+                artifact.body
+            )
+        })
+        .collect::<Vec<_>>();
+        if !unresolved_artifacts.is_empty() {
+            block.push_str(&format!(
+                "\nUnresolved coordination artifacts: {}",
+                unresolved_artifacts.join(" | ")
+            ));
+        }
         if !conflict_note.is_empty() {
             block.push('\n');
             block.push_str(&conflict_note);
@@ -284,6 +332,11 @@ Rules:
 - Be conservative — only act when clearly needed
 - send_prompt goes directly into the coding agent's terminal input
 - Keep prompts short (1-3 sentences), actionable, and specific
+- Use federated group context when present: coordinate related workspaces as ship-together peers, not isolated tasks
+- Treat unresolved coordination artifacts as first-class handoff signals
+- If an artifact has a target workspace, nudge that target only when the artifact is relevant to its next action
+- If an artifact has no target, use it as group-wide context; prefer notifying the user over spamming every agent
+- Respect release_ordering_note artifacts when suggesting PR or merge sequencing
 - If no intervention is needed, respond with exactly: []
 - Do NOT include "idle" actions — just omit workspaces that need nothing"#
     );

@@ -101,6 +101,25 @@ export interface CreateChildWorkspaceInput {
   createPr?: boolean;
 }
 
+export interface CreateManyWorkspaceCreated {
+  workspaceId: string;
+  name: string;
+  repo: string;
+}
+
+export interface CreateManyWorkspaceFailure {
+  input: CreateWorkspaceInput;
+  name: string;
+  repo: string;
+  error: string;
+}
+
+export interface CreateManyWorkspacesResult {
+  parentWorkspaceId?: string;
+  created: CreateManyWorkspaceCreated[];
+  failed: CreateManyWorkspaceFailure[];
+}
+
 export interface LinkedWorktreeRef {
   worktreeId: string;
   repoId: string;

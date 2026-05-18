@@ -3,6 +3,7 @@ pub mod agent_context;
 pub mod agent_memory;
 pub mod agent_profiles;
 pub mod checkpoints;
+pub mod coordination_artifacts;
 pub mod coordinator;
 pub mod deep_links;
 pub mod environment;

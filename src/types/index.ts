@@ -2,6 +2,7 @@ export type {
   AgentType,
   BranchHealth,
   ChangedFile,
+  CreateManyWorkspacesResult,
   CreateWorkspaceInput,
   CreateChildWorkspaceInput,
   LinkedWorktreeRef,
@@ -119,3 +120,5 @@ export interface DiffLine {
   content: string;
   lineNumber?: number;
 }
+
+export type { CoordinationArtifact, CoordinationArtifactKind, CoordinationArtifactStatus, CreateCoordinationArtifactInput, UpdateCoordinationArtifactInput, UpdateCoordinationArtifactStatusInput } from './coordination-artifact';

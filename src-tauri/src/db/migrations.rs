@@ -518,6 +518,31 @@ pub fn run(connection: &Connection) -> Result<(), String> {
 
             CREATE INDEX IF NOT EXISTS idx_app_repository_relationships_to
                 ON app_repository_relationships(to_repo_id);
+
+            CREATE TABLE IF NOT EXISTS coordination_artifacts (
+                id TEXT PRIMARY KEY,
+                parent_workspace_id TEXT NOT NULL,
+                source_workspace_id TEXT NOT NULL,
+                target_workspace_id TEXT,
+                artifact_kind TEXT NOT NULL,
+                title TEXT NOT NULL,
+                body TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (parent_workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+                FOREIGN KEY (source_workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+                FOREIGN KEY (target_workspace_id) REFERENCES workspaces(id) ON DELETE SET NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_coordination_artifacts_parent_updated
+                ON coordination_artifacts(parent_workspace_id, updated_at DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_coordination_artifacts_source
+                ON coordination_artifacts(source_workspace_id);
+
+            CREATE INDEX IF NOT EXISTS idx_coordination_artifacts_target
+                ON coordination_artifacts(target_workspace_id);
             "#,
         )
         .map_err(|err| format!("Failed to run SQLite migrations: {err}"))?;
@@ -804,5 +829,30 @@ mod tests {
         assert!(columns.iter().any(|name| name == "from_repo_id"));
         assert!(columns.iter().any(|name| name == "to_repo_id"));
         assert!(columns.iter().any(|name| name == "kind"));
+    }
+
+    #[test]
+    fn creates_coordination_artifacts_table() {
+        let connection = Connection::open_in_memory().expect("open in-memory db");
+        run(&connection).expect("run migrations");
+
+        let columns = table_columns(&connection, "coordination_artifacts");
+        for expected in [
+            "id",
+            "parent_workspace_id",
+            "source_workspace_id",
+            "target_workspace_id",
+            "artifact_kind",
+            "title",
+            "body",
+            "status",
+            "created_at",
+            "updated_at",
+        ] {
+            assert!(
+                columns.iter().any(|name| name == expected),
+                "missing {expected}"
+            );
+        }
     }
 }
