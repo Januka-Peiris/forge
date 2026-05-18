@@ -243,6 +243,28 @@ export default function App() {
     setBranchFromWorkspaceId(null);
   };
 
+  const handleCreateWorkspaces = async (inputs: CreateWorkspaceInput[]) => {
+    let parentWorkspaceId: string | null = null;
+    for (const [index, input] of inputs.entries()) {
+      const workspace = await createWorkspaceFromInput(
+        index === 0 || !parentWorkspaceId
+          ? input
+          : {
+              ...input,
+              parentWorkspaceId,
+              sourceWorkspaceId: parentWorkspaceId,
+            },
+        index === 0 ? branchFromWorkspaceId : null,
+      );
+      if (index === 0) {
+        parentWorkspaceId = workspace.id;
+      }
+    }
+    setModalOpen(false);
+    setModalRepositoryId(undefined);
+    setBranchFromWorkspaceId(null);
+  };
+
   const mainContent = () => {
     if (loading) return <LoadingView />;
     if (error) return <ErrorView message={error} onRetry={loadBackendState} />;
@@ -397,6 +419,7 @@ export default function App() {
               setBranchFromWorkspaceId(null);
             }}
             onCreate={handleCreateWorkspace}
+            onCreateMany={handleCreateWorkspaces}
             repositories={settingsState?.discoveredRepositories ?? []}
             initialRepositoryId={modalRepositoryId}
           />

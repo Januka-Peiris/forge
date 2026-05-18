@@ -1,6 +1,7 @@
 import type { TerminalSession } from './terminal';
 
 import type { AgentProfile } from './agent-profile';
+import type { RepositoryRelationshipKind } from './repository-relationship';
 
 export interface ForgeWorkspaceConfig {
   exists: boolean;
@@ -12,6 +13,8 @@ export interface ForgeWorkspaceConfig {
   agentProfiles: AgentProfile[];
   mcpServers: ForgeMcpServerConfig[];
   mcpWarnings: string[];
+  repositoryRelationships: ForgeRepositoryRelationshipConfig[];
+  repositoryRelationshipWarnings: string[];
   warning?: string | null;
 }
 
@@ -32,6 +35,13 @@ export interface ForgeMcpServerConfig {
   env: Record<string, string>;
   url?: string | null;
   enabled: boolean;
+}
+
+export interface ForgeRepositoryRelationshipConfig {
+  to: string;
+  kind: RepositoryRelationshipKind | string;
+  label?: string | null;
+  notes?: string | null;
 }
 
 export type WorkspaceScriptTerminalSession = TerminalSession;

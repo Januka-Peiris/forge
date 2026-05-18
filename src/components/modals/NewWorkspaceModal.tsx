@@ -1,11 +1,14 @@
-import { Bot, FolderGit2, GitBranch, Sparkles, Zap, BookTemplate } from 'lucide-react';
+import { Bot, FolderGit2, GitBranch, Sparkles, Zap, BookTemplate, Network } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { suggestRelevantRepositoriesForTask } from '../../lib/tauri-api/repository-relationships';
 import { getRepositoryWorkspaceOptions } from '../../lib/tauri-api/workspaces';
 import { listWorkspaceTemplates, createWorkspaceTemplate } from '../../lib/tauri-api/workspace-templates';
 import { formatWorkspaceCreationError } from '../../lib/ui-errors';
 import { defaultBranchForWorkspaceLabel, suggestForgeWorkspaceLabel } from '../../lib/workspace-name-generator';
 import type { AgentType, CreateWorkspaceInput, DiscoveredRepository, RepositoryWorkspaceOptions } from '../../types';
+import type { RelevantRepositoriesSuggestionResult, RepositoryScopeSuggestion } from '../../types/repository-relationship';
 import type { WorkspaceTemplate } from '../../types/workspace-template';
+import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
@@ -16,11 +19,12 @@ import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogTi
 interface NewWorkspaceModalProps {
   onClose: () => void;
   onCreate: (input: CreateWorkspaceInput) => Promise<void>;
+  onCreateMany: (inputs: CreateWorkspaceInput[]) => Promise<void>;
   repositories: DiscoveredRepository[];
   initialRepositoryId?: string;
 }
 
-export function NewWorkspaceModal({ onClose, onCreate, repositories, initialRepositoryId }: NewWorkspaceModalProps) {
+export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositories, initialRepositoryId }: NewWorkspaceModalProps) {
   const firstRepo = repositories[0];
   const [name, setName] = useState(() => suggestForgeWorkspaceLabel());
   const nameRef = useRef(name);
@@ -44,6 +48,10 @@ export function NewWorkspaceModal({ onClose, onCreate, repositories, initialRepo
   const [saveTemplateName, setSaveTemplateName] = useState('');
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [savingTemplate, setSavingTemplate] = useState(false);
+  const [scopeLoading, setScopeLoading] = useState(false);
+  const [scopeResult, setScopeResult] = useState<RelevantRepositoriesSuggestionResult | null>(null);
+  const [createRelatedWorkspaces, setCreateRelatedWorkspaces] = useState(false);
+  const [selectedScopeRepoIds, setSelectedScopeRepoIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!initialRepositoryId) return;
@@ -83,6 +91,12 @@ export function NewWorkspaceModal({ onClose, onCreate, repositories, initialRepo
       .finally(() => setLoadingOptions(false));
   }, [repositoryId]);
 
+  useEffect(() => {
+    setScopeResult(null);
+    setSelectedScopeRepoIds([]);
+    setCreateRelatedWorkspaces(false);
+  }, [repositoryId]);
+
   const shuffleWorkspaceLabel = () => {
     const next = suggestForgeWorkspaceLabel();
     setName(next);
@@ -104,6 +118,72 @@ export function NewWorkspaceModal({ onClose, onCreate, repositories, initialRepo
     return { selectedWorktreeId: undefined, selectedBranch: undefined, branch: undefined };
   }, [branchName, source, sourceMode]);
 
+  const relatedScopeSuggestions = useMemo(() => (
+    scopeResult?.suggestions.filter((suggestion) => suggestion.repoId !== repositoryId) ?? []
+  ), [repositoryId, scopeResult]);
+
+  const selectedRelatedSuggestions = useMemo(() => (
+    relatedScopeSuggestions.filter((suggestion) => selectedScopeRepoIds.includes(suggestion.repoId))
+  ), [relatedScopeSuggestions, selectedScopeRepoIds]);
+
+  const primaryInput = (): CreateWorkspaceInput => ({
+    name: name.trim() || suggestForgeWorkspaceLabel(),
+    repo,
+    baseBranch,
+    agent,
+    taskPrompt,
+    openInCursor: openCursor,
+    runTests,
+    createPr: createPR,
+    repositoryId: repositoryId || undefined,
+    ...selectedSource,
+  });
+
+  const relatedWorkspaceInput = (suggestion: RepositoryScopeSuggestion): CreateWorkspaceInput | null => {
+    const repository = repositories.find((candidate) => candidate.id === suggestion.repoId);
+    if (!repository) return null;
+    const baseName = name.trim() || suggestForgeWorkspaceLabel();
+    const primaryBranch = branchName.trim() || defaultBranchForWorkspaceLabel(baseName);
+    const repoSlug = slugify(repository.name);
+    return {
+      name: `${baseName} · ${repository.name}`,
+      repo: repository.name,
+      baseBranch: repository.currentBranch ?? 'main',
+      branch: `${primaryBranch}-${repoSlug}`,
+      agent,
+      taskPrompt,
+      openInCursor: false,
+      runTests,
+      createPr: createPR,
+      repositoryId: repository.id,
+    };
+  };
+
+  const handlePreviewScope = async () => {
+    if (!repositoryId) {
+      setError('Choose a repository before previewing task scope.');
+      return;
+    }
+    setScopeLoading(true);
+    setError(null);
+    try {
+      const result = await suggestRelevantRepositoriesForTask({
+        sourceRepoId: repositoryId,
+        taskPrompt,
+      });
+      setScopeResult(result);
+      const defaults = result.suggestions
+        .filter((suggestion) => suggestion.repoId !== repositoryId && suggestion.selectedByDefault)
+        .map((suggestion) => suggestion.repoId);
+      setSelectedScopeRepoIds(defaults);
+      setCreateRelatedWorkspaces(false);
+    } catch (err) {
+      setError(formatWorkspaceCreationError(err));
+    } finally {
+      setScopeLoading(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (sourceMode === 'new_branch' && !branchName.trim()) {
       setError('Branch name is required for a new branch workspace.');
@@ -112,18 +192,16 @@ export function NewWorkspaceModal({ onClose, onCreate, repositories, initialRepo
     setSubmitting(true);
     setError(null);
     try {
-      await onCreate({
-        name: name.trim() || suggestForgeWorkspaceLabel(),
-        repo,
-        baseBranch,
-        agent,
-        taskPrompt,
-        openInCursor: openCursor,
-        runTests,
-        createPr: createPR,
-        repositoryId: repositoryId || undefined,
-        ...selectedSource,
-      });
+      const relatedInputs = createRelatedWorkspaces
+        ? selectedRelatedSuggestions
+            .map(relatedWorkspaceInput)
+            .filter((input): input is CreateWorkspaceInput => input !== null)
+        : [];
+      if (relatedInputs.length > 0) {
+        await onCreateMany([primaryInput(), ...relatedInputs]);
+      } else {
+        await onCreate(primaryInput());
+      }
     } catch (err) {
       setError(formatWorkspaceCreationError(err));
     } finally {
@@ -133,7 +211,7 @@ export function NewWorkspaceModal({ onClose, onCreate, repositories, initialRepo
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="w-[520px] max-w-[95vw]">
+      <DialogContent className="w-[560px] max-w-[95vw]">
         <DialogHeader>
           <DialogTitle>New Branch Workspace</DialogTitle>
           <DialogDescription>Create a branch workspace in a repository and start a coding session</DialogDescription>
@@ -298,6 +376,85 @@ export function NewWorkspaceModal({ onClose, onCreate, repositories, initialRepo
             />
           </div>
 
+          {repositories.length > 1 && (
+            <div className="rounded-lg border border-forge-border/70 bg-forge-card/50 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-forge-muted">
+                    <Network className="h-3 w-3" />
+                    Multi-repo scope
+                  </div>
+                  <p className="mt-1 text-[11px] leading-relaxed text-forge-muted">
+                    Optional. Uses human-defined repo relationships to preview likely related workspaces.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="outline"
+                  onClick={() => void handlePreviewScope()}
+                  disabled={scopeLoading || !repositoryId}
+                >
+                  {scopeLoading ? 'Checking…' : 'Preview'}
+                </Button>
+              </div>
+
+              {scopeResult && (
+                <div className="mt-3 space-y-2">
+                  {relatedScopeSuggestions.length === 0 ? (
+                    <p className="rounded border border-forge-border/60 bg-forge-bg/40 px-2 py-1.5 text-[11px] text-forge-muted">
+                      No related repositories suggested. This will stay a single workspace.
+                    </p>
+                  ) : (
+                    <>
+                      <label className="flex items-center gap-2 rounded border border-forge-border/60 bg-forge-bg/40 px-2 py-1.5">
+                        <Checkbox
+                          checked={createRelatedWorkspaces}
+                          onCheckedChange={(checked) => setCreateRelatedWorkspaces(!!checked)}
+                        />
+                        <span className="text-[12px] text-forge-text/80">
+                          Also create selected related repo workspaces
+                        </span>
+                      </label>
+                      <div className="space-y-1.5">
+                        {relatedScopeSuggestions.slice(0, 4).map((suggestion) => (
+                          <label
+                            key={suggestion.repoId}
+                            className="flex cursor-pointer items-start gap-2 rounded border border-forge-border/50 bg-forge-bg/30 px-2 py-1.5"
+                          >
+                            <Checkbox
+                              checked={selectedScopeRepoIds.includes(suggestion.repoId)}
+                              disabled={!createRelatedWorkspaces}
+                              onCheckedChange={(checked) => {
+                                setSelectedScopeRepoIds((current) => (
+                                  checked
+                                    ? Array.from(new Set([...current, suggestion.repoId]))
+                                    : current.filter((id) => id !== suggestion.repoId)
+                                ));
+                              }}
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="flex flex-wrap items-center gap-1.5">
+                                <span className="text-[12px] font-semibold text-forge-text">{suggestion.repoName}</span>
+                                <Badge variant={suggestion.selectedByDefault ? 'success' : 'muted'}>
+                                  {suggestion.selectedByDefault ? 'likely' : 'optional'}
+                                </Badge>
+                                <Badge variant="info">{Math.round(suggestion.score)}%</Badge>
+                              </span>
+                              <span className="mt-0.5 block truncate text-[10px] text-forge-muted">
+                                {suggestion.reasons[0] ?? 'Related by repository relationship.'}
+                              </span>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="space-y-2.5 pt-1">
             <p className="text-[11px] font-semibold text-forge-muted uppercase tracking-wider mb-1">Options</p>
             {[
@@ -374,7 +531,13 @@ export function NewWorkspaceModal({ onClose, onCreate, repositories, initialRepo
             {error ? (
               <p className="text-[12px] text-forge-red">{error}</p>
             ) : (
-              <span className="text-[12px] text-forge-muted">{loadingOptions ? 'Loading repo options…' : ''}</span>
+              <span className="text-[12px] text-forge-muted">
+                {loadingOptions
+                  ? 'Loading repo options…'
+                  : createRelatedWorkspaces && selectedRelatedSuggestions.length > 0
+                    ? `Will create ${selectedRelatedSuggestions.length + 1} focused workspaces.`
+                    : ''}
+              </span>
             )}
           </div>
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
@@ -383,10 +546,22 @@ export function NewWorkspaceModal({ onClose, onCreate, repositories, initialRepo
             disabled={submitting || !repositoryId}
           >
             <Zap className="w-3.5 h-3.5" />
-            {submitting ? 'Creating…' : 'Create Branch Workspace'}
+            {submitting
+              ? 'Creating…'
+              : createRelatedWorkspaces && selectedRelatedSuggestions.length > 0
+                ? `Create ${selectedRelatedSuggestions.length + 1} Workspaces`
+                : 'Create Branch Workspace'}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
+}
+
+function slugify(value: string) {
+  const slug = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || 'repo';
 }

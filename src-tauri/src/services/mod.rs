@@ -19,6 +19,7 @@ pub mod pr_draft_service;
 pub mod prompt_template_service;
 pub mod repo_intelligence_service;
 pub mod repo_scanner_service;
+pub mod repository_relationship_service;
 pub mod review_cockpit_service;
 pub mod review_summary_service;
 pub mod settings_service;

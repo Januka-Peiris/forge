@@ -119,7 +119,7 @@ pub fn update_pr_status(
 pub fn next_workspace_id(_db: &Database) -> Result<String, String> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
+        .map(|d| d.as_nanos())
         .unwrap_or(0);
     Ok(format!("ws-{now}"))
 }

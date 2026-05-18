@@ -19,6 +19,7 @@ import {
   Send,
   X as XIcon,
   Brain,
+  Network,
 } from 'lucide-react';
 import type { DiscoveredRepository, Workspace, WorkspaceAttention } from '../../types';
 import type { OrchestratorStatus } from '../../types/orchestrator';
@@ -257,6 +258,32 @@ export function Sidebar({
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [repositories, sort, workspacesByRepoId]);
 
+  const federatedGroups = useMemo(() => {
+    const workspaceById = new Map(workspaces.map((workspace) => [workspace.id, workspace]));
+    const visibleIds = new Set(repoGroups.flatMap((group) => group.workspaces.map((workspace) => workspace.id)));
+    const groups = new Map<string, Workspace[]>();
+    for (const workspace of workspaces) {
+      const parentId = workspace.parentWorkspaceId ?? null;
+      if (!parentId) continue;
+      const parent = workspaceById.get(parentId);
+      if (!parent) continue;
+      const members = groups.get(parentId) ?? [parent];
+      if (!members.some((member) => member.id === workspace.id)) {
+        members.push(workspace);
+      }
+      groups.set(parentId, members);
+    }
+    return Array.from(groups.entries())
+      .map(([parentId, members]) => ({
+        parentId,
+        parent: workspaceById.get(parentId),
+        members: members.filter((member) => visibleIds.has(member.id)),
+        totalMembers: members.length,
+      }))
+      .filter((group) => group.parent && group.members.length > 1)
+      .slice(0, 3);
+  }, [repoGroups, workspaces]);
+
   useEffect(() => {
     if (!onFilteredWorkspacesChange) return;
     const flat = repoGroups.flatMap((group) => group.workspaces);
@@ -388,6 +415,42 @@ export function Sidebar({
             />
           </div>
         </div>
+
+        {federatedGroups.length > 0 && (
+          <div className="mt-3 space-y-1.5 px-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-forge-muted/60">Federated tasks</p>
+            {federatedGroups.map((group) => {
+              const running = group.members.filter((workspace) => workspace.status === 'Running').length;
+              const review = group.members.filter((workspace) => workspace.status === 'Review Ready').length;
+              const blocked = group.members.filter((workspace) => workspace.status === 'Blocked').length;
+              return (
+                <button
+                  key={group.parentId}
+                  type="button"
+                  onClick={() => {
+                    if (group.parent) {
+                      onNavigate('workspaces');
+                      onSelectWorkspace(group.parent.id);
+                    }
+                  }}
+                  className="w-full rounded-lg border border-forge-border/60 bg-forge-card/60 px-2 py-1.5 text-left hover:border-forge-orange/30 hover:bg-forge-orange/5"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Network className="h-3 w-3 shrink-0 text-forge-orange" />
+                    <span className="truncate text-[11px] font-semibold text-forge-text">{group.parent?.name}</span>
+                    <span className="ml-auto shrink-0 text-[10px] text-forge-muted">{group.totalMembers} repos</span>
+                  </div>
+                  <div className="mt-1 flex items-center gap-1.5 text-[10px] text-forge-muted">
+                    {running > 0 && <span>{running} running</span>}
+                    {review > 0 && <span>{review} review</span>}
+                    {blocked > 0 && <span className="text-forge-red">{blocked} blocked</span>}
+                    {running === 0 && review === 0 && blocked === 0 && <span>{group.members.length} waiting/active</span>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         <div className="mt-4 space-y-4">
           {repositories.length === 0 && workspaces.length === 0 && (
