@@ -17,12 +17,13 @@ import { checkEnvironment } from '../../lib/tauri-api/environment';
 import { diagnoseLocalLlmProfile, listLocalLlmModels } from '../../lib/tauri-api/local-llms';
 import { getStoredAgentProfileId, setStoredAgentProfileId } from '../../lib/hooks/useAgentProfile';
 import { formatCommandPreview, parseCommandArgs } from '../../lib/shell-args';
+import { isAgentProfileActive, type AgentProviderId } from '../../lib/active-agent-providers';
 
 import type { AgentProfile, LocalLlmModel, LocalLlmProfileDiagnostic } from '../../types';
 
 const DEFAULT_PROFILE_IDS = new Set(['shell']);
 
-export function AgentProfilesCard() {
+export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: ReadonlySet<AgentProviderId> }) {
   const [effectiveProfiles, setEffectiveProfiles] = useState<AgentProfile[]>([]);
   const [appProfiles, setAppProfiles] = useState<AgentProfile[]>([]);
   const [ollamaModels, setOllamaModels] = useState<LocalLlmModel[]>([]);
@@ -196,8 +197,9 @@ export function AgentProfilesCard() {
   };
 
   const appProfileIds = new Set(appProfiles.map((profile) => profile.id));
-  const selectableProfiles = agentProfilesForPromptPicker(effectiveProfiles).filter((profile) => profile.agent !== 'shell');
-  const coordinatorProfiles = agentProfilesForCoordinatorPicker(effectiveProfiles);
+  const activeEffectiveProfiles = effectiveProfiles.filter((profile) => isAgentProfileActive(profile, activeProviderIds));
+  const selectableProfiles = agentProfilesForPromptPicker(activeEffectiveProfiles).filter((profile) => profile.agent !== 'shell');
+  const coordinatorProfiles = agentProfilesForCoordinatorPicker(activeEffectiveProfiles);
 
   return (
     <div className="rounded-xl border border-forge-border bg-forge-card p-4">
@@ -285,7 +287,7 @@ export function AgentProfilesCard() {
       </div>
 
       <div className="grid gap-2 md:grid-cols-2">
-        {effectiveProfiles.map((profile) => {
+        {activeEffectiveProfiles.map((profile) => {
           const source = appProfileIds.has(profile.id) ? 'app' : DEFAULT_PROFILE_IDS.has(profile.id) ? 'built-in' : 'repo';
           const diagnostic = diagnostics[profile.id];
           return (
@@ -355,6 +357,11 @@ export function AgentProfilesCard() {
             </div>
           );
         })}
+        {activeEffectiveProfiles.length === 0 && (
+          <div className="rounded-lg border border-forge-border/70 bg-black/10 p-3 text-[12px] text-forge-muted">
+            No active agent providers. Enable a provider in Agent Setup to choose defaults or manage profiles.
+          </div>
+        )}
       </div>
 
       <div className="mt-4 rounded-lg border border-forge-border/70 bg-black/10 p-3">

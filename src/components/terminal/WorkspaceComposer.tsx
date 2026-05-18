@@ -8,6 +8,7 @@ import { getWorkspaceContextPreview, refreshWorkspaceRepoContext } from '../../l
 import { saveWorkspaceAttachment, saveWorkspacePastedImage } from '../../lib/tauri-api/workspace-file-tree';
 import { agentProfilesForCoordinatorPicker } from '../../lib/tauri-api/agent-profiles';
 import { formatSessionError } from '../../lib/ui-errors';
+import { isAgentProfileActive, type AgentProviderId } from '../../lib/active-agent-providers';
 import {
   AGENT_COMPOSER_DEFAULT_PX,
   AGENT_COMPOSER_HEIGHT_KEY,
@@ -198,6 +199,7 @@ interface WorkspaceComposerProps {
   promptTemplates: PromptTemplate[];
   agentContext: WorkspaceAgentContext | null;
   agentProfiles: AgentProfile[];
+  activeProviderIds: ReadonlySet<AgentProviderId>;
   coordinatorStatus: WorkspaceCoordinatorStatus | null;
   settings: ComposerSettings;
   onSettingsChange: (patch: Partial<ComposerSettings>) => void;
@@ -218,6 +220,7 @@ export function WorkspaceComposer({
   promptTemplates,
   agentContext,
   agentProfiles,
+  activeProviderIds,
   coordinatorStatus,
   settings,
   onSettingsChange,
@@ -518,9 +521,13 @@ export function WorkspaceComposer({
       : CLAUDE_THINKING_OPTIONS;
 
   const coordinatorWorkerCount = coordinatorStatus?.workers.filter((worker) => worker.status === 'running').length ?? 0;
+  const activeCoordinatorProviderOptions = useMemo(
+    () => COORDINATOR_PROVIDER_OPTIONS.filter((option) => activeProviderIds.has(option.value as AgentProviderId)),
+    [activeProviderIds],
+  );
   const coordinatorProfiles = useMemo(
-    () => agentProfilesForCoordinatorPicker(agentProfiles),
-    [agentProfiles],
+    () => agentProfilesForCoordinatorPicker(agentProfiles.filter((profile) => isAgentProfileActive(profile, activeProviderIds))),
+    [activeProviderIds, agentProfiles],
   );
   const coordinatorBrainProviderModelOptions = providerModelOptions(settings.coordinatorBrainProvider);
   const coordinatorCoderProviderModelOptions = providerModelOptions(settings.coordinatorCoderProvider);
@@ -529,6 +536,21 @@ export function WorkspaceComposer({
   const latestPlannerDiagnostic = coordinatorStatus?.plannerLastMessage
     ?? coordinatorStatus?.recentActions.find((action) => action.actionKind === 'planner')?.message
     ?? null;
+
+  useEffect(() => {
+    if (activeCoordinatorProviderOptions.length === 0 || settings.promptMode !== 'coordinator') return;
+    const fallback = activeCoordinatorProviderOptions[0].value;
+    const patch: Partial<ComposerSettings> = {};
+    if (!activeProviderIds.has(settings.coordinatorBrainProvider as AgentProviderId)) {
+      patch.coordinatorBrainProvider = fallback;
+      patch.coordinatorBrainProfileId = '';
+    }
+    if (!activeProviderIds.has(settings.coordinatorCoderProvider as AgentProviderId)) {
+      patch.coordinatorCoderProvider = fallback;
+      patch.coordinatorCoderProfileId = '';
+    }
+    if (Object.keys(patch).length > 0) onSettingsChange(patch);
+  }, [activeCoordinatorProviderOptions, activeProviderIds, onSettingsChange, settings.coordinatorBrainProvider, settings.coordinatorCoderProvider, settings.promptMode]);
 
   return (
     <div className="shrink-0 border-t border-forge-border bg-forge-surface" style={{ height: `${composerHeight}px` }}>
@@ -558,7 +580,7 @@ export function WorkspaceComposer({
                 >
                   <SelectTrigger compact title="Coordinator brain provider"><SelectValue placeholder="Brain provider" /></SelectTrigger>
                   <SelectContent>
-                    {COORDINATOR_PROVIDER_OPTIONS.map((providerOption) => (
+                    {activeCoordinatorProviderOptions.map((providerOption) => (
                       <SelectItem key={`composer-brain-provider-${providerOption.value}`} value={providerOption.value}>{providerOption.label}</SelectItem>
                     ))}
                   </SelectContent>
@@ -570,7 +592,7 @@ export function WorkspaceComposer({
                 >
                   <SelectTrigger compact title="Coordinator coder provider"><SelectValue placeholder="Coder provider" /></SelectTrigger>
                   <SelectContent>
-                    {COORDINATOR_PROVIDER_OPTIONS.map((providerOption) => (
+                    {activeCoordinatorProviderOptions.map((providerOption) => (
                       <SelectItem key={`composer-coder-provider-${providerOption.value}`} value={providerOption.value}>{providerOption.label}</SelectItem>
                     ))}
                   </SelectContent>
@@ -674,9 +696,16 @@ export function WorkspaceComposer({
                         </Select>
                       </div>
                     </div>
-                    <p className="mt-2 text-[10px] text-forge-muted">Built-in providers are always available. Profile override is optional.</p>
+                    <p className="mt-2 text-[10px] text-forge-muted">
+                      Provider list follows Settings → Agent Setup. Profile override is optional.
+                    </p>
                   </PopoverContent>
                 </Popover>
+                {activeCoordinatorProviderOptions.length === 0 && (
+                  <span className="rounded border border-forge-yellow/30 bg-forge-yellow/10 px-1.5 py-0.5 text-[10px] text-forge-yellow">
+                    enable a provider in Settings
+                  </span>
+                )}
                 <span>·</span>
                 <span className={coordinatorStatus?.activeRun ? 'text-forge-orange' : 'text-forge-muted'}>
                   {coordinatorStatus?.activeRun ? `running (${coordinatorWorkerCount} workers)` : 'idle'}

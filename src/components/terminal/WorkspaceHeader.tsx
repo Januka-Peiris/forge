@@ -30,6 +30,7 @@ import type {
   Workspace,
 } from '../../types';
 import { PROFILE_LABELS } from './workspace-terminal-constants';
+import { isAgentProfileActive, type AgentProviderId } from '../../lib/active-agent-providers';
 
 interface WorkspaceHeaderProps {
   workspace: Workspace;
@@ -39,6 +40,7 @@ interface WorkspaceHeaderProps {
   error: string | null;
   focusedSession: TerminalSession | null;
   agentProfiles: AgentProfile[];
+  activeProviderIds: ReadonlySet<AgentProviderId>;
   onOpenInCursor?: () => void;
   onCreateTerminal: (kind: 'agent' | 'shell', profile: TerminalProfile, title?: string, profileId?: string) => void;
   onCopyFocusedOutput: () => void;
@@ -56,6 +58,7 @@ export function WorkspaceHeader({
   error,
   focusedSession,
   agentProfiles,
+  activeProviderIds,
   onOpenInCursor,
   onCreateTerminal,
   onCopyFocusedOutput,
@@ -64,7 +67,7 @@ export function WorkspaceHeader({
   onAttachTerminal,
   onSetError,
 }: WorkspaceHeaderProps) {
-  const localAgentProfiles = agentProfiles.filter((profile) => profile.agent === 'local_llm' || profile.local);
+  const localAgentProfiles = agentProfiles.filter((profile) => (profile.agent === 'local_llm' || profile.local) && isAgentProfileActive(profile, activeProviderIds));
 
   return (
     <div className="shrink-0 border-b border-forge-border bg-forge-bg/95 backdrop-blur-md">
@@ -131,16 +134,18 @@ export function WorkspaceHeader({
             </PopoverContent>
           </Popover>
 
-          <Button
-            variant="outline"
-            size="xs"
-            disabled={busy}
-            onClick={() => onCreateTerminal('agent', 'claude_code', 'Claude')}
-            className="h-7 px-2 text-[11px] border-forge-green/20 text-forge-green hover:bg-forge-green/5"
-          >
-            <span className="hidden sm:inline">New Claude</span>
-            <span className="sm:hidden">+ Claude</span>
-          </Button>
+          {activeProviderIds.has('claude_code') && (
+            <Button
+              variant="outline"
+              size="xs"
+              disabled={busy}
+              onClick={() => onCreateTerminal('agent', 'claude_code', 'Claude')}
+              className="h-7 px-2 text-[11px] border-forge-green/20 text-forge-green hover:bg-forge-green/5"
+            >
+              <span className="hidden sm:inline">New Claude</span>
+              <span className="sm:hidden">+ Claude</span>
+            </Button>
+          )}
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -152,15 +157,21 @@ export function WorkspaceHeader({
               <DropdownMenuItem disabled={busy} onSelect={() => onCreateTerminal('shell', 'shell', 'Shell')}>
                 New shell tab
               </DropdownMenuItem>
-              <DropdownMenuItem disabled={busy} onSelect={() => onCreateTerminal('agent', 'codex', 'Codex')}>
-                New Codex tab
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled={busy} onSelect={() => onCreateTerminal('agent', 'kimi_code', 'Kimi')}>
-                New Kimi tab
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled={busy} onSelect={() => onCreateTerminal('agent', 'local_llm', 'Local LLM')}>
-                New Local LLM tab
-              </DropdownMenuItem>
+              {activeProviderIds.has('codex') && (
+                <DropdownMenuItem disabled={busy} onSelect={() => onCreateTerminal('agent', 'codex', 'Codex')}>
+                  New Codex tab
+                </DropdownMenuItem>
+              )}
+              {activeProviderIds.has('kimi_code') && (
+                <DropdownMenuItem disabled={busy} onSelect={() => onCreateTerminal('agent', 'kimi_code', 'Kimi')}>
+                  New Kimi tab
+                </DropdownMenuItem>
+              )}
+              {activeProviderIds.has('local_llm') && (
+                <DropdownMenuItem disabled={busy} onSelect={() => onCreateTerminal('agent', 'local_llm', 'Local LLM')}>
+                  New Local LLM tab
+                </DropdownMenuItem>
+              )}
               {localAgentProfiles.length > 0 && (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger>Other agents</DropdownMenuSubTrigger>
@@ -212,7 +223,7 @@ export function WorkspaceHeader({
 
       {visibleSessions.length > 0 && (
         <div className="flex items-center gap-1 overflow-x-auto px-4 py-1.5 bg-black/5">
-          {visibleSessions.filter((s) => s.terminalKind !== 'agent').map((session) => {
+          {visibleSessions.map((session) => {
             const title = session.title || PROFILE_LABELS[session.profile as TerminalProfile] || session.profile;
             const active = focusedSession?.id === session.id;
             return (
