@@ -44,10 +44,15 @@ import { TileLayout } from '../layout/TileLayout';
 import { useTileLayoutState } from '../layout/useTileLayoutState';
 import { WorkspaceHeader } from './WorkspaceHeader';
 import { WorkspaceComposer, type ComposerSettings } from './WorkspaceComposer';
+import {
+  isKnownComposerModel,
+  providerModelOptions,
+  providerReasoningOptions,
+} from './workspace-composer-options';
 import type { PromptTemplate } from '../../types/prompt-template';
 import { useSyncedRef } from '../../lib/hooks/useSyncedRef';
 import { useActiveAgentProviders } from '../../lib/hooks/useActiveAgentProviders';
-import { isAgentProfileActive } from '../../lib/active-agent-providers';
+import { isAgentProfileActive, providerForAgentProfile, type AgentProviderId } from '../../lib/active-agent-providers';
 import { useWorkspaceTerminalOutput } from './useWorkspaceTerminalOutput';
 import { WorkspaceTerminalEmptyState } from './WorkspaceTerminalEmptyState';
 import { WorkspaceContextFooter } from './WorkspaceContextFooter';
@@ -64,7 +69,6 @@ import type { TileLeaf } from '../../types/tile-layout';
 const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-6';
 const DEFAULT_CODEX_MODEL = 'gpt-5.4';
 const DEFAULT_KIMI_MODEL = 'kimi-for-coding';
-const CLAUDE_REASONING_VALUES = new Set(['Default', 'Low', 'Medium', 'High', 'Extra High', 'Max']);
 
 const FILE_PREVIEW_WIDTH_KEY = 'forge:file-preview-width';
 const COMPOSER_SETTINGS_KEY = 'forge:composer-settings';
@@ -87,6 +91,28 @@ const COMPOSER_SETTINGS_DEFAULTS: ComposerSettings = {
   coordinatorAutoStepTrigger: 'terminal_completion',
   coordinatorAutoStepCooldownSeconds: 3,
 };
+
+function providerFromProfileRef(profileRef?: string | null): AgentProviderId | null {
+  switch ((profileRef ?? '').trim()) {
+    case 'claude_code':
+    case 'claude-code':
+    case 'claude':
+      return 'claude_code';
+    case 'codex':
+      return 'codex';
+    case 'kimi_code':
+    case 'kimi-code':
+    case 'kimi':
+      return 'kimi_code';
+    case 'local_llm':
+    case 'local-llm':
+      return 'local_llm';
+    case 'openai':
+      return 'openai';
+    default:
+      return null;
+  }
+}
 
 function loadComposerSettings(): ComposerSettings {
   try {
@@ -204,6 +230,22 @@ export function WorkspaceTerminal({
     [activeProviders.activeProviderSet, agentProfiles],
   );
   const focusedIsAgent = focusedSession?.terminalKind === 'agent' || focusedSession?.sessionRole === 'agent';
+  const activePromptProfileRef = focusedIsAgent ? focusedSession?.profile : selectedProfileId;
+  const activePromptProfile = useMemo(
+    () => {
+      if (!activePromptProfileRef) return null;
+      return agentProfiles.find((profile) => profile.id === activePromptProfileRef)
+        ?? agentProfiles.find((profile) => profile.agent === activePromptProfileRef)
+        ?? null;
+    },
+    [activePromptProfileRef, agentProfiles],
+  );
+  const activePromptProvider = useMemo<AgentProviderId>(
+    () => (activePromptProfile ? providerForAgentProfile(activePromptProfile) : null)
+      ?? providerFromProfileRef(activePromptProfileRef)
+      ?? 'claude_code',
+    [activePromptProfile, activePromptProfileRef],
+  );
   const hasAnyAgentSession = useMemo(
     () => allSessions.some((s) => !s.closedAt && (s.terminalKind === 'agent' || s.sessionRole === 'agent')),
     [allSessions],
@@ -378,10 +420,6 @@ export function WorkspaceTerminal({
       const codexModel = settings.codexAgentModel || DEFAULT_CODEX_MODEL;
       const kimiModel = settings.kimiAgentModel || DEFAULT_KIMI_MODEL;
       setProviderModelDefaults({ claude: claudeModel, codex: codexModel, kimi: kimiModel });
-      setComposerSettings((current) => {
-        if (current.selectedModel && current.selectedModel.startsWith('claude-')) return current;
-        return { ...current, selectedModel: claudeModel };
-      });
     } catch (err) {
       forgeWarn('agent-models', 'load error', { err });
     }
@@ -532,16 +570,33 @@ export function WorkspaceTerminal({
 
   useEffect(() => {
     setComposerSettings((current) => {
-      const nextModel = current.selectedModel.startsWith('claude-')
-        ? current.selectedModel
-        : providerModelDefaults.claude;
-      const nextReasoning = CLAUDE_REASONING_VALUES.has(current.selectedReasoning)
+      const modelOptions = providerModelOptions(activePromptProvider);
+      const modelBelongsToProvider = modelOptions.some((option) => option.value === current.selectedModel);
+      const modelIsCustom = current.selectedModel.trim().length > 0 && !isKnownComposerModel(current.selectedModel);
+      const defaultModel = activePromptProvider === 'codex'
+        ? providerModelDefaults.codex
+        : activePromptProvider === 'kimi_code'
+          ? providerModelDefaults.kimi
+          : activePromptProvider === 'local_llm'
+            ? activePromptProfile?.model ?? ''
+            : providerModelDefaults.claude;
+      const nextModel = modelBelongsToProvider || modelIsCustom ? current.selectedModel : defaultModel;
+
+      const reasoningOptions = providerReasoningOptions(activePromptProvider);
+      const defaultReasoning = activePromptProvider === 'codex' || activePromptProvider === 'openai'
+        ? 'medium'
+        : activePromptProvider === 'kimi_code'
+          ? 'default'
+          : 'Default';
+      const reasoningBelongsToProvider = reasoningOptions.some((option) => option.value === current.selectedReasoning);
+      const nextReasoning = reasoningOptions.length === 0 || reasoningBelongsToProvider
         ? current.selectedReasoning
-        : 'Default';
+        : defaultReasoning;
+
       if (nextModel === current.selectedModel && nextReasoning === current.selectedReasoning) return current;
       return { ...current, selectedModel: nextModel, selectedReasoning: nextReasoning };
     });
-  }, [providerModelDefaults.claude]);
+  }, [activePromptProfile?.model, activePromptProvider, providerModelDefaults]);
 
   useEffect(() => {
     window.localStorage.setItem(FILE_PREVIEW_WIDTH_KEY, String(filePreviewWidth));
@@ -1008,6 +1063,7 @@ export function WorkspaceTerminal({
           agentContext={agentContext}
           agentProfiles={agentProfiles}
           activeProviderIds={activeProviders.activeProviderSet}
+          provider={activePromptProvider}
           coordinatorStatus={coordinatorStatus}
           settings={composerSettings}
           onSettingsChange={(patch) => setComposerSettings((current) => ({ ...current, ...patch }))}

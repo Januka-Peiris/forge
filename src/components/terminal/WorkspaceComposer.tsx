@@ -17,6 +17,14 @@ import {
   roughTokenEstimateFromChars,
 } from './workspace-terminal-constants';
 import { WorkspaceComposerSettingsPopover } from './WorkspaceComposerSettingsPopover';
+import {
+  CLAUDE_MODEL_OPTIONS,
+  CODEX_MODEL_OPTIONS,
+  KIMI_MODEL_OPTIONS,
+  directProviderLabel,
+  providerModelOptions,
+  providerReasoningOptions,
+} from './workspace-composer-options';
 
 const COMPOSER_DRAFTS = new Map<string, string>();
 
@@ -36,83 +44,8 @@ const COORDINATOR_PROVIDER_OPTIONS = [
   { value: 'local_llm', label: 'Local' },
 ];
 
-const CLAUDE_THINKING_OPTIONS = [
-  { value: 'Default', label: 'Default', hint: 'Claude default' },
-  { value: 'Low', label: 'Low', hint: 'faster' },
-  { value: 'Medium', label: 'Medium', hint: 'balanced' },
-  { value: 'High', label: 'High', hint: 'deeper' },
-  { value: 'Extra High', label: 'Extra High', hint: 'xhigh' },
-  { value: 'Max', label: 'Max', hint: 'maximum' },
-];
-
-const CLAUDE_MODEL_OPTIONS = [
-  { value: 'claude-opus-4-7', label: 'Opus 4.7' },
-  { value: 'claude-opus-4-7[1m]', label: 'Opus 4.7 · 1M context' },
-  { value: 'claude-opus-4-6', label: 'Opus 4.6' },
-  { value: 'claude-opus-4-6[1m]', label: 'Opus 4.6 · 1M context' },
-  { value: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
-  { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
-];
-
-const CODEX_MODEL_OPTIONS = [
-  { value: 'gpt-5.4', label: 'GPT-5.4 (Flagship)' },
-  { value: 'gpt-5.4-mini', label: 'GPT-5.4 mini' },
-  { value: 'gpt-5.3-codex', label: 'GPT-5.3 Codex' },
-  { value: 'gpt-5.3-codex-spark', label: 'GPT-5.3 Spark' },
-  { value: 'o4-mini', label: 'o4-mini' },
-];
-
-const CODEX_REASONING_OPTIONS = [
-  { value: 'low', label: 'Low', hint: 'faster response' },
-  { value: 'medium', label: 'Medium', hint: 'balanced' },
-  { value: 'high', label: 'High', hint: 'deep thinking' },
-  { value: 'xhigh', label: 'Extra High', hint: 'maximum reasoning' },
-];
-
-const KIMI_MODEL_OPTIONS = [
-  { value: 'kimi-for-coding', label: 'Kimi for Coding' },
-  { value: 'kimi-k2.6', label: 'Kimi K2.6' },
-  { value: 'kimi-k2.5', label: 'Kimi K2.5' },
-];
-
-const KIMI_THINKING_OPTIONS = [
-  { value: 'default', label: 'Default', hint: 'session default' },
-  { value: 'on', label: 'On', hint: 'enable --thinking' },
-  { value: 'off', label: 'Off', hint: 'enable --no-thinking' },
-];
-
-const OPENAI_MODEL_OPTIONS = [
-  { value: 'gpt-5.4', label: 'GPT-5.4 (Flagship)' },
-  { value: 'gpt-5.4-mini', label: 'GPT-5.4 mini' },
-  { value: 'gpt-5.2', label: 'GPT-5.2' },
-  { value: 'o4-mini', label: 'o4-mini' },
-];
-
-const OPENAI_REASONING_OPTIONS = [
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'xhigh', label: 'Extra High' },
-];
-
 function coordinatorProviderLabel(provider: string): string {
   return COORDINATOR_PROVIDER_OPTIONS.find((option) => option.value === provider)?.label ?? provider;
-}
-
-function providerModelOptions(provider: string) {
-  if (provider === 'codex') return CODEX_MODEL_OPTIONS;
-  if (provider === 'kimi_code') return KIMI_MODEL_OPTIONS;
-  if (provider === 'openai') return OPENAI_MODEL_OPTIONS;
-  if (provider === 'local_llm') return [] as { value: string; label: string }[];
-  return CLAUDE_MODEL_OPTIONS;
-}
-
-function providerReasoningOptions(provider: string) {
-  if (provider === 'codex') return CODEX_REASONING_OPTIONS;
-  if (provider === 'kimi_code') return KIMI_THINKING_OPTIONS;
-  if (provider === 'openai') return OPENAI_REASONING_OPTIONS;
-  if (provider === 'local_llm') return [] as { value: string; label: string; hint?: string }[];
-  return CLAUDE_THINKING_OPTIONS;
 }
 
 function compactLabel(model: string, provider?: string) {
@@ -200,6 +133,7 @@ interface WorkspaceComposerProps {
   agentContext: WorkspaceAgentContext | null;
   agentProfiles: AgentProfile[];
   activeProviderIds: ReadonlySet<AgentProviderId>;
+  provider: AgentProviderId;
   coordinatorStatus: WorkspaceCoordinatorStatus | null;
   settings: ComposerSettings;
   onSettingsChange: (patch: Partial<ComposerSettings>) => void;
@@ -221,6 +155,7 @@ export function WorkspaceComposer({
   agentContext,
   agentProfiles,
   activeProviderIds,
+  provider,
   coordinatorStatus,
   settings,
   onSettingsChange,
@@ -507,18 +442,9 @@ export function WorkspaceComposer({
     }
   };
 
-  const provider: string = 'claude_code';
-  const providerLabel = provider === 'codex' ? 'Codex' : provider === 'kimi_code' ? 'Kimi' : 'Claude';
-  const modelOptions = provider === 'codex'
-    ? CODEX_MODEL_OPTIONS
-    : provider === 'kimi_code'
-      ? KIMI_MODEL_OPTIONS
-      : CLAUDE_MODEL_OPTIONS;
-  const thinkingOptions = provider === 'codex'
-    ? CODEX_REASONING_OPTIONS
-    : provider === 'kimi_code'
-      ? KIMI_THINKING_OPTIONS
-      : CLAUDE_THINKING_OPTIONS;
+  const providerLabel = directProviderLabel(provider);
+  const modelOptions = providerModelOptions(provider);
+  const thinkingOptions = providerReasoningOptions(provider);
 
   const coordinatorWorkerCount = coordinatorStatus?.workers.filter((worker) => worker.status === 'running').length ?? 0;
   const activeCoordinatorProviderOptions = useMemo(
