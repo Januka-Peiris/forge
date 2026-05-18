@@ -17,87 +17,9 @@ pub(super) fn queue_workspace_agent_prompt(
     state: &AppState,
     input: QueueAgentPromptInput,
 ) -> Result<AgentPromptEntry, String> {
-    let mut prompt = input.prompt.trim().to_string();
-    if prompt.is_empty() {
+    let user_prompt = input.prompt.trim().to_string();
+    if user_prompt.is_empty() {
         return Err("Prompt is required".to_string());
-    }
-    if let Ok(context) =
-        agent_context_service::get_workspace_agent_context(state, &input.workspace_id)
-    {
-        if !context.prompt_preamble.trim().is_empty()
-            && !prompt.contains("Forge linked repository context:")
-        {
-            prompt = format!("{}\n\nUser request:\n{}", context.prompt_preamble, prompt);
-        }
-    }
-
-    let context_enabled =
-        crate::repositories::settings_repository::get_value(&state.db, "context_enabled")
-            .unwrap_or_default()
-            .map(|value| value != "false")
-            .unwrap_or(true);
-
-    if context_enabled {
-        let is_first_prompt = {
-            let active_session = terminal_repository::get_active_session_id_for_workspace(
-                &state.db,
-                &input.workspace_id,
-            )
-            .unwrap_or(None);
-            match active_session {
-                None => true,
-                Some(session_id) => {
-                    terminal_repository::count_sent_prompts_for_session(&state.db, &session_id)
-                        .unwrap_or(1)
-                        == 0
-                }
-            }
-        };
-
-        if is_first_prompt && !prompt.contains("[FORGE CONTEXT]") {
-            if let Some(context_block) =
-                agent_context_service::build_session_open_context(state, &input.workspace_id)
-            {
-                prompt = format!("{}\n\nUser request:\n{}", context_block, prompt);
-            }
-        }
-    }
-
-    if !prompt.contains("Forge memory recall:") {
-        let relevant_memories = agent_memory_repository::list_relevant_for_prompt(
-            &state.db,
-            &input.workspace_id,
-            &prompt,
-            5,
-        )
-        .unwrap_or_default();
-        if !relevant_memories.is_empty() {
-            let lines = relevant_memories
-                .iter()
-                .map(|memory| format!("- {}: {}", memory.key, memory.value))
-                .collect::<Vec<_>>()
-                .join("\n");
-            prompt = format!("Forge memory recall:\n{lines}\n\n{prompt}");
-            let now = terminal_service::timestamp();
-            for memory in relevant_memories {
-                let _ = agent_memory_repository::upsert(
-                    &state.db,
-                    agent_memory_repository::AgentMemoryUpsert {
-                        workspace_id: memory.workspace_id.as_deref(),
-                        scope: Some(memory.scope.as_str()),
-                        key: &memory.key,
-                        value: &memory.value,
-                        origin: Some(memory.origin.as_str()),
-                        status: Some(memory.status.as_str()),
-                        confidence: Some(memory.confidence),
-                        source_task_run_id: memory.source_task_run_id.as_deref(),
-                        source_label: memory.source_label.as_deref(),
-                        source_detail: memory.source_detail.as_deref(),
-                        last_used_at: Some(&now),
-                    },
-                );
-            }
-        }
     }
 
     let resolved_profile = agent_profile_service::resolve_agent_profile(
@@ -106,26 +28,80 @@ pub(super) fn queue_workspace_agent_prompt(
         input.profile_id.as_deref(),
         input.profile.as_deref(),
     )?;
-    if resolved_profile.agent == "local_llm" || resolved_profile.local {
-        let should_send_envelope = terminal_repository::get_active_session_id_for_workspace(
+
+    let supports_system_prompt_file =
+        resolved_profile.agent == "claude_code" && !resolved_profile.local;
+
+    let is_first_prompt = {
+        let active_session = terminal_repository::get_active_session_id_for_workspace(
             &state.db,
             &input.workspace_id,
         )
-        .ok()
-        .flatten()
-        .and_then(|session_id| {
-            terminal_repository::count_sent_prompts_for_session(&state.db, &session_id).ok()
-        })
-        .map(|count| count == 0)
-        .unwrap_or(true);
-        if should_send_envelope {
-            prompt = agent_profile_service::local_llm_prompt_envelope(
-                &resolved_profile,
-                input.task_mode.as_deref(),
-                &prompt,
+        .unwrap_or(None);
+        match active_session {
+            None => true,
+            Some(session_id) => {
+                terminal_repository::count_sent_prompts_for_session(&state.db, &session_id)
+                    .unwrap_or(1)
+                    == 0
+            }
+        }
+    };
+
+    // -- Collect memory recall (needed for all prompt types) --
+    let relevant_memories = if !user_prompt.contains("Forge memory recall:") {
+        agent_memory_repository::list_relevant_for_prompt(
+            &state.db,
+            &input.workspace_id,
+            &user_prompt,
+            5,
+        )
+        .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let memory_block = if !relevant_memories.is_empty() {
+        let lines = relevant_memories
+            .iter()
+            .map(|memory| format!("- {}: {}", memory.key, memory.value))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let now = terminal_service::timestamp();
+        for memory in relevant_memories {
+            let _ = agent_memory_repository::upsert(
+                &state.db,
+                agent_memory_repository::AgentMemoryUpsert {
+                    workspace_id: memory.workspace_id.as_deref(),
+                    scope: Some(memory.scope.as_str()),
+                    key: &memory.key,
+                    value: &memory.value,
+                    origin: Some(memory.origin.as_str()),
+                    status: Some(memory.status.as_str()),
+                    confidence: Some(memory.confidence),
+                    source_task_run_id: memory.source_task_run_id.as_deref(),
+                    source_label: memory.source_label.as_deref(),
+                    source_detail: memory.source_detail.as_deref(),
+                    last_used_at: Some(&now),
+                },
             );
         }
+        Some(format!("Forge memory recall:\n{lines}"))
     } else {
+        None
+    };
+
+    let is_plan_mode = input
+        .task_mode
+        .as_deref()
+        .is_some_and(|mode| mode.eq_ignore_ascii_case("plan"));
+
+    // -- Build the final prompt and optional system prompt file --
+    let (prompt, system_prompt_file) = if supports_system_prompt_file && is_first_prompt {
+        // Claude Code, first prompt: write ALL context to a temp file,
+        // send only user text to stdin.
+        let mut system_parts: Vec<String> = Vec::new();
+
+        // Agent profile metadata
         let metadata = agent_profile_service::prompt_metadata_preamble_for_workspace(
             state,
             Some(&input.workspace_id),
@@ -133,11 +109,145 @@ pub(super) fn queue_workspace_agent_prompt(
             input.task_mode.as_deref(),
             input.reasoning.as_deref(),
         );
-        if !prompt.contains("Forge agent profile:") {
-            prompt = format!("{metadata}\n\nUser request:\n{prompt}");
+        system_parts.push(metadata);
+
+        // Linked repository context
+        if let Ok(context) =
+            agent_context_service::get_workspace_agent_context(state, &input.workspace_id)
+        {
+            if !context.prompt_preamble.trim().is_empty() {
+                system_parts.push(context.prompt_preamble.trim().to_string());
+            }
         }
-    }
-    prompt = append_plan_mode_response_instructions(prompt, input.task_mode.as_deref());
+
+        // Session context ([FORGE CONTEXT] block)
+        let context_enabled =
+            crate::repositories::settings_repository::get_value(&state.db, "context_enabled")
+                .unwrap_or_default()
+                .map(|value| value != "false")
+                .unwrap_or(true);
+        if context_enabled {
+            if let Some(context_block) =
+                agent_context_service::build_session_open_context(state, &input.workspace_id)
+            {
+                system_parts.push(context_block);
+            }
+        }
+
+        // Memory recall
+        if let Some(ref block) = memory_block {
+            system_parts.push(block.clone());
+        }
+
+        // Plan mode instructions
+        if is_plan_mode {
+            system_parts.push(PLAN_MODE_RESPONSE_INSTRUCTIONS.to_string());
+        }
+
+        let system_context = system_parts.join("\n\n");
+        let file_path = write_system_prompt_file(&system_context)?;
+        (user_prompt, Some(file_path))
+    } else if supports_system_prompt_file {
+        // Claude Code, subsequent prompt: session already has profile/context from launch.
+        // Only include per-prompt dynamic data (memory recall, plan instructions) as a
+        // small stdin prefix — much smaller than the full preamble.
+        let mut prompt = user_prompt;
+        let mut prefix_parts: Vec<String> = Vec::new();
+        if let Some(block) = memory_block {
+            prefix_parts.push(block);
+        }
+        if is_plan_mode {
+            prefix_parts.push(PLAN_MODE_RESPONSE_INSTRUCTIONS.to_string());
+        }
+        if !prefix_parts.is_empty() {
+            let prefix = prefix_parts.join("\n\n");
+            prompt = format!("{prefix}\n\n{prompt}");
+        }
+        (prompt, None)
+    } else if resolved_profile.agent == "local_llm" || resolved_profile.local {
+        // Local LLM: wrap in envelope for the first prompt
+        let mut system_parts: Vec<String> = Vec::new();
+        if let Ok(context) =
+            agent_context_service::get_workspace_agent_context(state, &input.workspace_id)
+        {
+            if !context.prompt_preamble.trim().is_empty() {
+                system_parts.push(context.prompt_preamble.trim().to_string());
+            }
+        }
+        let context_enabled =
+            crate::repositories::settings_repository::get_value(&state.db, "context_enabled")
+                .unwrap_or_default()
+                .map(|value| value != "false")
+                .unwrap_or(true);
+        if context_enabled && is_first_prompt {
+            if let Some(context_block) =
+                agent_context_service::build_session_open_context(state, &input.workspace_id)
+            {
+                system_parts.push(context_block);
+            }
+        }
+        if let Some(block) = memory_block {
+            system_parts.push(block);
+        }
+        if is_plan_mode {
+            system_parts.push(PLAN_MODE_RESPONSE_INSTRUCTIONS.to_string());
+        }
+        let mut prompt = user_prompt;
+        for part in system_parts.iter().rev() {
+            prompt = format!("{part}\n\n{prompt}");
+        }
+        if is_first_prompt {
+            prompt = agent_profile_service::local_llm_prompt_envelope(
+                &resolved_profile,
+                input.task_mode.as_deref(),
+                &prompt,
+            );
+        }
+        (prompt, None)
+    } else {
+        // Non-Claude remote agents (Codex, Kimi, OpenAI): prepend everything to stdin
+        let mut system_parts: Vec<String> = Vec::new();
+        let metadata = agent_profile_service::prompt_metadata_preamble_for_workspace(
+            state,
+            Some(&input.workspace_id),
+            &resolved_profile,
+            input.task_mode.as_deref(),
+            input.reasoning.as_deref(),
+        );
+        system_parts.push(metadata);
+        if let Ok(context) =
+            agent_context_service::get_workspace_agent_context(state, &input.workspace_id)
+        {
+            if !context.prompt_preamble.trim().is_empty() {
+                system_parts.push(context.prompt_preamble.trim().to_string());
+            }
+        }
+        let context_enabled =
+            crate::repositories::settings_repository::get_value(&state.db, "context_enabled")
+                .unwrap_or_default()
+                .map(|value| value != "false")
+                .unwrap_or(true);
+        if context_enabled && is_first_prompt {
+            if let Some(context_block) =
+                agent_context_service::build_session_open_context(state, &input.workspace_id)
+            {
+                system_parts.push(context_block);
+            }
+        }
+        if let Some(block) = memory_block {
+            system_parts.push(block);
+        }
+        if is_plan_mode {
+            system_parts.push(PLAN_MODE_RESPONSE_INSTRUCTIONS.to_string());
+        }
+        let mut prompt = user_prompt;
+        if !system_parts.is_empty() {
+            let preamble = system_parts.join("\n\n");
+            prompt = format!("{preamble}\n\nUser request:\n{prompt}");
+        }
+        (prompt, None)
+    };
+
     let profile = resolved_profile.id.clone();
     let mut entry = AgentPromptEntry {
         id: format!("prompt-{}", unique_suffix()),
@@ -166,7 +276,7 @@ pub(super) fn queue_workspace_agent_prompt(
             hook_service::HookPhase::Pre,
             &hook_context,
         )?;
-        dispatch_prompt_entry(state, &mut entry)?;
+        dispatch_prompt_entry(state, &mut entry, system_prompt_file)?;
         let _ = hook_service::run_workspace_hooks(
             state,
             &entry.workspace_id,
@@ -180,13 +290,14 @@ pub(super) fn queue_workspace_agent_prompt(
 
 const PLAN_MODE_RESPONSE_INSTRUCTIONS: &str = "Forge Plan mode instructions:\n- Stay in planning mode: do not make file edits or run mutating commands.\n- Explore only as needed to make the plan decision-complete.\n- When you are ready to present the final implementation plan, wrap only the plan Markdown in <proposed_plan> and </proposed_plan> tags so Forge can render it as an actionable plan card.";
 
-fn append_plan_mode_response_instructions(mut prompt: String, task_mode: Option<&str>) -> String {
-    if task_mode.is_some_and(|mode| mode.eq_ignore_ascii_case("plan"))
-        && !prompt.contains("Forge Plan mode instructions:")
-    {
-        prompt = format!("{prompt}\n\n{PLAN_MODE_RESPONSE_INSTRUCTIONS}");
-    }
-    prompt
+fn write_system_prompt_file(content: &str) -> Result<String, String> {
+    let dir = std::env::temp_dir().join("forge-system-prompts");
+    std::fs::create_dir_all(&dir)
+        .map_err(|err| format!("Failed to create temp dir for system prompt: {err}"))?;
+    let file_path = dir.join(format!("forge-ctx-{}.md", unique_suffix()));
+    std::fs::write(&file_path, content)
+        .map_err(|err| format!("Failed to write system prompt file: {err}"))?;
+    Ok(file_path.display().to_string())
 }
 
 pub(super) fn batch_dispatch_workspace_agent_prompt(
@@ -230,7 +341,7 @@ pub(super) fn run_next_workspace_agent_prompt(
             Some(entry) => entry,
             None => return Ok(None),
         };
-    dispatch_prompt_entry(state, &mut entry)?;
+    dispatch_prompt_entry(state, &mut entry, None)?;
     Ok(Some(entry))
 }
 
@@ -242,14 +353,26 @@ pub(super) fn list_workspace_agent_prompts(
     terminal_repository::list_prompts_for_workspace(&state.db, workspace_id, limit)
 }
 
-fn dispatch_prompt_entry(state: &AppState, entry: &mut AgentPromptEntry) -> Result<(), String> {
+fn dispatch_prompt_entry(
+    state: &AppState,
+    entry: &mut AgentPromptEntry,
+    system_prompt_file: Option<String>,
+) -> Result<(), String> {
     checkpoint_service::create_checkpoint_if_dirty_in_background(
         state.clone(),
         entry.workspace_id.clone(),
         "before agent prompt".to_string(),
     );
 
-    let session = ensure_agent_session_for_prompt(state, &entry.workspace_id, &entry.profile)?;
+    let extra_args = system_prompt_file.map(|path| {
+        vec![
+            "--append-system-prompt-file".to_string(),
+            path,
+        ]
+    });
+
+    let session =
+        ensure_agent_session_for_prompt(state, &entry.workspace_id, &entry.profile, extra_args)?;
 
     let active = active_for_workspace(state, &entry.workspace_id, "agent")?
         .ok_or_else(|| "No active agent session found to send prompt".to_string())?;

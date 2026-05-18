@@ -236,6 +236,7 @@ pub fn start_command_terminal(
             title: Some(title.to_string()),
             command: Some(command.to_string()),
             args: None,
+            extra_args: None,
             profile_id: Some("shell".to_string()),
             cols: None,
             rows: None,
