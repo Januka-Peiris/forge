@@ -109,6 +109,7 @@ pub fn start_workspace_terminal_session(
             command: None,
             profile_id: Some(resolved_profile.id.clone()),
             args: None,
+            extra_args: input.extra_args,
             cols: input.cols,
             rows: input.rows,
         },
@@ -142,8 +143,11 @@ pub fn create_workspace_terminal(
         .title
         .clone()
         .unwrap_or_else(|| default_terminal_title(&kind, &profile.name));
-    let command_spec =
+    let mut command_spec =
         TerminalCommandSpec::from_input(&profile, input.command.as_deref(), input.args.clone())?;
+    if let Some(extra) = &input.extra_args {
+        command_spec.args.extend(extra.iter().cloned());
+    }
     let launch_command = command_spec.command.clone();
     let launch_args = command_spec.args.clone();
     let launch_preview = command_preview(&launch_command, &launch_args);

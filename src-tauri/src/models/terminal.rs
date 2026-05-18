@@ -76,6 +76,8 @@ pub struct StartTerminalSessionInput {
     pub cols: Option<u16>,
     pub rows: Option<u16>,
     pub replace_existing: Option<bool>,
+    #[serde(default)]
+    pub extra_args: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,6 +90,8 @@ pub struct CreateWorkspaceTerminalInput {
     pub title: Option<String>,
     pub command: Option<String>,
     pub args: Option<Vec<String>>,
+    #[serde(default)]
+    pub extra_args: Option<Vec<String>>,
     pub cols: Option<u16>,
     pub rows: Option<u16>,
 }
