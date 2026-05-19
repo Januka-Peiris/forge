@@ -11,12 +11,12 @@ import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 
 const SEARCH_DECORATIONS: ISearchOptions['decorations'] = {
-  matchBackground: '#f59e0b',
-  matchBorder: '#fbbf24',
-  matchOverviewRuler: '#f59e0b',
-  activeMatchBackground: '#22c55e',
-  activeMatchBorder: '#86efac',
-  activeMatchColorOverviewRuler: '#22c55e',
+  matchBackground: '#F97316',
+  matchBorder: '#FB923C',
+  matchOverviewRuler: '#F97316',
+  activeMatchBackground: '#00D4FF',
+  activeMatchBorder: '#66E5FF',
+  activeMatchColorOverviewRuler: '#00D4FF',
 };
 
 function sessionBadgeVariant(session: TerminalSession): 'warning' | 'success' | 'destructive' | 'muted' {
@@ -127,8 +127,8 @@ export function TerminalPane({
       theme: {
         background: '#0a0a0a',
         foreground: '#d7dce5',
-        cursor: '#22c55e',
-        selectionBackground: '#22c55e40',
+        cursor: '#00D4FF',
+        selectionBackground: '#00D4FF40',
       },
     });
     const fitAddon = new FitAddon();
@@ -228,14 +228,14 @@ export function TerminalPane({
     <section
       onFocusCapture={onFocus}
       title={session.cwd}
-      className={`relative flex min-h-0 flex-1 flex-col rounded-md border bg-forge-bg ${focused ? 'border-forge-green/50 shadow-lg shadow-emerald-950/20' : 'border-forge-border'}`}
+      className={`relative flex min-h-0 flex-1 flex-col rounded-md border bg-mn-bg ${focused ? 'border-mn-cyan/50 shadow-lg shadow-emerald-950/20' : 'border-mn-border'}`}
     >
       <div
         onMouseDown={onFocus}
-        className="flex shrink-0 items-center justify-between gap-2 border-b border-forge-border/70 bg-forge-surface px-2 py-1.5"
+        className="flex shrink-0 items-center justify-between gap-2 border-b border-mn-border/70 bg-mn-surface px-2 py-1.5"
       >
         <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-[12px] font-bold text-forge-text">{title}</span>
+          <span className="truncate text-[12px] font-bold text-mn-text">{title}</span>
           <Badge variant={sessionBadgeVariant(session)}>
             {session.status}
           </Badge>
@@ -250,7 +250,7 @@ export function TerminalPane({
                 event.stopPropagation();
                 onStop();
               }}
-              className="text-forge-red hover:bg-forge-red/10"
+              className="text-mn-red hover:bg-mn-red/10"
             >
               <Square className="h-3 w-3" /> Stop
             </Button>
@@ -268,16 +268,16 @@ export function TerminalPane({
         </div>
       </div>
       {restored && (
-        <div className="shrink-0 border-b border-forge-border/70 bg-forge-blue/10 px-3 py-1 text-[11px] text-forge-blue">
+        <div className="shrink-0 border-b border-mn-border/70 bg-mn-blue/10 px-3 py-1 text-[11px] text-mn-blue">
           Restored session history from {formatTerminalTimestamp(session.endedAt)}.
         </div>
       )}
       {showSearch && (
         <div
-          className="absolute right-3 top-12 z-20 flex items-center gap-1 rounded-md border border-forge-border bg-forge-surface/95 p-1.5 shadow-xl shadow-black/40 backdrop-blur"
+          className="absolute right-3 top-12 z-20 flex items-center gap-1 rounded-md border border-mn-border bg-mn-surface/95 p-1.5 shadow-xl shadow-black/40 backdrop-blur"
           onMouseDown={(event) => event.stopPropagation()}
         >
-          <Search className="h-3.5 w-3.5 text-forge-muted" />
+          <Search className="h-3.5 w-3.5 text-mn-muted" />
           <Input
             ref={searchInputRef}
             value={searchTerm}
@@ -298,7 +298,7 @@ export function TerminalPane({
             placeholder="Search terminal"
             className="h-7 w-56"
           />
-          <span className="min-w-[58px] text-center text-[11px] text-forge-muted">{resultLabel}</span>
+          <span className="min-w-[58px] text-center text-[11px] text-mn-muted">{resultLabel}</span>
           <Button
             type="button"
             variant="ghost"

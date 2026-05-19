@@ -23,7 +23,7 @@ pub fn list_workspace_agent_profiles(
 
     if let Some(workspace_id) = workspace_id {
         if let Ok(config) =
-            workspace_script_service::get_workspace_forge_config(state, workspace_id)
+            workspace_script_service::get_workspace_mnemonic_config(state, workspace_id)
         {
             for profile in config.agent_profiles {
                 profiles.insert(profile.id.clone(), profile);
@@ -273,7 +273,7 @@ pub fn prompt_metadata_preamble(
     reasoning: Option<&str>,
 ) -> String {
     let mut lines = vec![
-        "Forge agent profile:".to_string(),
+        "Mnemonic agent profile:".to_string(),
         format!("- Profile: {}", profile.label),
     ];
     if let Some(model) = profile.model.as_deref().filter(|value| !value.is_empty()) {
@@ -337,7 +337,7 @@ pub fn local_llm_prompt_envelope(
         _ => "Help with the user's software-development task. Be concise, practical, and honest about uncertainty.",
     };
     format!(
-        "You are a local Forge coding assistant running via {provider} using model {model}.
+        "You are a local Mnemonic coding assistant running via {provider} using model {model}.
 
 Important:
 - Treat the text after `User request:` as the task.
@@ -361,7 +361,7 @@ pub fn prompt_metadata_preamble_for_workspace(
     let mut preamble = prompt_metadata_preamble(profile, task_mode, reasoning);
     if let Some(workspace_id) = workspace_id {
         if let Ok(config) =
-            workspace_script_service::get_workspace_forge_config(state, workspace_id)
+            workspace_script_service::get_workspace_mnemonic_config(state, workspace_id)
         {
             let enabled_mcp = config
                 .mcp_servers
@@ -383,7 +383,7 @@ pub fn prompt_metadata_preamble_for_workspace(
                 .map(|server| format!("{} ({})", server.id, server.transport))
                 .collect::<Vec<_>>();
             if !enabled_mcp.is_empty() || !disabled_mcp.is_empty() {
-                preamble.push_str("\nForge workspace MCP config:");
+                preamble.push_str("\nMnemonic workspace MCP config:");
                 if !enabled_mcp.is_empty() {
                     preamble.push_str("\n- Enabled MCP servers: ");
                     preamble.push_str(&enabled_mcp.join(", "));
@@ -645,7 +645,7 @@ mod tests {
             "User request:
 fix the failing test"
         ));
-        assert!(!envelope.contains("Forge agent profile:"));
+        assert!(!envelope.contains("Mnemonic agent profile:"));
         assert!(!envelope.contains("- Profile:"));
         assert!(envelope.contains("Do not explain this profile/configuration"));
     }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { checkEnvironment } from '../tauri-api/environment';
 import { saveHasCompletedEnvCheck } from '../tauri-api/settings';
-import { forgeWarn } from '../forge-log';
+import { mnWarn } from '../mn-log';
 import type { AppSettings, EnvironmentCheckItem } from '../../types';
 
 interface UseEnvironmentCheckInput {
@@ -23,7 +23,7 @@ export function useEnvironmentCheck({ settingsState, setSettingsState }: UseEnvi
       if (showModal) setEnvironmentModalOpen(true);
       return items;
     } catch (err) {
-      forgeWarn('environment', 'check failed', { err });
+      mnWarn('environment', 'check failed', { err });
       const unknownItems: EnvironmentCheckItem[] = ['git', 'tmux', 'codex', 'claude', 'kimi', 'gh'].map((binary) => ({
         name: binary === 'codex'
           ? 'codex CLI'
@@ -54,7 +54,7 @@ export function useEnvironmentCheck({ settingsState, setSettingsState }: UseEnvi
       const nextSettings = await saveHasCompletedEnvCheck(true);
       setSettingsState(nextSettings);
     } catch (err) {
-      forgeWarn('environment', 'failed to persist completion flag', { err });
+      mnWarn('environment', 'failed to persist completion flag', { err });
     }
   }, [setSettingsState]);
 
@@ -64,7 +64,7 @@ export function useEnvironmentCheck({ settingsState, setSettingsState }: UseEnvi
     void runEnvironmentCheck(true).finally(() => {
       void saveHasCompletedEnvCheck(true)
         .then((nextSettings) => setSettingsState(nextSettings))
-        .catch((err) => forgeWarn('environment', 'failed to persist first-run completion', { err }));
+        .catch((err) => mnWarn('environment', 'failed to persist first-run completion', { err }));
     });
   }, [runEnvironmentCheck, setSettingsState, settingsState]);
 

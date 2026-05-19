@@ -338,7 +338,7 @@ pub fn attach_workspace_terminal_session(
         &session.workspace_id,
         &session.id,
         "system",
-        "[forge] Terminal process ended; start a new session\r\n",
+        "[mnemonic] Terminal process ended; start a new session\r\n",
     );
     Err(format!(
         "Terminal session {} is no longer running — start a new one",
@@ -374,7 +374,7 @@ pub fn write_workspace_terminal_session_input(
                     .map_err(|_| "Pending command registry lock poisoned".to_string())?
                     .insert(session_id.to_string(), data.to_string());
                 let _ = state.app_handle.emit(
-                    "forge://command-approval-required",
+                    "mn://command-approval-required",
                     CommandApprovalEvent {
                         session_id: session_id.to_string(),
                         workspace_id: session.workspace_id,
@@ -456,7 +456,7 @@ pub fn interrupt_workspace_terminal_session_by_id(
         &session.workspace_id,
         session_id,
         "system",
-        "\r\n[forge] interrupt sent (Ctrl-C)\r\n",
+        "\r\n[mnemonic] interrupt sent (Ctrl-C)\r\n",
     );
     terminal_repository::get_session(&state.db, session_id)?
         .ok_or_else(|| format!("Terminal session {session_id} was not found"))
@@ -499,7 +499,7 @@ pub fn stop_workspace_terminal_session(
     state: &AppState,
     workspace_id: &str,
 ) -> Result<TerminalSessionState, String> {
-    log::info!(target: "forge_lib", "stop_workspace_terminal_session: agent workspace_id={workspace_id}");
+    log::info!(target: "mnemonic_lib", "stop_workspace_terminal_session: agent workspace_id={workspace_id}");
     if let Some(session) =
         terminal_repository::latest_for_workspace_role(&state.db, workspace_id, "agent")?
     {
@@ -508,7 +508,7 @@ pub fn stop_workspace_terminal_session(
     reconcile_orphan_running_session(state, workspace_id, "agent", "stopped")?;
     let out = get_workspace_terminal_session_state(state, workspace_id)?;
     log::info!(
-        target: "forge_lib",
+        target: "mnemonic_lib",
         "stop_workspace_terminal_session: done workspace_id={workspace_id} active_session={}",
         out.active_session.as_ref().map(|s| s.id.as_str()).unwrap_or("-")
     );
@@ -535,7 +535,7 @@ pub fn interrupt_workspace_terminal_session(
                 &active.session_id,
                 &seq,
                 "system",
-                "\r\n[forge] interrupt sent (Ctrl-C)\r\n",
+                "\r\n[mnemonic] interrupt sent (Ctrl-C)\r\n",
             );
         }
         None => {
@@ -554,7 +554,7 @@ pub fn interrupt_workspace_terminal_session(
                         workspace_id,
                         &session.id,
                         "system",
-                        "\r\n[forge] interrupt sent to persistent tmux session (Ctrl-C)\r\n",
+                        "\r\n[mnemonic] interrupt sent to persistent tmux session (Ctrl-C)\r\n",
                     );
                 }
             } else {
@@ -601,7 +601,7 @@ pub fn stop_workspace_terminal_session_by_id(
         &session.workspace_id,
         session_id,
         "system",
-        "[forge] Terminal session stopped\r\n",
+        "[mnemonic] Terminal session stopped\r\n",
     );
     terminal_repository::get_session(&state.db, session_id)?
         .ok_or_else(|| format!("Terminal session {session_id} was not found"))
@@ -633,7 +633,7 @@ pub fn close_workspace_terminal_session_by_id(
         &session.workspace_id,
         session_id,
         "system",
-        "[forge] Session closed in workspace view; history retained\r\n",
+        "[mnemonic] Session closed in workspace view; history retained\r\n",
     );
     let _ = terminal_repository::prune_output_chunks(
         &state.db,
@@ -825,7 +825,7 @@ pub fn stop_workspace_utility_terminal_session(
     state: &AppState,
     workspace_id: &str,
 ) -> Result<TerminalSessionState, String> {
-    log::info!(target: "forge_lib", "stop_workspace_utility_terminal_session: workspace_id={workspace_id}");
+    log::info!(target: "mnemonic_lib", "stop_workspace_utility_terminal_session: workspace_id={workspace_id}");
     if let Some(session) =
         terminal_repository::latest_for_workspace_role(&state.db, workspace_id, "utility")?
     {
@@ -834,7 +834,7 @@ pub fn stop_workspace_utility_terminal_session(
     reconcile_orphan_running_session(state, workspace_id, "utility", "stopped")?;
     let out = get_workspace_utility_terminal_session_state(state, workspace_id)?;
     log::info!(
-        target: "forge_lib",
+        target: "mnemonic_lib",
         "stop_workspace_utility_terminal_session: done workspace_id={workspace_id} active_session={}",
         out.active_session.as_ref().map(|s| s.id.as_str()).unwrap_or("-")
     );

@@ -73,7 +73,7 @@ export function useDetailPanelCheckpointActions({
       [
         'Restore this checkpoint into the workspace?',
         '',
-        'Forge will only continue if the current workspace is clean.',
+        'Mnemonic will only continue if the current workspace is clean.',
         'The checkpoint tree will be restored into the index and working tree without creating a commit.',
       ].join('\n'),
     );
@@ -99,12 +99,12 @@ export function useDetailPanelCheckpointActions({
       [
         'Create a branch from this checkpoint?',
         '',
-        'Forge will create a Git branch at the checkpoint commit.',
+        'Mnemonic will create a Git branch at the checkpoint commit.',
         'It will not switch branches or change workspace files.',
         '',
         'Branch name:',
       ].join('\n'),
-      `forge/checkpoint-${checkpoint.shortOid}`,
+      `mnemonic/checkpoint-${checkpoint.shortOid}`,
     );
     const branchName = branch?.trim();
     if (!branchName) return;
@@ -129,7 +129,7 @@ export function useDetailPanelCheckpointActions({
       [
         'Abandon this checkpoint?',
         '',
-        `Forge will delete checkpoint ref ${checkpoint.reference}.`,
+        `Mnemonic will delete checkpoint ref ${checkpoint.reference}.`,
         'Workspace files, branches, and commits will not be changed.',
       ].join('\n'),
     );

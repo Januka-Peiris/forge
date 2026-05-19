@@ -103,18 +103,18 @@ Workspace task: {}",
     let mut testing_notes = Vec::new();
     match latest_run.as_ref().map(|run| run.status.as_str()) {
         Some("succeeded") => {
-            testing_notes.push("Latest Forge agent run completed successfully.".to_string())
+            testing_notes.push("Latest Mnemonic agent run completed successfully.".to_string())
         }
         Some("failed") => testing_notes
-            .push("Latest Forge agent run failed; review logs before merging.".to_string()),
-        Some("running") => testing_notes.push("A Forge agent run is still running.".to_string()),
-        Some(status) => testing_notes.push(format!("Latest Forge agent run status: {status}.")),
+            .push("Latest Mnemonic agent run failed; review logs before merging.".to_string()),
+        Some("running") => testing_notes.push("A Mnemonic agent run is still running.".to_string()),
+        Some(status) => testing_notes.push(format!("Latest Mnemonic agent run status: {status}.")),
         None => testing_notes.push(
-            "No Forge agent run recorded. Add manual testing notes before opening PR.".to_string(),
+            "No Mnemonic agent run recorded. Add manual testing notes before opening PR.".to_string(),
         ),
     }
     testing_notes
-        .push("Review the changed files and diff in Forge before creating a PR.".to_string());
+        .push("Review the changed files and diff in Mnemonic before creating a PR.".to_string());
 
     let draft = WorkspacePrDraft {
         workspace_id: workspace_id.to_string(),
@@ -157,7 +157,7 @@ pub fn create_workspace_pr(
         .join("\n");
 
     let body = format!(
-        "## Summary\n{}\n\n## Key Changes\n{}\n\n## Risks\n{}\n\n## Testing\n{}\n\n🤖 Generated with Forge",
+        "## Summary\n{}\n\n## Key Changes\n{}\n\n## Risks\n{}\n\n## Testing\n{}\n\n🤖 Generated with Mnemonic",
         draft.summary, key_changes_md, risks_md, testing_md
     );
     let hook_context = serde_json::json!({

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { listWorkspaceAttention, markWorkspaceAttentionRead } from '../tauri-api/workspace-attention';
 import { getWorkspaceConflicts } from '../tauri-api/workspace-health';
-import { forgeWarn } from '../forge-log';
+import { mnWarn } from '../mn-log';
 import type { WorkspaceAttention } from '../../types';
 
 export function useWorkspaceAttentionState(selectedWorkspaceId: string | null, view: string) {
@@ -15,7 +15,7 @@ export function useWorkspaceAttentionState(selectedWorkspaceId: string | null, v
       const rows = await listWorkspaceAttention();
       setWorkspaceAttention(Object.fromEntries(rows.map((row) => [row.workspaceId, row])));
     } catch (err) {
-      forgeWarn('attention', 'load failed', { err });
+      mnWarn('attention', 'load failed', { err });
     }
     try {
       const result = await getWorkspaceConflicts();
@@ -39,7 +39,7 @@ export function useWorkspaceAttentionState(selectedWorkspaceId: string | null, v
       delete markReadTimerRef.current[workspaceId];
       void markWorkspaceAttentionRead(workspaceId)
         .then(() => scheduleAttentionLoad(50))
-        .catch((err) => forgeWarn('attention', 'mark read failed', { err, workspaceId }));
+        .catch((err) => mnWarn('attention', 'mark read failed', { err, workspaceId }));
     }, 300);
   }, [scheduleAttentionLoad]);
 

@@ -23,11 +23,11 @@ function isEditableShortcutTarget(target: EventTarget | null): boolean {
 }
 
 function focusWorkspaceComposer(): void {
-  window.dispatchEvent(new CustomEvent('forge:focus-composer'));
+  window.dispatchEvent(new CustomEvent('mn:focus-composer'));
 }
 
 function toggleWorkspacePlanMode(): void {
-  window.dispatchEvent(new CustomEvent('forge:toggle-plan-mode'));
+  window.dispatchEvent(new CustomEvent('mn:toggle-plan-mode'));
 }
 
 export function useAppKeyboardShortcuts({

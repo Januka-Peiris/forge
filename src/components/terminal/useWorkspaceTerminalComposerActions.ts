@@ -6,7 +6,7 @@ import { stepWorkspaceCoordinator } from '../../lib/tauri-api/coordinator';
 import { formatSessionError } from '../../lib/ui-errors';
 import type { AgentChatNextAction } from '../../types/agent-chat';
 
-import type { ForgeWorkspaceConfig, TerminalSession } from '../../types';
+import type { MnemonicWorkspaceConfig, TerminalSession } from '../../types';
 import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
 import type { ComposerSettings } from './WorkspaceComposer';
 
@@ -15,7 +15,7 @@ interface UseWorkspaceTerminalComposerActionsParams {
   focusedSession: TerminalSession | null;
   selectedProfileId: string;
   composerSettings: ComposerSettings;
-  forgeConfig: ForgeWorkspaceConfig | null;
+  mnemonicConfig: MnemonicWorkspaceConfig | null;
   refreshWorkbenchState: () => Promise<void>;
   refreshReadiness: () => Promise<void>;
   refreshCoordinatorStatus: () => Promise<void>;
@@ -34,7 +34,7 @@ export function useWorkspaceTerminalComposerActions({
   focusedSession,
   selectedProfileId,
   composerSettings,
-  forgeConfig,
+  mnemonicConfig,
   refreshWorkbenchState,
   refreshReadiness,
   refreshCoordinatorStatus,
@@ -60,7 +60,7 @@ export function useWorkspaceTerminalComposerActions({
         await refreshWorkbenchState();
         return;
       case 'run_tests':
-        if (forgeConfig?.run[0]) void startRunCommand(0);
+        if (mnemonicConfig?.run[0]) void startRunCommand(0);
         return;
       case 'create_pr':
         if (workspaceId) {

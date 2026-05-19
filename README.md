@@ -1,6 +1,6 @@
-# Forge Desktop
+# Mnemonic Desktop
 
-Forge is a local-first desktop conductor for AI coding agents. It helps you create isolated Git workspaces, run Claude/Codex/Kimi agents, understand what changed, review work, run checks, and move safe changes toward a PR without turning Forge into a cloud platform or full IDE.
+Mnemonic is a local-first desktop conductor for AI coding agents. It helps you create isolated Git workspaces, run Claude/Codex/Kimi agents, understand what changed, review work, run checks, and move safe changes toward a PR without turning Mnemonic into a cloud platform or full IDE.
 
 ## Product Direction
 
@@ -68,11 +68,11 @@ This repo ignores generated artifacts:
 - `dist/` and `dist-ssr/`
 - `src-tauri/target/`
 - `src-tauri/gen/`
-- Forge-managed local workspaces under `forge/`
+- Mnemonic-managed local workspaces under `mnemonic/`
 - local env files (`.env`, `.env.*`)
 
 If generated files are accidentally tracked, remove them from the index before pushing:
 
 ```bash
-git rm -r --cached --ignore-unmatch src-tauri/target src-tauri/gen forge
+git rm -r --cached --ignore-unmatch src-tauri/target src-tauri/gen mnemonic
 ```

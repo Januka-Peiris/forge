@@ -66,7 +66,7 @@ export function deriveWorkspaceCockpit(
     if (hasConflict) return 'Overlapping workspace edits detected';
     if (workspace.mergeRisk === 'High') return 'High merge risk';
     if (workspace.behindBy > 0) return `${workspace.behindBy} behind base`;
-    if (workspace.worktreeManagedByForge) return 'Forge-managed worktree';
+    if (workspace.worktreeManagedByForge) return 'Mnemonic-managed worktree';
     return 'External worktree';
   })();
 
@@ -95,14 +95,14 @@ export function deriveWorkspaceCockpit(
 export function cockpitToneClass(tone: CockpitTone): string {
   switch (tone) {
     case 'green':
-      return 'border-forge-green/25 bg-forge-green/10 text-forge-green';
+      return 'border-mn-cyan/25 bg-mn-cyan/10 text-mn-cyan';
     case 'blue':
-      return 'border-forge-blue/25 bg-forge-blue/10 text-forge-blue';
+      return 'border-mn-blue/25 bg-mn-blue/10 text-mn-blue';
     case 'yellow':
-      return 'border-forge-yellow/25 bg-forge-yellow/10 text-forge-yellow';
+      return 'border-mn-yellow/25 bg-mn-yellow/10 text-mn-yellow';
     case 'red':
-      return 'border-forge-red/25 bg-forge-red/10 text-forge-red';
+      return 'border-mn-red/25 bg-mn-red/10 text-mn-red';
     default:
-      return 'border-forge-border bg-white/5 text-forge-muted';
+      return 'border-mn-border bg-white/5 text-mn-muted';
   }
 }

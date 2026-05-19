@@ -49,7 +49,7 @@ pub(super) fn queue_workspace_agent_prompt(
     };
 
     // -- Collect memory recall (needed for all prompt types) --
-    let relevant_memories = if !user_prompt.contains("Forge memory recall:") {
+    let relevant_memories = if !user_prompt.contains("Mnemonic memory recall:") {
         agent_memory_repository::list_relevant_for_prompt(
             &state.db,
             &input.workspace_id,
@@ -85,7 +85,7 @@ pub(super) fn queue_workspace_agent_prompt(
                 },
             );
         }
-        Some(format!("Forge memory recall:\n{lines}"))
+        Some(format!("Mnemonic memory recall:\n{lines}"))
     } else {
         None
     };
@@ -120,7 +120,7 @@ pub(super) fn queue_workspace_agent_prompt(
             }
         }
 
-        // Session context ([FORGE CONTEXT] block)
+        // Session context ([MNEMONIC CONTEXT] block)
         let context_enabled =
             crate::repositories::settings_repository::get_value(&state.db, "context_enabled")
                 .unwrap_or_default()
@@ -289,13 +289,13 @@ pub(super) fn queue_workspace_agent_prompt(
     Ok(entry)
 }
 
-const PLAN_MODE_RESPONSE_INSTRUCTIONS: &str = "Forge Plan mode instructions:\n- Stay in planning mode: do not make file edits or run mutating commands.\n- Explore only as needed to make the plan decision-complete.\n- When you are ready to present the final implementation plan, wrap only the plan Markdown in <proposed_plan> and </proposed_plan> tags so Forge can render it as an actionable plan card.";
+const PLAN_MODE_RESPONSE_INSTRUCTIONS: &str = "Mnemonic Plan mode instructions:\n- Stay in planning mode: do not make file edits or run mutating commands.\n- Explore only as needed to make the plan decision-complete.\n- When you are ready to present the final implementation plan, wrap only the plan Markdown in <proposed_plan> and </proposed_plan> tags so Mnemonic can render it as an actionable plan card.";
 
 fn write_system_prompt_file(content: &str) -> Result<String, String> {
-    let dir = std::env::temp_dir().join("forge-system-prompts");
+    let dir = std::env::temp_dir().join("mn-system-prompts");
     std::fs::create_dir_all(&dir)
         .map_err(|err| format!("Failed to create temp dir for system prompt: {err}"))?;
-    let file_path = dir.join(format!("forge-ctx-{}.md", unique_suffix()));
+    let file_path = dir.join(format!("mn-ctx-{}.md", unique_suffix()));
     std::fs::write(&file_path, content)
         .map_err(|err| format!("Failed to write system prompt file: {err}"))?;
     Ok(file_path.display().to_string())
@@ -326,7 +326,7 @@ pub(super) fn batch_dispatch_workspace_agent_prompt(
         match result {
             Ok(entry) => entries.push(entry),
             Err(err) => log::warn!(
-                target: "forge_lib",
+                target: "mnemonic_lib",
                 "batch_dispatch: failed for workspace {workspace_id}: {err}"
             ),
         }
@@ -412,7 +412,7 @@ fn dispatch_prompt_entry(
         &session.id,
         &AtomicU64::new(terminal_repository::next_seq(&state.db, &session.id).unwrap_or(0)),
         "system",
-        &format!("\r\n[forge] queued prompt sent at {sent_at}\r\n"),
+        &format!("\r\n[mnemonic] queued prompt sent at {sent_at}\r\n"),
     );
     Ok(())
 }

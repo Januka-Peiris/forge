@@ -89,20 +89,20 @@ export function WorkspaceTerminalEditorPanel({
         aria-label="Resize file preview panel"
         onMouseDown={startFilePreviewResize}
         onDoubleClick={() => onFilePreviewWidthChange(420)}
-        className="w-1 shrink-0 cursor-col-resize rounded bg-transparent hover:bg-forge-border/70 active:bg-forge-green/60"
+        className="w-1 shrink-0 cursor-col-resize rounded bg-transparent hover:bg-mn-border/70 active:bg-mn-cyan/60"
         title="Double-click to reset width"
       />
-      <div className="flex min-h-0 shrink-0 flex-col rounded-xl border border-forge-border bg-forge-card/70" style={{ width: `${filePreviewWidth}px` }}>
-        <div className="flex items-center gap-1 overflow-x-auto border-b border-forge-border px-2 py-2">
+      <div className="flex min-h-0 shrink-0 flex-col rounded-xl border border-mn-border bg-mn-card/70" style={{ width: `${filePreviewWidth}px` }}>
+        <div className="flex items-center gap-1 overflow-x-auto border-b border-mn-border px-2 py-2">
           {openEditors.map((editor) => {
             const dirty = editor.content !== editor.savedContent;
             const active = activeEditorPath === editor.path;
             return (
-              <div key={editor.path} className={`flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs ${active ? 'border-forge-green/30 bg-forge-green/10 text-forge-green' : 'border-forge-border bg-forge-card/70 text-forge-muted'}`}>
+              <div key={editor.path} className={`flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs ${active ? 'border-mn-cyan/30 bg-mn-cyan/10 text-mn-cyan' : 'border-mn-border bg-mn-card/70 text-mn-muted'}`}>
                 <button
                   type="button"
                   onClick={() => onActiveEditorPathChange(editor.path)}
-                  className="truncate text-left hover:text-forge-text"
+                  className="truncate text-left hover:text-mn-text"
                   title={editor.path}
                 >
                   {dirty ? '● ' : ''}{editor.path.split('/').pop() ?? editor.path}
@@ -110,7 +110,7 @@ export function WorkspaceTerminalEditorPanel({
                 <button
                   type="button"
                   onClick={() => onCloseEditor(editor.path)}
-                  className="rounded p-0.5 hover:bg-forge-surface-overlay"
+                  className="rounded p-0.5 hover:bg-mn-surface-overlay"
                   title="Close file"
                 >
                   <X className="h-3 w-3" />
@@ -121,16 +121,16 @@ export function WorkspaceTerminalEditorPanel({
         </div>
 
         {!activeEditor ? (
-          <div className="flex flex-1 items-center justify-center text-sm text-forge-muted">Select a file from the Files tab.</div>
+          <div className="flex flex-1 items-center justify-center text-sm text-mn-muted">Select a file from the Files tab.</div>
         ) : (
           <>
-            <div className="flex items-center justify-between border-b border-forge-border px-3 py-2">
-              <p className="truncate font-mono text-xs text-forge-text" title={activeEditor.path}>{activeEditor.path}</p>
+            <div className="flex items-center justify-between border-b border-mn-border px-3 py-2">
+              <p className="truncate font-mono text-xs text-mn-text" title={activeEditor.path}>{activeEditor.path}</p>
               <button
                 type="button"
                 onClick={() => onSaveEditor(activeEditor.path)}
                 disabled={activeEditor.loading || !!activeEditor.error || savingEditorPaths.has(activeEditor.path)}
-                className="inline-flex items-center gap-1 rounded-md border border-forge-green/30 bg-forge-green/10 px-2 py-1 text-xs font-semibold text-forge-green disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-md border border-mn-cyan/30 bg-mn-cyan/10 px-2 py-1 text-xs font-semibold text-mn-cyan disabled:opacity-50"
               >
                 <Save className="h-3 w-3" />
                 {savingEditorPaths.has(activeEditor.path) ? 'Saving…' : 'Save'}
@@ -138,9 +138,9 @@ export function WorkspaceTerminalEditorPanel({
             </div>
 
             {activeEditor.loading ? (
-              <div className="flex flex-1 items-center justify-center text-sm text-forge-muted">Loading file…</div>
+              <div className="flex flex-1 items-center justify-center text-sm text-mn-muted">Loading file…</div>
             ) : activeEditor.error ? (
-              <div className="p-3 text-sm text-forge-red">{activeEditor.error}</div>
+              <div className="p-3 text-sm text-mn-red">{activeEditor.error}</div>
             ) : (
               <div className="min-h-0 flex-1 overflow-auto bg-black/35 p-3 text-xs">
                 <Editor
@@ -150,7 +150,7 @@ export function WorkspaceTerminalEditorPanel({
                   padding={0}
                   textareaClassName="outline-none font-mono"
                   preClassName="font-mono m-0"
-                  className="min-h-full font-mono text-xs text-forge-text"
+                  className="min-h-full font-mono text-xs text-mn-text"
                 />
               </div>
             )}

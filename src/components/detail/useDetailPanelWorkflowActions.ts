@@ -183,7 +183,7 @@ export function useDetailPanelWorkflowActions({
       [
         'Cleanup this workspace?',
         '',
-        'Forge will stop running workspace terminals and start configured teardown commands.',
+        'Mnemonic will stop running workspace terminals and start configured teardown commands.',
         'It will not remove the worktree or kill ports from this button.',
       ].join('\n'),
     );
@@ -213,7 +213,7 @@ export function useDetailPanelWorkflowActions({
     const confirmed = window.confirm(
       isArchived
         ? 'Unarchive this workspace? It will return to the active workspace view.'
-        : 'Archive this workspace? It will be hidden from active views, but Forge keeps its history, checkpoints, branch, Git worktree, and local files.',
+        : 'Archive this workspace? It will be hidden from active views, but Mnemonic keeps its history, checkpoints, branch, Git worktree, and local files.',
     );
     if (confirmed) onArchiveWorkspace();
   };
@@ -224,7 +224,7 @@ export function useDetailPanelWorkflowActions({
       [
         'Recover unhealthy workspace sessions?',
         '',
-        'Forge will close stale, failed, interrupted, stuck, or detached running terminal sessions.',
+        'Mnemonic will close stale, failed, interrupted, stuck, or detached running terminal sessions.',
         'Terminal history and workspace activity will be preserved.',
         'It will not delete files, remove the worktree, or kill unrelated ports.',
       ].join('\n'),

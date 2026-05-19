@@ -26,7 +26,7 @@ pub fn get_workspace_changed_files(
     }
 
     log::debug!(
-        target: "forge_lib",
+        target: "mnemonic_lib",
         "get_workspace_changed_files workspace={} files={} elapsed_ms={}",
         workspace_id,
         files.len(),

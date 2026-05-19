@@ -36,11 +36,11 @@ function classifyDiffLine(line: string): DiffLineType {
 }
 
 function lineClasses(type: DiffLineType): string {
-  if (type === 'file_header') return 'bg-forge-blue/5 text-forge-blue/80';
-  if (type === 'hunk_header') return 'bg-forge-surface-overlay text-forge-muted';
-  if (type === 'addition') return 'bg-forge-green/10 text-forge-green';
-  if (type === 'deletion') return 'bg-forge-red/10 text-forge-red';
-  return 'text-forge-text/85';
+  if (type === 'file_header') return 'bg-mn-blue/5 text-mn-blue/80';
+  if (type === 'hunk_header') return 'bg-mn-surface-overlay text-mn-muted';
+  if (type === 'addition') return 'bg-mn-cyan/10 text-mn-cyan';
+  if (type === 'deletion') return 'bg-mn-red/10 text-mn-red';
+  return 'text-mn-text/85';
 }
 
 export function UnifiedDiffView({
@@ -71,7 +71,7 @@ export function UnifiedDiffView({
   if (!diff || diff.trim().length === 0) {
     return (
       <div
-        className={`flex min-h-0 flex-1 items-center justify-center p-4 text-ui-label text-forge-muted ${className}`}
+        className={`flex min-h-0 flex-1 items-center justify-center p-4 text-ui-label text-mn-muted ${className}`}
       >
         {emptyMessage}
       </div>
@@ -96,7 +96,7 @@ export function UnifiedDiffView({
   };
 
   return (
-    <div className={`flex min-h-0 flex-1 flex-col bg-forge-bg ${className}`}>
+    <div className={`flex min-h-0 flex-1 flex-col bg-mn-bg ${className}`}>
       <div className="min-h-0 flex-1 overflow-auto">
         <div className="min-w-full">
           {rows.map((row, index) => {
@@ -109,10 +109,10 @@ export function UnifiedDiffView({
                 key={`${index}-${row.raw}`}
                 type="button"
                 onClick={(event) => toggleLine(index, event.shiftKey)}
-                className={`flex w-full items-start gap-2 border-b border-forge-border/20 px-3 py-0.5 text-left font-mono text-ui-label leading-relaxed ${lineClasses(type)} ${selected ? 'ring-1 ring-inset ring-forge-orange/70 brightness-125' : 'hover:bg-white/5'}`}
+                className={`flex w-full items-start gap-2 border-b border-mn-border/20 px-3 py-0.5 text-left font-mono text-ui-label leading-relaxed ${lineClasses(type)} ${selected ? 'ring-1 ring-inset ring-mn-orange/70 brightness-125' : 'hover:bg-white/5'}`}
               >
-                <span className="w-10 shrink-0 select-none text-right text-forge-dim">{row.oldLine ?? ''}</span>
-                <span className="w-10 shrink-0 select-none text-right text-forge-dim">{row.newLine ?? ''}</span>
+                <span className="w-10 shrink-0 select-none text-right text-mn-dim">{row.oldLine ?? ''}</span>
+                <span className="w-10 shrink-0 select-none text-right text-mn-dim">{row.newLine ?? ''}</span>
                 <span className="w-3 shrink-0 select-none text-center opacity-90">{prefix}</span>
                 <span className="flex-1 whitespace-pre">{body}</span>
               </button>

@@ -9,21 +9,21 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          'bg-forge-orange/10 border border-forge-orange/30 text-forge-orange hover:bg-forge-orange/20',
+          'bg-mn-orange/10 border border-mn-orange/30 text-mn-orange hover:bg-mn-orange/20',
         secondary:
-          'bg-white/5 border border-forge-border text-forge-muted hover:bg-white/10 hover:text-forge-text',
+          'bg-white/5 border border-mn-border text-mn-muted hover:bg-white/10 hover:text-mn-text',
         outline:
-          'border border-forge-border bg-transparent text-forge-muted hover:bg-white/5 hover:text-forge-text',
+          'border border-mn-border bg-transparent text-mn-muted hover:bg-white/5 hover:text-mn-text',
         ghost:
-          'text-forge-muted hover:bg-white/5 hover:text-forge-text',
+          'text-mn-muted hover:bg-white/5 hover:text-mn-text',
         destructive:
-          'bg-forge-red/10 border border-forge-red/30 text-forge-red hover:bg-forge-red/20',
+          'bg-mn-red/10 border border-mn-red/30 text-mn-red hover:bg-mn-red/20',
         warning:
-          'bg-forge-yellow/10 border border-forge-yellow/30 text-forge-yellow hover:bg-forge-yellow/20',
+          'bg-mn-yellow/10 border border-mn-yellow/30 text-mn-yellow hover:bg-mn-yellow/20',
         success:
-          'bg-forge-green/10 border border-forge-green/30 text-forge-green hover:bg-forge-green/20',
+          'bg-mn-green/10 border border-mn-green/30 text-mn-green hover:bg-mn-green/20',
         link:
-          'text-forge-orange underline-offset-4 hover:underline',
+          'text-mn-orange underline-offset-4 hover:underline',
       },
       size: {
         default: 'h-8 px-3 py-1.5 text-xs rounded-btn',

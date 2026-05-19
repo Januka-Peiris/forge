@@ -16,7 +16,7 @@ export function perfMeasure(label: string, startMark: string): number | null {
     performance.mark(endMark);
     const measure = performance.measure(label, startMark, endMark);
     if (measure.duration >= SLOW_MEASURE_MS) {
-      console.info(`[forge-perf] ${label}: ${Math.round(measure.duration)}ms`);
+      console.info(`[mn-perf] ${label}: ${Math.round(measure.duration)}ms`);
     }
     performance.clearMarks(startMark);
     performance.clearMarks(endMark);
@@ -28,7 +28,7 @@ export function perfMeasure(label: string, startMark: string): number | null {
 }
 
 export async function measureAsync<T>(label: string, task: () => Promise<T>): Promise<T> {
-  const start = `forge:${label}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+  const start = `mn:${label}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
   perfMark(start);
   try {
     return await task();

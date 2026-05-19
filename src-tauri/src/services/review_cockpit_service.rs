@@ -187,7 +187,7 @@ fn build_cockpit(
         warnings: Vec::new(),
     };
     log::debug!(
-        target: "forge_lib",
+        target: "mnemonic_lib",
         "build_review_cockpit workspace={} files={} comments={} refresh={} elapsed_ms={}",
         workspace_id,
         cockpit.files.len(),
@@ -595,7 +595,7 @@ fn build_review_prompt(
         .clone()
         .unwrap_or(detail.worktree_path);
     let mut sections = Vec::new();
-    sections.push("Forge review task".to_string());
+    sections.push("Mnemonic review task".to_string());
     sections.push(format!("Primary writable workspace: {root}"));
     if let Ok(context) =
         agent_context_service::get_workspace_agent_context(state, &input.workspace_id)

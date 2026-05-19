@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { forgeWarn } from '../forge-log';
+import { mnWarn } from '../mn-log';
 import type { TerminalOutputEvent, Workspace } from '../../types';
 import { getSetting } from '../tauri-api/settings';
 
@@ -14,7 +14,7 @@ export interface AttentionToast {
 type NotificationSeverity = 'info' | 'warn' | 'error';
 type NotificationSource = 'orchestrator' | 'coordinator' | 'rebase' | 'terminal' | 'approval' | 'budget' | 'system';
 
-interface ForgeNotificationEnvelope {
+interface MnemonicNotificationEnvelope {
   source: NotificationSource;
   severity: NotificationSeverity;
   workspaceId: string;
@@ -37,9 +37,9 @@ interface UseAppNotificationsInput {
   onScheduleMarkAttentionRead: (workspaceId: string) => void;
 }
 
-async function sendForgeNotification(title: string, body: string) {
+async function sendMnemonicNotification(title: string, body: string) {
   try {
-    const notificationsEnabled = window.localStorage.getItem('forge:notifications-enabled');
+    const notificationsEnabled = window.localStorage.getItem('mn:notifications-enabled');
     if (notificationsEnabled === 'false') return;
     const { isPermissionGranted, requestPermission, sendNotification } = await import('@tauri-apps/plugin-notification');
     let granted = await isPermissionGranted();
@@ -79,7 +79,7 @@ export function useAppNotifications({
     return rank(severity) >= rank(minLevel);
   }, [minLevel]);
 
-  const routeEnvelope = useCallback((envelope: ForgeNotificationEnvelope) => {
+  const routeEnvelope = useCallback((envelope: MnemonicNotificationEnvelope) => {
     if (!shouldPassMinLevel(envelope.severity)) return;
     const workspace = workspacesRef.current.find((item) => item.id === envelope.workspaceId);
     const workspaceName = workspace?.name ?? envelope.workspaceId;
@@ -102,7 +102,7 @@ export function useAppNotifications({
       window.setTimeout(() => dismissAttentionToast(toastId), 8000);
     }
     if (!isForeground || envelope.severity !== 'info') {
-      void sendForgeNotification(envelope.source[0].toUpperCase() + envelope.source.slice(1), envelope.message);
+      void sendMnemonicNotification(envelope.source[0].toUpperCase() + envelope.source.slice(1), envelope.message);
     }
   }, [dedupeSeconds, dismissAttentionToast, shouldPassMinLevel]);
 
@@ -124,7 +124,7 @@ export function useAppNotifications({
     let unlisten: UnlistenFn | undefined;
     let disposed = false;
     void listen<{ workspaceId: string; message: string }>(
-      'forge://orchestrator-notify',
+      'mn://orchestrator-notify',
       (event) => {
         if (disposed) return;
         const { workspaceId, message } = event.payload;
@@ -146,7 +146,7 @@ export function useAppNotifications({
     let unlisten: UnlistenFn | undefined;
     let disposed = false;
     void listen<{ workspaceId: string; workspaceName: string; branch: string; baseBranch: string }>(
-      'forge://workspace-rebase-conflict',
+      'mn://workspace-rebase-conflict',
       (event) => {
         if (disposed) return;
         const { workspaceId, workspaceName, branch, baseBranch } = event.payload;
@@ -168,7 +168,7 @@ export function useAppNotifications({
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
     let disposed = false;
-    void listen<TerminalOutputEvent>('forge://terminal-output', (event) => {
+    void listen<TerminalOutputEvent>('mn://terminal-output', (event) => {
       if (disposed) return;
       const workspaceId = event.payload.workspaceId;
       if (workspaceId === selectedWorkspaceIdRef.current && viewRef.current === 'workspaces') {
@@ -192,7 +192,7 @@ export function useAppNotifications({
       onScheduleAttentionLoad();
     }).then((fn) => {
       if (disposed) fn(); else unlisten = fn;
-    }).catch((err) => forgeWarn('attention', 'event listener failed', { err }));
+    }).catch((err) => mnWarn('attention', 'event listener failed', { err }));
     return () => {
       disposed = true;
       if (unlisten) unlisten();
@@ -203,7 +203,7 @@ export function useAppNotifications({
     let unlisten: UnlistenFn | undefined;
     let disposed = false;
     void listen<{ workspaceId: string; workspaceName: string; stuckFor: number }>(
-      'forge://terminal-stuck',
+      'mn://terminal-stuck',
       (event) => {
         if (disposed) return;
         const { workspaceId, workspaceName, stuckFor } = event.payload;
@@ -224,7 +224,7 @@ export function useAppNotifications({
     let unlisten: UnlistenFn | undefined;
     let disposed = false;
     void listen<{ workspaceId: string; command: string }>(
-      'forge://command-approval-required',
+      'mn://command-approval-required',
       (event) => {
         if (disposed) return;
         routeEnvelope({
@@ -244,7 +244,7 @@ export function useAppNotifications({
     let unlisten: UnlistenFn | undefined;
     let disposed = false;
     void listen<{ workspaceId: string; cost: string; limit: number }>(
-      'forge://workspace-budget-exceeded',
+      'mn://workspace-budget-exceeded',
       (event) => {
         if (disposed) return;
         routeEnvelope({

@@ -8,21 +8,21 @@ const badgeVariants = cva(
     variants: {
       variant: {
         default:
-          'border-forge-border bg-white/5 text-forge-muted',
+          'border-mn-border bg-white/5 text-mn-muted',
         muted:
-          'border-transparent bg-white/5 text-forge-dim',
+          'border-transparent bg-white/5 text-mn-dim',
         success:
-          'border-forge-green/25 bg-forge-green/10 text-forge-green',
+          'border-mn-green/25 bg-mn-green/10 text-mn-green',
         warning:
-          'border-forge-yellow/25 bg-forge-yellow/10 text-forge-yellow',
+          'border-mn-yellow/25 bg-mn-yellow/10 text-mn-yellow',
         destructive:
-          'border-forge-red/25 bg-forge-red/10 text-forge-red',
+          'border-mn-red/25 bg-mn-red/10 text-mn-red',
         info:
-          'border-forge-blue/25 bg-forge-blue/10 text-forge-blue',
+          'border-mn-blue/25 bg-mn-blue/10 text-mn-blue',
         orange:
-          'border-forge-orange/25 bg-forge-orange/10 text-forge-orange',
+          'border-mn-orange/25 bg-mn-orange/10 text-mn-orange',
         violet:
-          'border-forge-violet/25 bg-forge-violet/10 text-forge-violet',
+          'border-mn-violet/25 bg-mn-violet/10 text-mn-violet',
       },
     },
     defaultVariants: {
@@ -46,12 +46,12 @@ function Badge({ className, variant, dot, animateDot, children, ...props }: Badg
           className={cn(
             'h-1.5 w-1.5 rounded-full',
             animateDot && 'animate-agent-pulse',
-            variant === 'success' && 'bg-forge-green',
-            variant === 'warning' && 'bg-forge-yellow',
-            variant === 'destructive' && 'bg-forge-red',
-            variant === 'info' && 'bg-forge-blue',
-            variant === 'orange' && 'bg-forge-orange',
-            (!variant || variant === 'default' || variant === 'muted') && 'bg-forge-muted',
+            variant === 'success' && 'bg-mn-green',
+            variant === 'warning' && 'bg-mn-yellow',
+            variant === 'destructive' && 'bg-mn-red',
+            variant === 'info' && 'bg-mn-blue',
+            variant === 'orange' && 'bg-mn-orange',
+            (!variant || variant === 'default' || variant === 'muted') && 'bg-mn-muted',
           )}
         />
       )}

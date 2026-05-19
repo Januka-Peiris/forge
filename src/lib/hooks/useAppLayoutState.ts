@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState, type MouseEvent } from 'react';
 
-const SIDEBAR_WIDTH_KEY = 'forge:sidebar-width';
-const INSPECTOR_WIDTH_KEY = 'forge:inspector-width';
-const INSPECTOR_COLLAPSED_KEY = 'forge:inspector-collapsed';
-const LEGACY_DETAIL_PANEL_WIDTH_KEY = 'forge:detail-panel-width';
-const LEGACY_DETAIL_PANEL_COLLAPSED_KEY = 'forge:detail-panel-collapsed';
-const INSPECTOR_TAB_KEY = 'forge:inspector-tab';
+const SIDEBAR_WIDTH_KEY = 'mn:sidebar-width';
+const INSPECTOR_WIDTH_KEY = 'mn:inspector-width';
+const INSPECTOR_COLLAPSED_KEY = 'mn:inspector-collapsed';
+const LEGACY_DETAIL_PANEL_WIDTH_KEY = 'mn:detail-panel-width';
+const LEGACY_DETAIL_PANEL_COLLAPSED_KEY = 'mn:detail-panel-collapsed';
+const INSPECTOR_TAB_KEY = 'mn:inspector-tab';
 const COLLAPSED_RAIL_WIDTH = 44;
 
 function readClampedNumber(key: string, fallback: number, min: number, max: number): number {

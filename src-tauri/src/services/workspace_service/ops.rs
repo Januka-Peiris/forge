@@ -72,7 +72,7 @@ pub(super) fn create_workspace(
         worktree_managed_by_forge = false;
         workspace_source = "external_worktree".to_string();
     } else if let Some(repo) = &selected_repo {
-        let created = git_worktree_service::create_forge_worktree(
+        let created = git_worktree_service::create_mnemonic_worktree(
             &repo.path,
             &next_id,
             &branch,
@@ -83,7 +83,7 @@ pub(super) fn create_workspace(
         workspace_root_path = Some(created.path.clone());
         worktree_path = created.path;
         worktree_managed_by_forge = true;
-        workspace_source = "forge_managed_worktree".to_string();
+        workspace_source = "mnemonic_managed_worktree".to_string();
     } else {
         return Err(
             "Repository selection is required to create a real branch workspace".to_string(),
@@ -112,7 +112,7 @@ pub(super) fn create_workspace(
             pr_status: None,
             pr_number: None,
             description: if worktree_managed_by_forge {
-                "Branch workspace created with a Forge-managed Git worktree.".to_string()
+                "Branch workspace created with a Mnemonic-managed Git worktree.".to_string()
             } else if selected_worktree.is_some() {
                 "Branch workspace linked to an existing external Git worktree.".to_string()
             } else {
@@ -163,7 +163,7 @@ pub(super) fn create_workspace(
         if detail.summary.worktree_managed_by_forge {
             if let Some(repo_path) = detail.summary.repository_path.as_deref() {
                 let _ =
-                    git_worktree_service::remove_forge_worktree(repo_path, &detail.worktree_path);
+                    git_worktree_service::remove_mnemonic_worktree(repo_path, &detail.worktree_path);
             }
         }
         return Err(err);
@@ -235,7 +235,7 @@ pub(super) fn create_workspace(
 
     if detail.summary.run_tests_on_create {
         if let Ok(config) =
-            workspace_script_service::get_workspace_forge_config(state, &detail.summary.id)
+            workspace_script_service::get_workspace_mnemonic_config(state, &detail.summary.id)
         {
             if !config.run.is_empty() {
                 let mut started = 0usize;
@@ -275,31 +275,31 @@ pub(super) fn create_workspace(
 }
 
 pub(super) fn delete_workspace(state: &AppState, workspace_id: &str) -> Result<(), String> {
-    log::info!(target: "forge_lib", "delete_workspace begin: id={workspace_id}");
+    log::info!(target: "mnemonic_lib", "delete_workspace begin: id={workspace_id}");
     let detail = workspace_repository::get_detail(&state.db, workspace_id)?
         .ok_or_else(|| format!("Workspace {workspace_id} was not found"))?;
     log::info!(
-        target: "forge_lib",
+        target: "mnemonic_lib",
         "delete_workspace loaded: id={workspace_id} worktree_path={} forge_managed={}",
         detail.worktree_path,
         detail.summary.worktree_managed_by_forge
     );
 
     match terminal_service::stop_workspace_terminal_session(state, workspace_id) {
-        Ok(_) => log::info!(target: "forge_lib", "stop agent terminal: ok id={workspace_id}"),
-        Err(e) => log::warn!(target: "forge_lib", "stop agent terminal: {e} id={workspace_id}"),
+        Ok(_) => log::info!(target: "mnemonic_lib", "stop agent terminal: ok id={workspace_id}"),
+        Err(e) => log::warn!(target: "mnemonic_lib", "stop agent terminal: {e} id={workspace_id}"),
     }
     match terminal_service::stop_workspace_utility_terminal_session(state, workspace_id) {
-        Ok(_) => log::info!(target: "forge_lib", "stop utility terminal: ok id={workspace_id}"),
-        Err(e) => log::warn!(target: "forge_lib", "stop utility terminal: {e} id={workspace_id}"),
+        Ok(_) => log::info!(target: "mnemonic_lib", "stop utility terminal: ok id={workspace_id}"),
+        Err(e) => log::warn!(target: "mnemonic_lib", "stop utility terminal: {e} id={workspace_id}"),
     }
     match workspace_script_service::stop_workspace_run_commands(state, workspace_id) {
         Ok(stopped) => log::info!(
-            target: "forge_lib",
+            target: "mnemonic_lib",
             "stop run terminals: {} stopped id={workspace_id}",
             stopped.len()
         ),
-        Err(e) => log::warn!(target: "forge_lib", "stop run terminals: {e} id={workspace_id}"),
+        Err(e) => log::warn!(target: "mnemonic_lib", "stop run terminals: {e} id={workspace_id}"),
     }
 
     let path = detail
@@ -323,43 +323,43 @@ pub(super) fn delete_workspace(state: &AppState, workspace_id: &str) -> Result<(
             Some(repo_path) => {
                 if !path_on_disk.exists() {
                     log::info!(
-                        target: "forge_lib",
+                        target: "mnemonic_lib",
                         "worktree folder already absent; git worktree prune repo={} path={}",
                         repo_path,
                         path
                     );
                     if let Err(err) = git_worktree_service::prune_worktrees(Path::new(&repo_path)) {
                         log::warn!(
-                            target: "forge_lib",
+                            target: "mnemonic_lib",
                             "git worktree prune failed (continuing DB delete): {err}"
                         );
                     }
                 } else {
                     log::info!(
-                        target: "forge_lib",
+                        target: "mnemonic_lib",
                         "git worktree remove: repo={} path={}",
                         repo_path,
                         path
                     );
-                    match git_worktree_service::remove_forge_worktree(&repo_path, &path) {
+                    match git_worktree_service::remove_mnemonic_worktree(&repo_path, &path) {
                         Ok(()) => {
-                            log::info!(target: "forge_lib", "git worktree remove: ok path={path}");
+                            log::info!(target: "mnemonic_lib", "git worktree remove: ok path={path}");
                         }
                         Err(err) => {
                             if !Path::new(&path).exists() {
                                 log::warn!(
-                                    target: "forge_lib",
+                                    target: "mnemonic_lib",
                                     "git worktree remove failed after folder disappeared: {err}"
                                 );
                                 let _ =
                                     git_worktree_service::prune_worktrees(Path::new(&repo_path));
                             } else {
                                 log::warn!(
-                                    target: "forge_lib",
+                                    target: "mnemonic_lib",
                                     "git worktree remove failed; still deleting workspace row: {err}"
                                 );
                                 worktree_cleanup_warning = Some(format!(
-                                    "Git worktree remove failed ({err}). The workspace was removed from Forge; delete the folder manually or run `git worktree prune` in the repository."
+                                    "Git worktree remove failed ({err}). The workspace was removed from Mnemonic; delete the folder manually or run `git worktree prune` in the repository."
                                 ));
                                 let _ =
                                     git_worktree_service::prune_worktrees(Path::new(&repo_path));
@@ -371,16 +371,16 @@ pub(super) fn delete_workspace(state: &AppState, workspace_id: &str) -> Result<(
             None => {
                 if path_on_disk.exists() {
                     log::warn!(
-                        target: "forge_lib",
+                        target: "mnemonic_lib",
                         "delete_workspace: could not resolve repository_path for existing worktree path; continuing DB delete path={path}"
                     );
                     worktree_cleanup_warning = Some(
-                        "Could not resolve the main repository path for this worktree. The workspace was removed from Forge; remove the checkout folder manually if it is still on disk."
+                        "Could not resolve the main repository path for this worktree. The workspace was removed from Mnemonic; remove the checkout folder manually if it is still on disk."
                             .to_string(),
                     );
                 } else {
                     log::warn!(
-                        target: "forge_lib",
+                        target: "mnemonic_lib",
                         "skip git cleanup: no repository_path and worktree path missing; continuing DB delete path={path}"
                     );
                 }
@@ -388,12 +388,12 @@ pub(super) fn delete_workspace(state: &AppState, workspace_id: &str) -> Result<(
         }
     } else {
         log::info!(
-            target: "forge_lib",
-            "skip git worktree remove (not Forge-managed or policy); path={path}"
+            target: "mnemonic_lib",
+            "skip git worktree remove (not Mnemonic-managed or policy); path={path}"
         );
     }
 
-    log::info!(target: "forge_lib", "sqlite delete workspace row: id={workspace_id}");
+    log::info!(target: "mnemonic_lib", "sqlite delete workspace row: id={workspace_id}");
     workspace_repository::delete(&state.db, workspace_id)?;
 
     if let Some(repo_path) = detail.summary.repository_path.as_deref() {
@@ -410,7 +410,7 @@ pub(super) fn delete_workspace(state: &AppState, workspace_id: &str) -> Result<(
             if remove_managed_worktree {
                 "Removed workspace record; branch and on-disk worktree were preserved."
             } else {
-                "Removed workspace record; on-disk worktree was not removed by Forge."
+                "Removed workspace record; on-disk worktree was not removed by Mnemonic."
             }
             .to_string(),
         )
@@ -433,13 +433,13 @@ pub(super) fn delete_workspace(state: &AppState, workspace_id: &str) -> Result<(
     if let Some(repository_id) = detail.summary.repository_id.as_deref() {
         if let Err(err) = repo_scanner_service::refresh_repository_by_id(state, repository_id) {
             log::warn!(
-                target: "forge_lib",
+                target: "mnemonic_lib",
                 "refresh_repository_by_id after delete failed (workspace already removed from DB): repository_id={repository_id} err={err}"
             );
         }
     }
 
-    log::info!(target: "forge_lib", "delete_workspace finished: id={workspace_id}");
+    log::info!(target: "mnemonic_lib", "delete_workspace finished: id={workspace_id}");
     Ok(())
 }
 

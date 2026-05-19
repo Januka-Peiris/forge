@@ -179,8 +179,8 @@ fn merge_input(input: OpenDeepLinkInput) -> Result<ParsedDeepLink, String> {
 
 fn parse_deep_link_url(url: &str) -> Result<ParsedDeepLink, String> {
     let trimmed = url.trim();
-    if !trimmed.starts_with("forge://open") {
-        return Err("Unsupported Forge deep link. Expected forge://open?...".to_string());
+    if !trimmed.starts_with("mn://open") {
+        return Err("Unsupported Mnemonic deep link. Expected mn://open?...".to_string());
     }
     let query = trimmed
         .split_once('?')
@@ -252,9 +252,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_forge_open_url() {
+    fn parses_mn_open_url() {
         let parsed = parse_deep_link_url(
-            "forge://open?repo=my-repo&branch=feat%2Fthing&prompt=Fix+tests&agent=claude",
+            "mn://open?repo=my-repo&branch=feat%2Fthing&prompt=Fix+tests&agent=claude",
         )
         .unwrap();
         assert_eq!(parsed.repo.as_deref(), Some("my-repo"));

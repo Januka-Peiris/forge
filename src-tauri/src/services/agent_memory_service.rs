@@ -34,7 +34,7 @@ fn sync_workspace_candidates(state: &AppState, workspace_id: &str) -> Result<(),
         )?;
     }
 
-    let config = workspace_script_service::get_workspace_forge_config(state, workspace_id)?;
+    let config = workspace_script_service::get_workspace_mnemonic_config(state, workspace_id)?;
     if config.exists && config.warning.is_none() {
         let summary = summarize_workspace_rules(&config);
         if !summary.is_empty() {

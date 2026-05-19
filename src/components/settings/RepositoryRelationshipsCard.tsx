@@ -143,11 +143,11 @@ export function RepositoryRelationshipsCard({
   };
 
   return (
-    <div className="rounded-xl border border-forge-border bg-forge-card p-4">
+    <div className="rounded-xl border border-mn-border bg-mn-card p-4">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-[14px] font-bold text-forge-text">Repository Relationships</h2>
-          <p className="text-[11px] text-forge-muted mt-0.5">
+          <h2 className="text-[14px] font-bold text-mn-text">Repository Relationships</h2>
+          <p className="text-[11px] text-mn-muted mt-0.5">
             Model lightweight repo federation links without merging repo intelligence contexts.
           </p>
         </div>
@@ -158,14 +158,14 @@ export function RepositoryRelationshipsCard({
       </div>
 
       {repositoryOptions.length < 2 ? (
-        <p className="rounded border border-forge-border/70 bg-forge-bg/50 p-3 text-[12px] text-forge-muted">
+        <p className="rounded border border-mn-border/70 bg-mn-bg/50 p-3 text-[12px] text-mn-muted">
           Add at least two repositories before creating relationships.
         </p>
       ) : (
-        <div className="rounded border border-forge-border/70 bg-forge-bg/40 p-3">
+        <div className="rounded border border-mn-border/70 bg-mn-bg/40 p-3">
           <div className="grid gap-3 md:grid-cols-2">
             <div>
-              <label className="mb-1 block text-[11px] font-semibold text-forge-text">Source repository</label>
+              <label className="mb-1 block text-[11px] font-semibold text-mn-text">Source repository</label>
               <Select value={fromRepoId} onValueChange={setFromRepoId}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -176,7 +176,7 @@ export function RepositoryRelationshipsCard({
               </Select>
             </div>
             <div>
-              <label className="mb-1 block text-[11px] font-semibold text-forge-text">Target repository</label>
+              <label className="mb-1 block text-[11px] font-semibold text-mn-text">Target repository</label>
               <Select value={toRepoId} onValueChange={setToRepoId}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -187,7 +187,7 @@ export function RepositoryRelationshipsCard({
               </Select>
             </div>
             <div>
-              <label className="mb-1 block text-[11px] font-semibold text-forge-text">Relationship kind</label>
+              <label className="mb-1 block text-[11px] font-semibold text-mn-text">Relationship kind</label>
               <Select value={kind} onValueChange={(value) => setKind(value as RepositoryRelationshipKind)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -198,12 +198,12 @@ export function RepositoryRelationshipsCard({
               </Select>
             </div>
             <div>
-              <label className="mb-1 block text-[11px] font-semibold text-forge-text">Label</label>
+              <label className="mb-1 block text-[11px] font-semibold text-mn-text">Label</label>
               <Input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Frontend calls backend API" />
             </div>
           </div>
           <div className="mt-3">
-            <label className="mb-1 block text-[11px] font-semibold text-forge-text">Notes</label>
+            <label className="mb-1 block text-[11px] font-semibold text-mn-text">Notes</label>
             <Textarea
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
@@ -218,19 +218,19 @@ export function RepositoryRelationshipsCard({
         </div>
       )}
 
-      {message && <p className="mt-3 text-[12px] text-forge-muted">{message}</p>}
+      {message && <p className="mt-3 text-[12px] text-mn-muted">{message}</p>}
 
       {repositoryOptions.length > 0 && (
-        <div className="mt-4 rounded border border-forge-border/70 bg-forge-bg/40 p-3">
+        <div className="mt-4 rounded border border-mn-border/70 bg-mn-bg/40 p-3">
           <div className="mb-3">
-            <p className="text-[12px] font-semibold text-forge-text">Task scope preview</p>
-            <p className="mt-0.5 text-[11px] text-forge-muted">
+            <p className="text-[12px] font-semibold text-mn-text">Task scope preview</p>
+            <p className="mt-0.5 text-[11px] text-mn-muted">
               Uses explicit relationships and transparent keywords only; it does not infer or save relationships with AI.
             </p>
           </div>
           <div className="grid gap-3 md:grid-cols-[220px_1fr_auto] md:items-end">
             <div>
-              <label className="mb-1 block text-[11px] font-semibold text-forge-text">Task starts in</label>
+              <label className="mb-1 block text-[11px] font-semibold text-mn-text">Task starts in</label>
               <Select value={scopeSourceRepoId} onValueChange={setScopeSourceRepoId}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -241,7 +241,7 @@ export function RepositoryRelationshipsCard({
               </Select>
             </div>
             <div>
-              <label className="mb-1 block text-[11px] font-semibold text-forge-text">Task prompt</label>
+              <label className="mb-1 block text-[11px] font-semibold text-mn-text">Task prompt</label>
               <Input
                 value={scopeTask}
                 onChange={(event) => setScopeTask(event.target.value)}
@@ -256,12 +256,12 @@ export function RepositoryRelationshipsCard({
           {scopeResult && (
             <div className="mt-3 space-y-2">
               {scopeResult.suggestions.length === 0 ? (
-                <p className="text-[12px] text-forge-muted">No repositories suggested yet.</p>
+                <p className="text-[12px] text-mn-muted">No repositories suggested yet.</p>
               ) : (
                 scopeResult.suggestions.map((suggestion) => (
-                  <div key={suggestion.repoId} className="rounded border border-forge-border/60 bg-forge-card/50 p-2">
+                  <div key={suggestion.repoId} className="rounded border border-mn-border/60 bg-mn-card/50 p-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-[12px] font-semibold text-forge-text">{suggestion.repoName}</p>
+                      <p className="text-[12px] font-semibold text-mn-text">{suggestion.repoName}</p>
                       <Badge variant={suggestion.selectedByDefault ? 'success' : 'muted'}>
                         {suggestion.selectedByDefault ? 'selected' : 'optional'}
                       </Badge>
@@ -273,7 +273,7 @@ export function RepositoryRelationshipsCard({
                         <Badge key={source} variant={source === 'config' ? 'violet' : 'orange'}>{source}</Badge>
                       ))}
                     </div>
-                    <ul className="mt-1 space-y-0.5 text-[11px] text-forge-muted">
+                    <ul className="mt-1 space-y-0.5 text-[11px] text-mn-muted">
                       {suggestion.reasons.map((reason) => (
                         <li key={reason}>• {reason}</li>
                       ))}
@@ -287,9 +287,9 @@ export function RepositoryRelationshipsCard({
       )}
 
       {result.warnings.length > 0 && (
-        <div className="mt-4 rounded border border-forge-yellow/25 bg-forge-yellow/5 p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-forge-yellow">Relationship warnings</p>
-          <ul className="mt-2 space-y-1 text-[11px] text-forge-muted">
+        <div className="mt-4 rounded border border-mn-yellow/25 bg-mn-yellow/5 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-mn-yellow">Relationship warnings</p>
+          <ul className="mt-2 space-y-1 text-[11px] text-mn-muted">
             {result.warnings.map((warning) => (
               <li key={warning}>• {warning}</li>
             ))}
@@ -299,16 +299,16 @@ export function RepositoryRelationshipsCard({
 
       <div className="mt-4 space-y-2">
         {result.relationships.length === 0 ? (
-          <p className="rounded border border-forge-border/70 bg-forge-bg/40 p-3 text-[12px] text-forge-muted">
+          <p className="rounded border border-mn-border/70 bg-mn-bg/40 p-3 text-[12px] text-mn-muted">
             No repository relationships yet. Add one here or define `repositoryRelationships` in `.forge/config.json`.
           </p>
         ) : (
           result.relationships.map((relationship) => (
-            <div key={relationship.id} className="rounded border border-forge-border/70 bg-forge-bg/40 p-3">
+            <div key={relationship.id} className="rounded border border-mn-border/70 bg-mn-bg/40 p-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate text-[13px] font-semibold text-forge-text">
+                    <p className="truncate text-[13px] font-semibold text-mn-text">
                       {relationship.fromRepoName} → {relationship.toRepoName}
                     </p>
                     <Badge variant="info">{kindLabel(relationship.kind)}</Badge>
@@ -318,13 +318,13 @@ export function RepositoryRelationshipsCard({
                     {relationship.readOnly && <Badge variant="muted">read-only</Badge>}
                   </div>
                   {relationship.label && (
-                    <p className="mt-1 text-[12px] text-forge-text/80">{relationship.label}</p>
+                    <p className="mt-1 text-[12px] text-mn-text/80">{relationship.label}</p>
                   )}
                   {relationship.notes && (
-                    <p className="mt-1 text-[11px] leading-relaxed text-forge-muted">{relationship.notes}</p>
+                    <p className="mt-1 text-[11px] leading-relaxed text-mn-muted">{relationship.notes}</p>
                   )}
                   {relationship.configPaths.length > 0 && (
-                    <p className="mt-1 truncate font-mono text-[10px] text-forge-muted/70">
+                    <p className="mt-1 truncate font-mono text-[10px] text-mn-muted/70">
                       {relationship.configPaths.join(', ')}
                     </p>
                   )}

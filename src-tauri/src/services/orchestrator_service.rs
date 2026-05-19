@@ -35,7 +35,7 @@ pub fn start_orchestrator_loop(state: AppState) {
         std::thread::sleep(Duration::from_secs(10));
         loop {
             if let Err(err) = ensure_default_scheduler_jobs(&state) {
-                log::warn!(target: "forge_lib", "scheduler ensure jobs failed: {err}");
+                log::warn!(target: "mnemonic_lib", "scheduler ensure jobs failed: {err}");
             }
             let now = now_secs();
             let due_jobs = list_due_scheduler_jobs(&state, now).unwrap_or_default();
@@ -73,10 +73,10 @@ pub fn start_orchestrator_loop(state: AppState) {
                     _ => Ok(()),
                 };
                 if let Err(err) = execute_result {
-                    log::warn!(target: "forge_lib", "scheduler job {} failed: {err}", job.kind);
+                    log::warn!(target: "mnemonic_lib", "scheduler job {} failed: {err}", job.kind);
                 }
                 if let Err(err) = reschedule_job(&state, &job, now) {
-                    log::warn!(target: "forge_lib", "scheduler reschedule failed: {err}");
+                    log::warn!(target: "mnemonic_lib", "scheduler reschedule failed: {err}");
                 }
                 if let Ok(mut guard) = state.scheduler_job_inflight.lock() {
                     guard.remove(&single_flight_key);
@@ -311,7 +311,7 @@ fn run_orchestrator_pass_inner(
     workspace_ids: &[String],
 ) -> Result<Vec<OrchestratorAction>, String> {
     let prompt = format!(
-        r#"You are the Forge Orchestrator — the strategic brain coordinating multiple AI coding agents (Claude, Codex, Kimi) running in parallel git worktrees.
+        r#"You are the Mnemonic Orchestrator — the strategic brain coordinating multiple AI coding agents (Claude, Codex, Kimi) running in parallel git worktrees.
 
 Your role:
 - Detect stuck agents and send a short actionable nudge
@@ -357,7 +357,7 @@ Rules:
     let actions = parse_actions(&response);
 
     log::info!(
-        target: "forge_lib",
+        target: "mnemonic_lib",
         "orchestrator ran with model {model}: {} action(s)",
         actions.len()
     );
@@ -381,7 +381,7 @@ Rules:
                     };
                     if let Err(err) = terminal_service::queue_workspace_agent_prompt(state, input) {
                         log::warn!(
-                            target: "forge_lib",
+                            target: "mnemonic_lib",
                             "orchestrator: failed to send prompt to {ws_id}: {err}"
                         );
                     }
@@ -403,7 +403,7 @@ Rules:
                 let ws_id = action.workspace_id.as_deref().unwrap_or("");
                 let message = action.message.as_deref().unwrap_or("");
                 let _ = state.app_handle.emit(
-                    "forge://orchestrator-notify",
+                    "mn://orchestrator-notify",
                     serde_json::json!({
                         "workspaceId": ws_id,
                         "message": message,
@@ -662,10 +662,10 @@ fn run_coordinator_autostep_watch_job(state: &AppState, workspace_id: &str) -> R
         ) {
             Ok(_) => {}
             Err(err) if err.starts_with("COORDINATOR_STEP_IN_PROGRESS:") => {
-                log::debug!(target: "forge_lib", "coordinator autostep already running for {workspace_id}");
+                log::debug!(target: "mnemonic_lib", "coordinator autostep already running for {workspace_id}");
             }
             Err(err) => {
-                log::warn!(target: "forge_lib", "coordinator autostep failed for {workspace_id}: {err}");
+                log::warn!(target: "mnemonic_lib", "coordinator autostep failed for {workspace_id}: {err}");
                 return Err(err);
             }
         }

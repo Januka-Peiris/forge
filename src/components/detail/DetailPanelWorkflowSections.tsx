@@ -1,5 +1,5 @@
 import { ChevronRight, Loader2 } from 'lucide-react';
-import type { ActivityItem as ForgeActivityItem } from '../../types';
+import type { ActivityItem as MnemonicActivityItem } from '../../types';
 import type { WorkspaceCheckpoint, WorkspaceCheckpointRestorePlan } from '../../types/checkpoint';
 import { Button } from '../ui/button';
 import { UnifiedDiffView } from '../reviews/UnifiedDiffView';
@@ -12,7 +12,7 @@ interface ActivityRow {
 interface ActivitySectionProps {
   activityOpen: boolean;
   timelineLoading: boolean;
-  timelineItems: ForgeActivityItem[];
+  timelineItems: MnemonicActivityItem[];
   activityRows: ActivityRow[];
   workspaceId: string;
   timelineExpanded: boolean;
@@ -35,7 +35,7 @@ export function ActivitySection({
       <button
         type="button"
         onClick={onToggleOpen}
-        className="flex w-full items-center gap-1.5 text-xs font-semibold text-forge-muted hover:text-forge-text/80 uppercase tracking-widest"
+        className="flex w-full items-center gap-1.5 text-xs font-semibold text-mn-muted hover:text-mn-text/80 uppercase tracking-widest"
       >
         <ChevronRight className={`w-3 h-3 transition-transform ${activityOpen ? 'rotate-90' : ''}`} />
         Activity
@@ -57,22 +57,22 @@ export function ActivitySection({
         return (
           <div className="mt-1.5 space-y-0.5">
             {visibleItems.length === 0 ? (
-              <p className="text-xs text-forge-muted">No activity yet.</p>
+              <p className="text-xs text-mn-muted">No activity yet.</p>
             ) : visibleItems.map((item, index) => {
               const label = 'details' in item && item.details ? `${item.event} · ${item.details}` : item.event;
               const time = 'timestamp' in item ? String(item.timestamp) : '';
               const levelColor = item.level === 'error'
-                ? 'text-forge-red'
+                ? 'text-mn-red'
                 : item.level === 'warning'
-                ? 'text-forge-yellow'
+                ? 'text-mn-yellow'
                 : item.level === 'success'
-                ? 'text-forge-green'
-                : 'text-forge-muted';
+                ? 'text-mn-cyan'
+                : 'text-mn-muted';
               return (
                 <div key={index} className="flex items-baseline gap-2">
                   <span className={`shrink-0 text-xs font-mono ${levelColor}`}>›</span>
-                  <span className="min-w-0 flex-1 truncate text-xs text-forge-text/85" title={label}>{label}</span>
-                  <span className="shrink-0 text-[10px] text-forge-muted/60">{time}</span>
+                  <span className="min-w-0 flex-1 truncate text-xs text-mn-text/85" title={label}>{label}</span>
+                  <span className="shrink-0 text-[10px] text-mn-muted/60">{time}</span>
                 </div>
               );
             })}
@@ -80,7 +80,7 @@ export function ActivitySection({
               <button
                 type="button"
                 onClick={onToggleExpanded}
-                className="mt-1 text-xs text-forge-muted hover:text-forge-text"
+                className="mt-1 text-xs text-mn-muted hover:text-mn-text"
               >
                 {timelineExpanded ? '↑ Show less' : `↓ ${allItems.length - 8} more`}
               </button>
@@ -121,43 +121,43 @@ export function SafeIterationSection({
 }: SafeIterationSectionProps) {
   return (
     <div className="px-4 pb-4">
-      <div className="rounded-xl border border-forge-border bg-forge-card/70 p-3">
+      <div className="rounded-xl border border-mn-border bg-mn-card/70 p-3">
         <div className="mb-2 flex items-center justify-between gap-2">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-forge-muted">Safe Iteration</p>
-            <p className="mt-0.5 text-xs text-forge-muted">Git-backed checkpoints before risky agent turns.</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-mn-muted">Safe Iteration</p>
+            <p className="mt-0.5 text-xs text-mn-muted">Git-backed checkpoints before risky agent turns.</p>
           </div>
           <Button variant="secondary" size="xs" disabled={checkpointBusy} onClick={onCreateCheckpoint}>
             {checkpointBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
             Checkpoint
           </Button>
         </div>
-        {checkpointMessage && <p className="mb-2 text-xs text-forge-muted">{checkpointMessage}</p>}
+        {checkpointMessage && <p className="mb-2 text-xs text-mn-muted">{checkpointMessage}</p>}
         {checkpoints.length === 0 ? (
-          <p className="text-xs text-forge-muted">No checkpoints yet. Forge creates them automatically before dirty agent runs.</p>
+          <p className="text-xs text-mn-muted">No checkpoints yet. Mnemonic creates them automatically before dirty agent runs.</p>
         ) : (
           <div className="space-y-1">
             {checkpoints.slice(0, 4).map((checkpoint) => (
-              <div key={checkpoint.reference} className="rounded border border-forge-border/60 bg-black/15 px-2 py-1.5">
+              <div key={checkpoint.reference} className="rounded border border-mn-border/60 bg-black/15 px-2 py-1.5">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="min-w-0 truncate text-xs font-medium text-forge-text" title={checkpoint.subject}>
-                    {checkpoint.subject || 'Forge checkpoint'}
+                  <span className="min-w-0 truncate text-xs font-medium text-mn-text" title={checkpoint.subject}>
+                    {checkpoint.subject || 'Mnemonic checkpoint'}
                   </span>
                   <button
                     type="button"
                     onClick={() => onPreviewCheckpoint(checkpoint)}
-                    className="shrink-0 rounded border border-forge-border bg-white/5 px-1.5 py-0.5 font-mono text-xs text-forge-muted hover:bg-white/10 hover:text-forge-text"
+                    className="shrink-0 rounded border border-mn-border bg-white/5 px-1.5 py-0.5 font-mono text-xs text-mn-muted hover:bg-white/10 hover:text-mn-text"
                   >
                     {selectedCheckpointRef === checkpoint.reference ? 'hide' : checkpoint.shortOid}
                   </button>
                 </div>
-                <p className="mt-0.5 truncate font-mono text-[10px] text-forge-muted/70" title={checkpoint.reference}>
+                <p className="mt-0.5 truncate font-mono text-[10px] text-mn-muted/70" title={checkpoint.reference}>
                   {checkpoint.reference}
                 </p>
                 {selectedCheckpointRef === checkpoint.reference && (
                   <div className="mt-2 space-y-2">
                     {checkpointRestorePlan && (
-                      <div className="rounded border border-forge-yellow/20 bg-forge-yellow/10 px-2 py-1.5 text-xs text-forge-yellow">
+                      <div className="rounded border border-mn-yellow/20 bg-mn-yellow/10 px-2 py-1.5 text-xs text-mn-yellow">
                         <p className="font-semibold">Restore plan preview — no changes applied</p>
                         <p className="mt-1">
                           Current dirty files: {checkpointRestorePlan.changedFileCount} · checkpoint files: {checkpointRestorePlan.checkpointFileCount}
@@ -193,7 +193,7 @@ export function SafeIterationSection({
                             variant="secondary"
                             size="xs"
                             disabled={checkpointBusy}
-                            className="text-forge-red/80 hover:text-forge-red"
+                            className="text-mn-red/80 hover:text-mn-red"
                             onClick={() => onAbandonCheckpoint(checkpoint)}
                           >
                             Abandon checkpoint
@@ -201,7 +201,7 @@ export function SafeIterationSection({
                         </div>
                       </div>
                     )}
-                    <div className="max-h-72 overflow-hidden rounded border border-forge-border">
+                    <div className="max-h-72 overflow-hidden rounded border border-mn-border">
                       <UnifiedDiffView
                         diff={checkpointDiff}
                         emptyMessage="Checkpoint has no diff to preview."
@@ -213,7 +213,7 @@ export function SafeIterationSection({
               </div>
             ))}
             {checkpoints.length > 4 && (
-              <p className="text-xs text-forge-muted">+{checkpoints.length - 4} more checkpoint(s)</p>
+              <p className="text-xs text-mn-muted">+{checkpoints.length - 4} more checkpoint(s)</p>
             )}
           </div>
         )}

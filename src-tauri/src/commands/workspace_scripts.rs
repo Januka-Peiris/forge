@@ -5,11 +5,11 @@ use crate::services::{hook_service, workspace_script_service};
 use crate::state::AppState;
 
 #[tauri::command]
-pub fn get_workspace_forge_config(
+pub fn get_workspace_mnemonic_config(
     state: State<'_, AppState>,
     workspace_id: String,
 ) -> Result<ForgeWorkspaceConfig, String> {
-    workspace_script_service::get_workspace_forge_config(&state, &workspace_id)
+    workspace_script_service::get_workspace_mnemonic_config(&state, &workspace_id)
 }
 
 #[tauri::command]

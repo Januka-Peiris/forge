@@ -12,13 +12,13 @@ import {
 import { createWorkspacePr } from '../tauri-api/pr-draft';
 import { listActivity } from '../tauri-api/activity';
 import { formatCursorOpenError } from '../ui-errors';
-import { forgeLog, forgeWarn } from '../forge-log';
+import { mnLog, mnWarn } from '../mn-log';
 import { perfMark, perfMeasure } from '../perf';
 import { sanitizeWorkspaceForDisplay, sanitizeWorkspacesForDisplay } from '../workspace-display';
 import type { ActivityItem, CreateWorkspaceInput, Workspace } from '../../types';
 
-const SELECTED_WORKSPACE_KEY = 'forge:selected-workspace-id';
-const ARCHIVED_WORKSPACES_KEY = 'forge:archived-workspace-ids';
+const SELECTED_WORKSPACE_KEY = 'mn:selected-workspace-id';
+const ARCHIVED_WORKSPACES_KEY = 'mn:archived-workspace-ids';
 
 function readArchivedWorkspaceIds(): string[] {
   const raw = window.localStorage.getItem(ARCHIVED_WORKSPACES_KEY);
@@ -31,13 +31,13 @@ function readArchivedWorkspaceIds(): string[] {
   }
 }
 
-interface UseForgeWorkspacesInput {
+interface UseMnemonicWorkspacesInput {
   onActivityItems: (items: ActivityItem[]) => void;
   onError: (message: string | null) => void;
   onViewWorkspaces: () => void;
 }
 
-export function useForgeWorkspaces({ onActivityItems, onError, onViewWorkspaces }: UseForgeWorkspacesInput) {
+export function useMnemonicWorkspaces({ onActivityItems, onError, onViewWorkspaces }: UseMnemonicWorkspacesInput) {
   const [selectedId, setSelectedId] = useState<string | null>(() => window.localStorage.getItem(SELECTED_WORKSPACE_KEY));
   const [archivedWorkspaceIds, setArchivedWorkspaceIds] = useState<string[]>(readArchivedWorkspaceIds);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -79,7 +79,7 @@ export function useForgeWorkspaces({ onActivityItems, onError, onViewWorkspaces 
     if (workspaceSwitchMarkRef.current) {
       perfMeasure('workspace:switch', workspaceSwitchMarkRef.current);
     }
-    const mark = `forge:workspace-switch:${selectedId}:${Date.now()}`;
+    const mark = `mn:workspace-switch:${selectedId}:${Date.now()}`;
     workspaceSwitchMarkRef.current = mark;
     perfMark(mark);
   }, [selectedId]);
@@ -127,17 +127,17 @@ export function useForgeWorkspaces({ onActivityItems, onError, onViewWorkspaces 
     const candidate = workspaces.find((workspace) => workspace.id === workspaceId);
     const label = candidate?.name ?? workspaceId;
     if (!window.confirm([
-      `Forget workspace "${label}" from Forge?`,
+      `Forget workspace "${label}" from Mnemonic?`,
       '',
-      'This removes only the Forge workspace record from the app.',
+      'This removes only the Mnemonic workspace record from the app.',
       'It will not delete the branch, Git worktree, checkout folder, or files on disk.',
-      'Prefer Archive if you may want to reopen it from Forge later.',
+      'Prefer Archive if you may want to reopen it from Mnemonic later.',
     ].join('\n'))) return;
-    forgeLog('deleteWorkspace', 'user confirmed; invoking delete_workspace', { workspaceId, label });
+    mnLog('deleteWorkspace', 'user confirmed; invoking delete_workspace', { workspaceId, label });
     onError(null);
     try {
       await deleteWorkspace(workspaceId);
-      forgeLog('deleteWorkspace', 'invoke returned ok', { workspaceId });
+      mnLog('deleteWorkspace', 'invoke returned ok', { workspaceId });
       setWorkspaces((current) => {
         const next = current.filter((workspace) => workspace.id !== workspaceId);
         setSelectedId((previous) => previous === workspaceId ? next[0]?.id ?? null : previous);
@@ -152,7 +152,7 @@ export function useForgeWorkspaces({ onActivityItems, onError, onViewWorkspaces 
       onActivityItems(await listActivity());
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      forgeWarn('deleteWorkspace', 'invoke failed', { workspaceId, err, message });
+      mnWarn('deleteWorkspace', 'invoke failed', { workspaceId, err, message });
       onError(message);
       window.alert(`Failed to delete workspace: ${message}`);
     }

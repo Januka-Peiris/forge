@@ -100,28 +100,28 @@ export function FederatedTasksView({ workspaces, repositories, relationships, on
   };
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto bg-forge-bg p-6">
+    <div className="min-h-0 flex-1 overflow-y-auto bg-mn-bg p-6">
       <div className="mx-auto max-w-6xl">
         <div className="mb-5 flex items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <Network className="h-5 w-5 text-forge-orange" />
-              <h1 className="text-xl font-bold text-forge-text">Federated tasks</h1>
+              <Network className="h-5 w-5 text-mn-orange" />
+              <h1 className="text-xl font-bold text-mn-text">Federated tasks</h1>
             </div>
-            <p className="mt-1 text-sm text-forge-muted">All multi-repo workspace groups and their ship-together signals.</p>
+            <p className="mt-1 text-sm text-mn-muted">All multi-repo workspace groups and their ship-together signals.</p>
           </div>
           <Button type="button" variant="ghost" size="sm" onClick={() => void refreshSignals()} disabled={loadingSignals}>
             <RefreshCw className={`h-3.5 w-3.5 ${loadingSignals ? 'animate-spin' : ''}`} />
             Refresh signals
           </Button>
         </div>
-        {signalError && <p className="mb-3 rounded border border-forge-red/30 bg-forge-red/10 px-3 py-2 text-sm text-forge-red">{signalError}</p>}
+        {signalError && <p className="mb-3 rounded border border-mn-red/30 bg-mn-red/10 px-3 py-2 text-sm text-mn-red">{signalError}</p>}
 
         {groups.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-forge-border bg-forge-card/60 p-8 text-center">
-            <Network className="mx-auto mb-3 h-8 w-8 text-forge-muted" />
-            <p className="text-sm font-semibold text-forge-text">No federated tasks yet</p>
-            <p className="mt-1 text-sm text-forge-muted">Create a workspace with selected related repositories to start a federated group.</p>
+          <div className="rounded-xl border border-dashed border-mn-border bg-mn-card/60 p-8 text-center">
+            <Network className="mx-auto mb-3 h-8 w-8 text-mn-muted" />
+            <p className="text-sm font-semibold text-mn-text">No federated tasks yet</p>
+            <p className="mt-1 text-sm text-mn-muted">Create a workspace with selected related repositories to start a federated group.</p>
           </div>
         ) : (
           <div className="grid gap-4 xl:grid-cols-2">
@@ -138,34 +138,34 @@ export function FederatedTasksView({ workspaces, repositories, relationships, on
               const prsWithFailingChecks = group.members.filter((member) => prStatuses[member.id]?.checksSummary.toLowerCase().includes('failing')).length;
               const prsWithPendingChecks = group.members.filter((member) => prStatuses[member.id]?.checksSummary.toLowerCase().includes('pending')).length;
               return (
-                <section key={group.parentId} className="rounded-xl border border-forge-border bg-forge-card/75 p-4">
+                <section key={group.parentId} className="rounded-xl border border-mn-border bg-mn-card/75 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate text-base font-bold text-forge-text">{group.parent.name}</p>
-                      <p className="mt-0.5 truncate text-xs text-forge-muted">Parent <span className="font-mono">{group.parentId}</span></p>
+                      <p className="truncate text-base font-bold text-mn-text">{group.parent.name}</p>
+                      <p className="mt-0.5 truncate text-xs text-mn-muted">Parent <span className="font-mono">{group.parentId}</span></p>
                     </div>
                     <Button type="button" size="xs" onClick={() => { onSelectWorkspace(group.parentId); onOpenWorkspace(); }}>Open</Button>
                   </div>
 
                   <div className="mt-3 flex flex-wrap gap-1.5 text-[11px]">
-                    <span className="rounded border border-forge-border/70 bg-black/20 px-2 py-0.5 text-forge-muted">{group.members.length} repos</span>
-                    {running > 0 && <span className="rounded border border-forge-blue/30 bg-forge-blue/10 px-2 py-0.5 text-forge-blue">{running} running</span>}
-                    {review > 0 && <span className="rounded border border-forge-green/30 bg-forge-green/10 px-2 py-0.5 text-forge-green">{review} review</span>}
-                    {blocked > 0 && <span className="rounded border border-forge-red/30 bg-forge-red/10 px-2 py-0.5 text-forge-red">{blocked} blocked</span>}
-                    <span className="rounded border border-forge-blue/30 bg-forge-blue/10 px-2 py-0.5 text-forge-blue">{prsFound}/{group.members.length} PRs</span>
-                    {prsWithPendingChecks > 0 && <span className="rounded border border-forge-yellow/30 bg-forge-yellow/10 px-2 py-0.5 text-forge-yellow">{prsWithPendingChecks} pending checks</span>}
-                    {prsWithFailingChecks > 0 && <span className="rounded border border-forge-red/30 bg-forge-red/10 px-2 py-0.5 text-forge-red">{prsWithFailingChecks} failing checks</span>}
-                    {unresolved.length > 0 && <span className="rounded border border-forge-yellow/30 bg-forge-yellow/10 px-2 py-0.5 text-forge-yellow">{unresolved.length} open artifacts</span>}
-                    {warnings.length > 0 && <span className="rounded border border-forge-yellow/30 bg-forge-yellow/10 px-2 py-0.5 text-forge-yellow">{warnings.length} companion warnings</span>}
-                    <span className={`rounded border px-2 py-0.5 ${readiness.level === 'ready' ? 'border-forge-green/30 bg-forge-green/10 text-forge-green' : readiness.level === 'blocked' ? 'border-forge-red/30 bg-forge-red/10 text-forge-red' : 'border-forge-yellow/30 bg-forge-yellow/10 text-forge-yellow'}`}>{readiness.label}</span>
+                    <span className="rounded border border-mn-border/70 bg-black/20 px-2 py-0.5 text-mn-muted">{group.members.length} repos</span>
+                    {running > 0 && <span className="rounded border border-mn-blue/30 bg-mn-blue/10 px-2 py-0.5 text-mn-blue">{running} running</span>}
+                    {review > 0 && <span className="rounded border border-mn-cyan/30 bg-mn-cyan/10 px-2 py-0.5 text-mn-cyan">{review} review</span>}
+                    {blocked > 0 && <span className="rounded border border-mn-red/30 bg-mn-red/10 px-2 py-0.5 text-mn-red">{blocked} blocked</span>}
+                    <span className="rounded border border-mn-blue/30 bg-mn-blue/10 px-2 py-0.5 text-mn-blue">{prsFound}/{group.members.length} PRs</span>
+                    {prsWithPendingChecks > 0 && <span className="rounded border border-mn-yellow/30 bg-mn-yellow/10 px-2 py-0.5 text-mn-yellow">{prsWithPendingChecks} pending checks</span>}
+                    {prsWithFailingChecks > 0 && <span className="rounded border border-mn-red/30 bg-mn-red/10 px-2 py-0.5 text-mn-red">{prsWithFailingChecks} failing checks</span>}
+                    {unresolved.length > 0 && <span className="rounded border border-mn-yellow/30 bg-mn-yellow/10 px-2 py-0.5 text-mn-yellow">{unresolved.length} open artifacts</span>}
+                    {warnings.length > 0 && <span className="rounded border border-mn-yellow/30 bg-mn-yellow/10 px-2 py-0.5 text-mn-yellow">{warnings.length} companion warnings</span>}
+                    <span className={`rounded border px-2 py-0.5 ${readiness.level === 'ready' ? 'border-mn-cyan/30 bg-mn-cyan/10 text-mn-cyan' : readiness.level === 'blocked' ? 'border-mn-red/30 bg-mn-red/10 text-mn-red' : 'border-mn-yellow/30 bg-mn-yellow/10 text-mn-yellow'}`}>{readiness.label}</span>
                   </div>
 
-                  <div className="mt-3 rounded-lg border border-forge-border/60 bg-black/10 p-2">
-                    <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-forge-text">
-                      {readiness.level === 'ready' ? <CheckCircle2 className="h-3.5 w-3.5 text-forge-green" /> : <AlertTriangle className="h-3.5 w-3.5 text-forge-yellow" />}
+                  <div className="mt-3 rounded-lg border border-mn-border/60 bg-black/10 p-2">
+                    <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-mn-text">
+                      {readiness.level === 'ready' ? <CheckCircle2 className="h-3.5 w-3.5 text-mn-cyan" /> : <AlertTriangle className="h-3.5 w-3.5 text-mn-yellow" />}
                       Ship-together readiness
                     </p>
-                    <ul className="list-disc space-y-0.5 pl-4 text-xs text-forge-muted">
+                    <ul className="list-disc space-y-0.5 pl-4 text-xs text-mn-muted">
                       {readiness.reasons.slice(0, 4).map((reason) => <li key={reason}>{reason}</li>)}
                     </ul>
                   </div>
@@ -174,15 +174,15 @@ export function FederatedTasksView({ workspaces, repositories, relationships, on
                     {group.members.map((member) => {
                       const pr = prStatuses[member.id];
                       return (
-                        <div key={member.id} role="button" tabIndex={0} onClick={() => { onSelectWorkspace(member.id); onOpenWorkspace(); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelectWorkspace(member.id); onOpenWorkspace(); } }} className="rounded-lg border border-forge-border/60 bg-black/10 px-2 py-1.5 text-left hover:border-forge-orange/40">
+                        <div key={member.id} role="button" tabIndex={0} onClick={() => { onSelectWorkspace(member.id); onOpenWorkspace(); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelectWorkspace(member.id); onOpenWorkspace(); } }} className="rounded-lg border border-mn-border/60 bg-black/10 px-2 py-1.5 text-left hover:border-mn-orange/40">
                           <div className="flex items-center gap-2">
-                            <span className="truncate text-xs font-semibold text-forge-text">{member.repo}</span>
-                            <span className="ml-auto text-[10px] text-forge-muted">{member.status}</span>
+                            <span className="truncate text-xs font-semibold text-mn-text">{member.repo}</span>
+                            <span className="ml-auto text-[10px] text-mn-muted">{member.status}</span>
                           </div>
-                          <p className="mt-0.5 truncate font-mono text-[11px] text-forge-muted">{member.branch}</p>
-                          <p className="mt-1 flex items-center gap-1 text-[11px] text-forge-muted">
+                          <p className="mt-0.5 truncate font-mono text-[11px] text-mn-muted">{member.branch}</p>
+                          <p className="mt-1 flex items-center gap-1 text-[11px] text-mn-muted">
                             <GitPullRequest className="h-3 w-3" />
-                            {pr?.found ? (pr.url ? <a href={pr.url} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="text-forge-blue hover:underline">PR #{pr.number ?? '—'} · {pr.checksSummary}</a> : `PR #${pr.number ?? '—'} · ${pr.checksSummary}`) : (pr?.warning ? 'PR unavailable' : 'No PR found')}
+                            {pr?.found ? (pr.url ? <a href={pr.url} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="text-mn-blue hover:underline">PR #{pr.number ?? '—'} · {pr.checksSummary}</a> : `PR #${pr.number ?? '—'} · ${pr.checksSummary}`) : (pr?.warning ? 'PR unavailable' : 'No PR found')}
                           </p>
                           {!pr?.found && member.changedFiles.length > 0 && (
                             <Button type="button" variant="success" size="xs" className="mt-1" disabled={prCreatingByWorkspaceId[member.id]} onClick={(event) => { event.stopPropagation(); void createPrForMember(group.parentId, member); }}>
@@ -196,31 +196,31 @@ export function FederatedTasksView({ workspaces, repositories, relationships, on
                   </div>
 
                   {unresolved.length > 0 && (
-                    <div className="mt-3 rounded-lg border border-forge-border/60 bg-black/10 p-2">
-                      <p className="mb-1 text-xs font-semibold text-forge-text">Open coordination artifacts</p>
+                    <div className="mt-3 rounded-lg border border-mn-border/60 bg-black/10 p-2">
+                      <p className="mb-1 text-xs font-semibold text-mn-text">Open coordination artifacts</p>
                       {unresolved.slice(0, 4).map((artifact) => (
-                        <div key={artifact.id} className="border-t border-forge-border/40 py-1 first:border-t-0 first:pt-0">
-                          <p className="truncate text-xs font-semibold text-forge-text">
-                            <span className="text-forge-yellow">{artifact.status}</span> · {artifact.title}
+                        <div key={artifact.id} className="border-t border-mn-border/40 py-1 first:border-t-0 first:pt-0">
+                          <p className="truncate text-xs font-semibold text-mn-text">
+                            <span className="text-mn-yellow">{artifact.status}</span> · {artifact.title}
                           </p>
-                          <p className="truncate text-[11px] text-forge-muted">
+                          <p className="truncate text-[11px] text-mn-muted">
                             {artifact.artifactKind.replace(/_/g, ' ')}
                             {' · '}
                             source {group.members.find((member) => member.id === artifact.sourceWorkspaceId)?.repo ?? artifact.sourceWorkspaceId}
                             {' · '}
                             {artifact.targetWorkspaceId ? `target ${group.members.find((member) => member.id === artifact.targetWorkspaceId)?.repo ?? artifact.targetWorkspaceId}` : 'group-wide'}
                           </p>
-                          {artifact.body && <p className="line-clamp-2 text-xs text-forge-text/75">{artifact.body}</p>}
+                          {artifact.body && <p className="line-clamp-2 text-xs text-mn-text/75">{artifact.body}</p>}
                         </div>
                       ))}
                     </div>
                   )}
 
                   {warnings.length > 0 && (
-                    <div className="mt-3 rounded-lg border border-forge-yellow/30 bg-forge-yellow/10 p-2">
-                      <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-forge-yellow"><AlertTriangle className="h-3.5 w-3.5" />Missing companion work</p>
+                    <div className="mt-3 rounded-lg border border-mn-yellow/30 bg-mn-yellow/10 p-2">
+                      <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-mn-yellow"><AlertTriangle className="h-3.5 w-3.5" />Missing companion work</p>
                       {warnings.slice(0, 3).map((warning) => (
-                        <div key={`${warning.repoId}:${warning.relationshipKind}`} className="flex items-center gap-2 text-xs text-forge-muted">
+                        <div key={`${warning.repoId}:${warning.relationshipKind}`} className="flex items-center gap-2 text-xs text-mn-muted">
                           <span className="min-w-0 flex-1">{warning.reason}</span>
                           {onCreateWorkspaceForRepo && <Button type="button" size="xs" variant="outline" onClick={() => onCreateWorkspaceForRepo(warning.repoId, group.parentId, warning.relatedWorkspaceId)}>Create</Button>}
                         </div>

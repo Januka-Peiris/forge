@@ -47,7 +47,7 @@ export function AppFrame({
       {!isReviewView && (
         sidebarCollapsed ? (
           <div
-            className="shrink-0 h-full flex flex-col items-center justify-start bg-forge-surface"
+            className="shrink-0 h-full flex flex-col items-center justify-start bg-mn-surface"
             style={{ width: `${collapsedRailWidth}px` }}
           >
             <Button
@@ -71,7 +71,7 @@ export function AppFrame({
               aria-label="Resize sidebar"
               onMouseDown={onResizeSidebar}
               onDoubleClick={onResetSidebarWidth}
-              className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-forge-border/70 active:bg-forge-green/60"
+              className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-mn-border/70 active:bg-mn-cyan/60"
               title="Double-click to reset width"
             />
           </>
@@ -79,7 +79,7 @@ export function AppFrame({
       )}
 
       <div className="flex flex-1 min-w-0 min-h-0">
-        <div className="relative flex flex-col flex-1 min-w-0 min-h-0 bg-forge-bg">
+        <div className="relative flex flex-col flex-1 min-w-0 min-h-0 bg-mn-bg">
           <div className="relative flex flex-1 flex-col min-h-0">
             {children}
           </div>
@@ -94,11 +94,11 @@ export function AppFrame({
                   aria-label="Resize inspector"
                   onMouseDown={onResizeInspector}
                   onDoubleClick={onResetInspectorWidth}
-                  className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-forge-border/70 active:bg-forge-green/60"
+                  className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-mn-border/70 active:bg-mn-cyan/60"
                   title="Double-click to reset width"
                 />
                 <div
-                  className="relative z-[2] shrink-0 h-full shadow-forge-panel"
+                  className="relative z-[2] shrink-0 h-full shadow-mn-panel"
                   style={{ width: `${inspectorWidth}px` }}
                 >
                   {onCollapseInspector && (
@@ -108,7 +108,7 @@ export function AppFrame({
                       size="icon-xs"
                       onClick={onCollapseInspector}
                       title="Collapse inspector"
-                      className="absolute -left-3 top-2 z-10 h-6 w-6 border-forge-green/40 bg-forge-card/95 text-forge-green shadow-md"
+                      className="absolute -left-3 top-2 z-10 h-6 w-6 border-mn-cyan/40 bg-mn-card/95 text-mn-cyan shadow-md"
                     >
                       <ChevronRight className="h-3.5 w-3.5" />
                     </Button>
@@ -118,7 +118,7 @@ export function AppFrame({
               </>
             ) : (
               <div
-                className="shrink-0 h-full flex items-start justify-center bg-forge-surface"
+                className="shrink-0 h-full flex items-start justify-center bg-mn-surface"
                 style={{ width: `${collapsedRailWidth}px` }}
               >
                 <Button
@@ -127,7 +127,7 @@ export function AppFrame({
                   size="icon-xs"
                   onClick={onExpandInspector}
                   title="Open inspector"
-                  className="mt-2.5 h-8 w-8 border-forge-green/40 bg-forge-card/95 text-forge-green shadow-md hover:bg-forge-green/10"
+                  className="mt-2.5 h-8 w-8 border-mn-cyan/40 bg-mn-card/95 text-mn-cyan shadow-md hover:bg-mn-cyan/10"
                 >
                   <ChevronLeft className="h-3.5 w-3.5" />
                 </Button>

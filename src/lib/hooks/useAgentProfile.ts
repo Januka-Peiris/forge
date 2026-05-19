@@ -1,6 +1,6 @@
 import { useState, useCallback, type Dispatch, type SetStateAction } from 'react';
 
-const PROFILE_KEY = 'forge:agent-profile';
+const PROFILE_KEY = 'mn:agent-profile';
 const DEFAULT_PROFILE_ID = '';
 
 export function getStoredAgentProfileId(): string {

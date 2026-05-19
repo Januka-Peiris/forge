@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { ActivityItem as ForgeActivityItem } from '../../types';
-import type { ForgeWorkspaceConfig } from '../../types/workspace-scripts';
+import type { ActivityItem as MnemonicActivityItem } from '../../types';
+import type { MnemonicWorkspaceConfig } from '../../types/workspace-scripts';
 import type { WorkspaceReadiness } from '../../types/workspace-readiness';
 import type { WorkspacePrDraft, WorkspacePrStatus } from '../../types/pr-draft';
 import type { WorkspaceChangedFile } from '../../types/git-review';
@@ -10,7 +10,7 @@ import type { WorkspaceCheckpoint } from '../../types/checkpoint';
 import type { WorkspaceSchedulerJob, WorkspaceTaskSnapshot } from '../../types/task-lifecycle';
 import type { WorkspaceHookInspector } from '../../types/workspace-hooks';
 import { listWorkspaceActivity } from '../../lib/tauri-api/activity';
-import { getWorkspaceForgeConfig, getWorkspaceHookInspector } from '../../lib/tauri-api/workspace-scripts';
+import { getWorkspaceMnemonicConfig, getWorkspaceHookInspector } from '../../lib/tauri-api/workspace-scripts';
 import { getWorkspaceReadiness } from '../../lib/tauri-api/workspace-readiness';
 import { listWorkspacePorts } from '../../lib/tauri-api/workspace-ports';
 import { getCachedWorkspacePrStatus, getWorkspacePrDraft, getWorkspacePrStatus } from '../../lib/tauri-api/pr-draft';
@@ -22,7 +22,7 @@ import { getWorkspaceTaskSnapshot, listWorkspaceSchedulerJobs } from '../../lib/
 
 function loadCockpitSummaryData(workspaceId: string) {
   return Promise.allSettled([
-    getWorkspaceForgeConfig(workspaceId),
+    getWorkspaceMnemonicConfig(workspaceId),
     getWorkspaceHookInspector(workspaceId),
     getWorkspaceReadiness(workspaceId),
     getWorkspaceHealth(workspaceId),
@@ -43,7 +43,7 @@ function loadCockpitHeavyData(workspaceId: string) {
 }
 
 export function useDetailPanelCockpitState(workspaceId: string | undefined, activityOpen: boolean) {
-  const [forgeConfig, setForgeConfig] = useState<ForgeWorkspaceConfig | null>(null);
+  const [mnemonicConfig, setMnemonicConfig] = useState<MnemonicWorkspaceConfig | null>(null);
   const [workspaceReadiness, setWorkspaceReadiness] = useState<WorkspaceReadiness | null>(null);
   const [workspacePrStatus, setWorkspacePrStatus] = useState<WorkspacePrStatus | null>(null);
   const [workspacePrDraft, setWorkspacePrDraft] = useState<WorkspacePrDraft | null>(null);
@@ -56,11 +56,11 @@ export function useDetailPanelCockpitState(workspaceId: string | undefined, acti
   const [workspaceTaskSnapshot, setWorkspaceTaskSnapshot] = useState<WorkspaceTaskSnapshot | null>(null);
   const [workspaceSchedulerJobs, setWorkspaceSchedulerJobs] = useState<WorkspaceSchedulerJob[]>([]);
   const [cockpitLoading, setCockpitLoading] = useState(false);
-  const [timelineItems, setTimelineItems] = useState<ForgeActivityItem[]>([]);
+  const [timelineItems, setTimelineItems] = useState<MnemonicActivityItem[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
 
   const resetCockpitState = useCallback(() => {
-    setForgeConfig(null);
+    setMnemonicConfig(null);
     setWorkspaceReadiness(null);
     setWorkspacePrStatus(null);
     setWorkspacePrDraft(null);
@@ -77,7 +77,7 @@ export function useDetailPanelCockpitState(workspaceId: string | undefined, acti
   const applySummaryResults = useCallback((
     [configResult, hookInspectorResult, readinessResult, healthResult, changedFilesResult]: Awaited<ReturnType<typeof loadCockpitSummaryData>>,
   ) => {
-    setForgeConfig(configResult.status === 'fulfilled' ? configResult.value : null);
+    setMnemonicConfig(configResult.status === 'fulfilled' ? configResult.value : null);
     setWorkspaceHookInspector(hookInspectorResult.status === 'fulfilled' ? hookInspectorResult.value : null);
     setWorkspaceReadiness(readinessResult.status === 'fulfilled' ? readinessResult.value : null);
     setWorkspaceHealth(healthResult.status === 'fulfilled' ? healthResult.value : null);
@@ -151,7 +151,7 @@ export function useDetailPanelCockpitState(workspaceId: string | undefined, acti
   }, [applyHeavyResults, applySummaryResults, resetCockpitState, workspaceId]);
 
   return {
-    forgeConfig,
+    mnemonicConfig,
     workspaceReadiness,
     workspacePrStatus,
     workspacePrDraft,

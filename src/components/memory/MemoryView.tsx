@@ -19,9 +19,9 @@ function kindForMemory(memory: AgentMemory): MemoryFilter {
 }
 
 function toneForMemory(memory: AgentMemory): string {
-  if (memory.status === 'candidate') return 'border-forge-yellow/20 bg-forge-yellow/10 text-forge-yellow';
-  if (memory.origin === 'manual') return 'border-forge-green/20 bg-forge-green/10 text-forge-green';
-  return 'border-forge-blue/20 bg-forge-blue/10 text-forge-blue';
+  if (memory.status === 'candidate') return 'border-mn-yellow/20 bg-mn-yellow/10 text-mn-yellow';
+  if (memory.origin === 'manual') return 'border-mn-cyan/20 bg-mn-cyan/10 text-mn-cyan';
+  return 'border-mn-blue/20 bg-mn-blue/10 text-mn-blue';
 }
 
 function titleForFilter(filter: MemoryFilter): string {
@@ -151,16 +151,16 @@ export function MemoryView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="shrink-0 border-b border-forge-border px-6 pb-4 pt-6">
-        <h1 className="text-ui-title font-bold tracking-tight text-forge-text">Agent Memory</h1>
-        <p className="mt-1.5 text-ui-label text-forge-muted">
+      <div className="shrink-0 border-b border-mn-border px-6 pb-4 pt-6">
+        <h1 className="text-ui-title font-bold tracking-tight text-mn-text">Agent Memory</h1>
+        <p className="mt-1.5 text-ui-label text-mn-muted">
           Persistent project context with clear provenance, scope, and candidate promotion flow.
         </p>
       </div>
       <div className="flex-1 space-y-5 overflow-y-auto p-5">
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
-          <div className="rounded-xl border border-forge-border bg-forge-card p-4 lg:col-span-2">
-            <h2 className="mb-3 text-ui-body font-bold text-forge-text">Add Global Memory</h2>
+          <div className="rounded-xl border border-mn-border bg-mn-card p-4 lg:col-span-2">
+            <h2 className="mb-3 text-ui-body font-bold text-mn-text">Add Global Memory</h2>
             <div className="mb-2 flex gap-2">
               <Input
                 value={editKey}
@@ -176,36 +176,36 @@ export function MemoryView() {
               rows={3}
               className="mb-2"
             />
-            {error && <p className="mb-2 text-ui-label text-forge-red">{error}</p>}
+            {error && <p className="mb-2 text-ui-label text-mn-red">{error}</p>}
             <Button
               variant="ghost"
               size="sm"
               disabled={saving || !editKey.trim() || !editValue.trim()}
               onClick={() => void handleSave()}
-              className="border border-forge-blue/20 text-forge-blue hover:bg-forge-blue/15"
+              className="border border-mn-blue/20 text-mn-blue hover:bg-mn-blue/15"
             >
               {saving ? 'Saving…' : 'Save Entry'}
             </Button>
           </div>
 
-          <div className="rounded-xl border border-forge-border bg-forge-card p-4">
-            <p className="text-xs font-semibold uppercase tracking-widest text-forge-muted">Candidate queue</p>
-            <p className="mt-2 text-3xl font-semibold text-forge-text">{candidateCount}</p>
-            <p className="mt-1 text-xs text-forge-muted">Need promote or dismiss review.</p>
+          <div className="rounded-xl border border-mn-border bg-mn-card p-4">
+            <p className="text-xs font-semibold uppercase tracking-widest text-mn-muted">Candidate queue</p>
+            <p className="mt-2 text-3xl font-semibold text-mn-text">{candidateCount}</p>
+            <p className="mt-1 text-xs text-mn-muted">Need promote or dismiss review.</p>
           </div>
 
-          <div className="rounded-xl border border-forge-border bg-forge-card p-4">
-            <p className="text-xs font-semibold uppercase tracking-widest text-forge-muted">Active memory split</p>
-            <p className="mt-2 text-sm text-forge-text">{manualCount} manual · {autoCount} auto</p>
-            <p className="mt-1 text-xs text-forge-muted">Global and workspace-scoped memories stay explicit.</p>
+          <div className="rounded-xl border border-mn-border bg-mn-card p-4">
+            <p className="text-xs font-semibold uppercase tracking-widest text-mn-muted">Active memory split</p>
+            <p className="mt-2 text-sm text-mn-text">{manualCount} manual · {autoCount} auto</p>
+            <p className="mt-1 text-xs text-mn-muted">Global and workspace-scoped memories stay explicit.</p>
           </div>
         </div>
 
-        <div className="rounded-xl border border-forge-border bg-forge-card p-4">
+        <div className="rounded-xl border border-mn-border bg-mn-card p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h2 className="text-ui-body font-bold text-forge-text">{titleForFilter(filter)}</h2>
-              <p className="mt-0.5 text-xs text-forge-muted">
+              <h2 className="text-ui-body font-bold text-mn-text">{titleForFilter(filter)}</h2>
+              <p className="mt-0.5 text-xs text-mn-muted">
                 Candidate memories are auto-captured from workspace goals, durable config rules, and repeated run patterns.
               </p>
             </div>
@@ -215,7 +215,7 @@ export function MemoryView() {
                   key={option}
                   type="button"
                   className={`rounded border px-2 py-0.5 text-[11px] ${
-                    filter === option ? 'border-forge-blue/30 bg-forge-blue/10 text-forge-blue' : 'border-forge-border text-forge-muted'
+                    filter === option ? 'border-mn-blue/30 bg-mn-blue/10 text-mn-blue' : 'border-mn-border text-mn-muted'
                   }`}
                   onClick={() => setFilter(option)}
                 >
@@ -227,38 +227,38 @@ export function MemoryView() {
           </div>
 
           {loading ? (
-            <p className="text-ui-label text-forge-muted">Loading…</p>
+            <p className="text-ui-label text-mn-muted">Loading…</p>
           ) : visibleMemories.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-forge-border p-6 text-center">
-              <p className="text-ui-body text-forge-muted">No memories in this view yet</p>
-              <p className="mt-1 text-ui-label text-forge-muted">Candidate memories will appear as Forge learns durable workspace context.</p>
+            <div className="rounded-lg border border-dashed border-mn-border p-6 text-center">
+              <p className="text-ui-body text-mn-muted">No memories in this view yet</p>
+              <p className="mt-1 text-ui-label text-mn-muted">Candidate memories will appear as Mnemonic learns durable workspace context.</p>
             </div>
           ) : (
             <div className="space-y-2">
               {visibleMemories.map((memory) => {
                 const memoryKind = kindForMemory(memory);
                 return (
-                  <div key={`${memory.workspaceId}-${memory.key}`} className="rounded-lg border border-forge-border/80 bg-forge-surface/60 p-3">
+                  <div key={`${memory.workspaceId}-${memory.key}`} className="rounded-lg border border-mn-border/80 bg-mn-surface/60 p-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="mb-1 flex flex-wrap items-center gap-2">
-                          <span className="text-ui-label font-mono font-bold text-forge-text">{memory.key}</span>
+                          <span className="text-ui-label font-mono font-bold text-mn-text">{memory.key}</span>
                           <span className={`rounded border px-1.5 py-0.5 text-ui-caption ${toneForMemory(memory)}`}>
                             {memoryKind}
                           </span>
-                          <span className="rounded border border-forge-border px-1.5 py-0.5 text-ui-caption text-forge-muted">
+                          <span className="rounded border border-mn-border px-1.5 py-0.5 text-ui-caption text-mn-muted">
                             {scopeLabel(memory)}
                           </span>
-                          <span className="rounded border border-forge-border px-1.5 py-0.5 text-ui-caption text-forge-muted">
+                          <span className="rounded border border-mn-border px-1.5 py-0.5 text-ui-caption text-mn-muted">
                             confidence {Math.round((memory.confidence ?? 0) * 100)}%
                           </span>
                         </div>
-                        <p className="whitespace-pre-wrap text-ui-label leading-relaxed text-forge-muted">{memory.value}</p>
+                        <p className="whitespace-pre-wrap text-ui-label leading-relaxed text-mn-muted">{memory.value}</p>
                         {(memory.sourceLabel || memory.sourceDetail || memory.sourceTaskRunId) && (
-                          <div className="mt-2 space-y-0.5 text-[11px] text-forge-muted">
-                            {memory.sourceLabel && <p><span className="text-forge-text/80">Why:</span> {memory.sourceLabel}</p>}
-                            {memory.sourceDetail && <p><span className="text-forge-text/80">Source:</span> {memory.sourceDetail}</p>}
-                            {memory.sourceTaskRunId && <p><span className="text-forge-text/80">Task run:</span> {memory.sourceTaskRunId}</p>}
+                          <div className="mt-2 space-y-0.5 text-[11px] text-mn-muted">
+                            {memory.sourceLabel && <p><span className="text-mn-text/80">Why:</span> {memory.sourceLabel}</p>}
+                            {memory.sourceDetail && <p><span className="text-mn-text/80">Source:</span> {memory.sourceDetail}</p>}
+                            {memory.sourceTaskRunId && <p><span className="text-mn-text/80">Task run:</span> {memory.sourceTaskRunId}</p>}
                           </div>
                         )}
                       </div>
@@ -266,7 +266,7 @@ export function MemoryView() {
                         variant="ghost"
                         size="icon-xs"
                         onClick={() => void handleDelete(memory)}
-                        className="shrink-0 text-forge-muted hover:bg-forge-red/15 hover:text-forge-red"
+                        className="shrink-0 text-mn-muted hover:bg-mn-red/15 hover:text-mn-red"
                       >
                         ✕
                       </Button>

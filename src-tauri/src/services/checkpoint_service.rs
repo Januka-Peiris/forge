@@ -195,7 +195,7 @@ pub fn delete_workspace_checkpoint(
             "Checkpoint deleted",
             "warning",
             Some(&format!(
-                "Deleted checkpoint ref {reference}. This removes Forge's direct recovery pointer for that checkpoint."
+                "Deleted checkpoint ref {reference}. This removes Mnemonic's direct recovery pointer for that checkpoint."
             )),
         );
     }
@@ -261,7 +261,7 @@ pub fn create_checkpoint_if_dirty_in_background(
     thread::spawn(move || {
         if let Err(err) = create_checkpoint_if_dirty(&state, &workspace_id, &reason) {
             log::warn!(
-                target: "forge_lib",
+                target: "mnemonic_lib",
                 "failed to create background checkpoint for workspace {}: {err}",
                 workspace_id
             );
@@ -286,7 +286,7 @@ pub fn create_checkpoint_if_dirty(
 
     let suffix = unique_suffix();
     let checkpoint_ref = format!("refs/forge/checkpoints/{workspace_id}/{suffix}");
-    let message = format!("forge checkpoint: {reason}");
+    let message = format!("mnemonic checkpoint: {reason}");
     let oid = git(&root, &["stash", "create", &message])?;
     let oid = oid.trim().to_string();
     if oid.is_empty() {

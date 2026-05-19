@@ -102,16 +102,16 @@ fn should_skip_discovered_worktree(repo_root: &Path, worktree_path: &Path) -> bo
     {
         return true;
     }
-    if is_forge_workspace_folder_under_repo(repo_root, worktree_path) {
+    if is_mnemonic_workspace_folder_under_repo(repo_root, worktree_path) {
         return true;
     }
     false
 }
 
-/// `<repo>/forge/ws-NNN` checkouts created by Forge (see `git_worktree_service`).
-fn is_forge_workspace_folder_under_repo(repo_root: &Path, worktree_path: &Path) -> bool {
+/// `<repo>/mnemonic/ws-NNN` checkouts created by Mnemonic (see `git_worktree_service`).
+fn is_mnemonic_workspace_folder_under_repo(repo_root: &Path, worktree_path: &Path) -> bool {
     if let Ok(rel) = worktree_path.strip_prefix(repo_root) {
-        return path_starts_with_forge_ws(rel);
+        return path_starts_with_mnemonic_ws(rel);
     }
     let Ok(repo_canon) = std::fs::canonicalize(repo_root) else {
         return false;
@@ -122,15 +122,15 @@ fn is_forge_workspace_folder_under_repo(repo_root: &Path, worktree_path: &Path) 
     wt_canon
         .strip_prefix(&repo_canon)
         .ok()
-        .is_some_and(path_starts_with_forge_ws)
+        .is_some_and(path_starts_with_mnemonic_ws)
 }
 
-fn path_starts_with_forge_ws(rel: &Path) -> bool {
+fn path_starts_with_mnemonic_ws(rel: &Path) -> bool {
     let mut it = rel.components();
     matches!(
         (it.next(), it.next()),
         (Some(first), Some(second))
-            if first.as_os_str() == "forge" && is_ws_id_folder(second.as_os_str())
+            if first.as_os_str() == "mnemonic" && is_ws_id_folder(second.as_os_str())
     )
 }
 
@@ -171,15 +171,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn skips_forge_managed_ws_folder() {
+    fn skips_mnemonic_managed_ws_folder() {
         let repo = Path::new("/proj/repo");
         assert!(should_skip_discovered_worktree(
             repo,
-            Path::new("/proj/repo/forge/ws-001")
+            Path::new("/proj/repo/mnemonic/ws-001")
         ));
         assert!(!should_skip_discovered_worktree(
             repo,
-            Path::new("/proj/repo/forge/not-ws")
+            Path::new("/proj/repo/mnemonic/not-ws")
         ));
     }
 

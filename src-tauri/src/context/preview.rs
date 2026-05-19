@@ -127,7 +127,7 @@ pub fn build_session_context_string(state: &AppState, workspace_id: &str) -> Opt
             .unwrap_or_else(|_| "unknown".to_string())
     };
 
-    let mut parts: Vec<String> = vec![format!("[FORGE CONTEXT — {}]", branch_info)];
+    let mut parts: Vec<String> = vec![format!("[MNEMONIC CONTEXT — {}]", branch_info)];
 
     if let Some(warn) = &preview.warning {
         parts.push(format!("⚠ {}", warn));
@@ -159,7 +159,7 @@ pub fn build_session_context_string(state: &AppState, workspace_id: &str) -> Opt
         }
     }
 
-    parts.push("[END FORGE CONTEXT]".to_string());
+    parts.push("[END MNEMONIC CONTEXT]".to_string());
 
     Some(parts.join("\n\n"))
 }

@@ -5,7 +5,7 @@ import type { TerminalSearchResult } from '../../types/terminal';
 import { createWorkspaceTerminal, attachWorkspaceTerminalSession, listWorkspaceVisibleTerminalSessions, searchTerminalOutput, queueWorkspaceAgentPrompt } from '../../lib/tauri-api/terminal';
 import { getWorkspaceReviewCockpit, refreshWorkspacePrComments, queueReviewAgentPrompt } from '../../lib/tauri-api/review-cockpit';
 import { agentProfilesForPromptPicker, listWorkspaceAgentProfiles } from '../../lib/tauri-api/agent-profiles';
-import { runWorkspaceSetup, startWorkspaceRunCommand, getWorkspaceForgeConfig } from '../../lib/tauri-api/workspace-scripts';
+import { runWorkspaceSetup, startWorkspaceRunCommand, getWorkspaceMnemonicConfig } from '../../lib/tauri-api/workspace-scripts';
 import { cleanupWorkspace } from '../../lib/tauri-api/workspace-cleanup';
 import { getWorkspaceReadiness } from '../../lib/tauri-api/workspace-readiness';
 import { createWorkspaceCheckpoint } from '../../lib/tauri-api/checkpoints';
@@ -63,7 +63,7 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
 
   useEffect(() => {
     if (!open) return;
-    const mark = `forge:command-palette-open:${Date.now()}`;
+    const mark = `mn:command-palette-open:${Date.now()}`;
     openPerfMarkRef.current = mark;
     perfMark(mark);
     setQuery('');
@@ -97,7 +97,7 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
       getWorkspaceReviewCockpit(workspaceId, null).then((cockpit) => ({ comments: cockpit.prComments, files: cockpit.files.map((item) => item.file) })).catch(() => ({ comments: [] as WorkspacePrComment[], files: [] as WorkspaceChangedFile[] })),
       listWorkspaceAgentProfiles(workspaceId).catch(() => []),
       getWorkspaceReadiness(workspaceId).catch(() => null),
-      getWorkspaceForgeConfig(workspaceId).then((config) => config.run).catch(() => []),
+      getWorkspaceMnemonicConfig(workspaceId).then((config) => config.run).catch(() => []),
     ]).then(([nextSessions, cockpitData, nextProfiles, nextReadiness, nextRunCommands]) => {
       if (cancelled) return;
       const entry = {
@@ -334,9 +334,9 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 px-4 pt-[12vh] backdrop-blur-sm" onMouseDown={onClose}>
-      <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-forge-border bg-forge-surface shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="flex items-center gap-3 border-b border-forge-border px-4 py-3">
-          <Search className="h-4 w-4 text-forge-muted" />
+      <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-mn-border bg-mn-surface shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="flex items-center gap-3 border-b border-mn-border px-4 py-3">
+          <Search className="h-4 w-4 text-mn-muted" />
           <input
             autoFocus
             value={query}
@@ -347,24 +347,24 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
               if (event.key === 'Enter') { event.preventDefault(); void runActive(); }
             }}
             placeholder="Jump to workspace, file, agent session… or type > to search terminal output"
-            className="flex-1 bg-transparent text-ui-body text-forge-text outline-none placeholder:text-forge-muted"
+            className="flex-1 bg-transparent text-ui-body text-mn-text outline-none placeholder:text-mn-muted"
           />
-          <button onClick={onClose} className="rounded-md p-1 text-forge-muted hover:bg-forge-surface-overlay hover:text-forge-text"><X className="h-4 w-4" /></button>
+          <button onClick={onClose} className="rounded-md p-1 text-mn-muted hover:bg-mn-surface-overlay hover:text-mn-text"><X className="h-4 w-4" /></button>
         </div>
         <div className="max-h-[55vh] overflow-y-auto p-2">
           {filtered.length === 0 ? (
-            <p className="p-4 text-center text-ui-label text-forge-muted">No matching commands.</p>
+            <p className="p-4 text-center text-ui-label text-mn-muted">No matching commands.</p>
           ) : filtered.map((item, index) => (
             <button
               key={item.id}
               onMouseEnter={() => setActiveIndex(index)}
               onClick={() => { void item.run(); onClose(); }}
-              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left ${index === activeIndex ? 'bg-forge-green/10' : 'hover:bg-forge-surface-overlay'}`}
+              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left ${index === activeIndex ? 'bg-mn-cyan/10' : 'hover:bg-mn-surface-overlay'}`}
             >
               <CommandIcon icon={item.icon} />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-ui-body font-semibold text-forge-text">{item.title}</span>
-                <span className="block truncate text-ui-label text-forge-muted">{item.subtitle}</span>
+                <span className="block truncate text-ui-body font-semibold text-mn-text">{item.title}</span>
+                <span className="block truncate text-ui-label text-mn-muted">{item.subtitle}</span>
               </span>
             </button>
           ))}
@@ -390,15 +390,15 @@ function agentItem(workspaceId: string, profile: AgentProfile, onOpenWorkspace: 
 
 function CommandIcon({ icon }: { icon: CommandItem['icon'] }) {
   const cls = 'h-4 w-4 shrink-0';
-  if (icon === 'workspace') return <Zap className={`${cls} text-forge-green`} />;
-  if (icon === 'file') return <FileCode className={`${cls} text-forge-green`} />;
-  if (icon === 'terminal') return <TerminalIcon className={`${cls} text-forge-blue`} />;
-  if (icon === 'comment') return <GitPullRequest className={`${cls} text-forge-violet`} />;
-  if (icon === 'action') return <Play className={`${cls} text-forge-green`} />;
-  if (icon === 'checkpoint') return <ShieldCheck className={`${cls} text-forge-blue`} />;
-  if (icon === 'ship') return <Ship className={`${cls} text-forge-green`} />;
-  if (icon === 'cleanup') return <Trash2 className={`${cls} text-forge-red`} />;
-  return <Bot className={`${cls} text-forge-green`} />;
+  if (icon === 'workspace') return <Zap className={`${cls} text-mn-cyan`} />;
+  if (icon === 'file') return <FileCode className={`${cls} text-mn-cyan`} />;
+  if (icon === 'terminal') return <TerminalIcon className={`${cls} text-mn-blue`} />;
+  if (icon === 'comment') return <GitPullRequest className={`${cls} text-mn-violet`} />;
+  if (icon === 'action') return <Play className={`${cls} text-mn-cyan`} />;
+  if (icon === 'checkpoint') return <ShieldCheck className={`${cls} text-mn-blue`} />;
+  if (icon === 'ship') return <Ship className={`${cls} text-mn-cyan`} />;
+  if (icon === 'cleanup') return <Trash2 className={`${cls} text-mn-red`} />;
+  return <Bot className={`${cls} text-mn-cyan`} />;
 }
 
 function firstLine(value: string) {

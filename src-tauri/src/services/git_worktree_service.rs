@@ -8,7 +8,7 @@ pub struct CreatedWorktree {
     pub branch: String,
 }
 
-pub fn create_forge_worktree(
+pub fn create_mnemonic_worktree(
     repo_path: &str,
     workspace_id: &str,
     branch: &str,
@@ -23,7 +23,7 @@ pub fn create_forge_worktree(
     }
 
     let branch = sanitize_branch(branch)?;
-    let worktree_path = forge_worktree_path(repo_path, workspace_id)?;
+    let worktree_path = mnemonic_worktree_path(repo_path, workspace_id)?;
     if worktree_path.exists() {
         return Err(format!(
             "Workspace path already exists: {}",
@@ -34,7 +34,7 @@ pub fn create_forge_worktree(
     if let Some(parent) = worktree_path.parent() {
         fs::create_dir_all(parent).map_err(|err| {
             format!(
-                "Failed to create Forge worktree parent directory {}: {err}",
+                "Failed to create Mnemonic worktree parent directory {}: {err}",
                 parent.display()
             )
         })?;
@@ -75,7 +75,7 @@ pub fn create_forge_worktree(
     })
 }
 
-pub fn remove_forge_worktree(repo_path: &str, worktree_path: &str) -> Result<(), String> {
+pub fn remove_mnemonic_worktree(repo_path: &str, worktree_path: &str) -> Result<(), String> {
     let repo_path = Path::new(repo_path);
     let worktree_path = Path::new(worktree_path);
     git(
@@ -130,14 +130,14 @@ fn branch_exists(repo_path: &Path, branch: &str) -> Result<bool, String> {
     Ok(output.status.success())
 }
 
-/// Forge-managed worktrees live under `<repo>/forge/<workspace_id>/`.
+/// Mnemonic-managed worktrees live under `<repo>/mnemonic/<workspace_id>/`.
 ///
 /// Paths are anchored to the repository checkout the user registered (not a sibling
 /// tree under the parent directory). The leaf folder is the workspace id so shells
 /// stay compact; labels and branches live in the DB and Git.
-fn forge_worktree_path(repo_path: &Path, workspace_id: &str) -> Result<PathBuf, String> {
+fn mnemonic_worktree_path(repo_path: &Path, workspace_id: &str) -> Result<PathBuf, String> {
     let leaf = sanitize_path_part(workspace_id);
-    Ok(repo_path.join("forge").join(leaf))
+    Ok(repo_path.join("mnemonic").join(leaf))
 }
 
 fn sanitize_branch(branch: &str) -> Result<String, String> {

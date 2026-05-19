@@ -248,13 +248,13 @@ export function WorkspaceFilesPanel({
                   onFileSelect?.(node.path);
                 }
               }}
-              className={`flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-xs transition-colors ${selected ? 'bg-forge-green/15 text-forge-green' : 'text-forge-text hover:bg-forge-surface-overlay'}`}
+              className={`flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-xs transition-colors ${selected ? 'bg-mn-cyan/15 text-mn-cyan' : 'text-mn-text hover:bg-mn-surface-overlay'}`}
               style={{ paddingLeft: `${depth * 12 + 8}px` }}
               title={node.path}
             >
               {isDir ? (
                 node.hasChildren ? (
-                  expanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-forge-muted" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-forge-muted" />
+                  expanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-mn-muted" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-mn-muted" />
                 ) : (
                   <span className="h-3.5 w-3.5 shrink-0" />
                 )
@@ -263,8 +263,8 @@ export function WorkspaceFilesPanel({
               )}
 
               {isDir
-                ? (expanded ? <FolderOpen className="h-3.5 w-3.5 shrink-0 text-forge-blue" /> : <Folder className="h-3.5 w-3.5 shrink-0 text-forge-blue" />)
-                : <FileText className="h-3.5 w-3.5 shrink-0 text-forge-muted" />}
+                ? (expanded ? <FolderOpen className="h-3.5 w-3.5 shrink-0 text-mn-blue" /> : <Folder className="h-3.5 w-3.5 shrink-0 text-mn-blue" />)
+                : <FileText className="h-3.5 w-3.5 shrink-0 text-mn-muted" />}
 
               <span className="truncate">{node.name}</span>
             </button>
@@ -272,13 +272,13 @@ export function WorkspaceFilesPanel({
             {isDir && expanded && (
               <div>
                 {loading && (
-                  <p className="px-2 py-1 text-[11px] text-forge-muted" style={{ paddingLeft: `${(depth + 1) * 12 + 8}px` }}>
+                  <p className="px-2 py-1 text-[11px] text-mn-muted" style={{ paddingLeft: `${(depth + 1) * 12 + 8}px` }}>
                     Loading…
                   </p>
                 )}
                 {!loading && childNodes.length > 0 && renderNodes(childNodes, depth + 1)}
                 {!loading && childNodes.length === 0 && node.hasChildren && (
-                  <p className="px-2 py-1 text-[11px] text-forge-muted" style={{ paddingLeft: `${(depth + 1) * 12 + 8}px` }}>
+                  <p className="px-2 py-1 text-[11px] text-mn-muted" style={{ paddingLeft: `${(depth + 1) * 12 + 8}px` }}>
                     No visible files.
                   </p>
                 )}
@@ -292,7 +292,7 @@ export function WorkspaceFilesPanel({
 
   return (
     <div
-      className={`flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-forge-border bg-forge-card/70 ${className ?? ''}`}
+      className={`flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-mn-border bg-mn-card/70 ${className ?? ''}`}
       onContextMenu={(event) => {
         event.preventDefault();
         setContextMenu({
@@ -305,27 +305,27 @@ export function WorkspaceFilesPanel({
       }}
     >
       {showHeader && (
-        <div className="shrink-0 border-b border-forge-border px-3 py-2">
-          <p className="text-ui-caption font-bold uppercase tracking-wider text-forge-muted">Files</p>
-          <p className="mt-0.5 text-[10px] text-forge-muted/80">Right-click a folder to create a file</p>
+        <div className="shrink-0 border-b border-mn-border px-3 py-2">
+          <p className="text-ui-caption font-bold uppercase tracking-wider text-mn-muted">Files</p>
+          <p className="mt-0.5 text-[10px] text-mn-muted/80">Right-click a folder to create a file</p>
         </div>
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
         {error && (
-          <p className="rounded border border-forge-red/30 bg-forge-red/10 px-2 py-1.5 text-xs text-forge-red">
+          <p className="rounded border border-mn-red/30 bg-mn-red/10 px-2 py-1.5 text-xs text-mn-red">
             {error}
           </p>
         )}
-        {!error && isLoadingRoot && <p className="px-2 py-1 text-xs text-forge-muted">Loading files…</p>}
+        {!error && isLoadingRoot && <p className="px-2 py-1 text-xs text-mn-muted">Loading files…</p>}
         {!error && !isLoadingRoot && rootNodes.length === 0 && (
-          <p className="px-2 py-1 text-xs text-forge-muted">No visible files.</p>
+          <p className="px-2 py-1 text-xs text-mn-muted">No visible files.</p>
         )}
         {!error && rootNodes.length > 0 && renderNodes(rootNodes, 0)}
       </div>
       {contextMenu && (
         <div
-          className="fixed z-50 min-w-[220px] rounded-panel border border-forge-border bg-forge-surface p-1 shadow-forge-panel"
+          className="fixed z-50 min-w-[220px] rounded-panel border border-mn-border bg-mn-surface p-1 shadow-mn-panel"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(event) => event.stopPropagation()}
         >
@@ -391,8 +391,8 @@ function ContextAction({
       onClick={onClick}
       className={`flex w-full items-center rounded-btn px-2.5 py-1.5 text-left text-xs ${
         destructive
-          ? 'text-forge-red hover:bg-forge-red/15'
-          : 'text-forge-text hover:bg-forge-surface-overlay'
+          ? 'text-mn-red hover:bg-mn-red/15'
+          : 'text-mn-text hover:bg-mn-surface-overlay'
       }`}
     >
       {children}

@@ -12,7 +12,7 @@ import { listAppAgentProfiles } from '../tauri-api/agent-profiles';
 import { getSetting, setSetting } from '../tauri-api/settings';
 import type { AgentProfile, EnvironmentCheckItem } from '../../types';
 
-const ACTIVE_AGENT_PROVIDERS_CHANGED_EVENT = 'forge:active-agent-providers-changed';
+const ACTIVE_AGENT_PROVIDERS_CHANGED_EVENT = 'mn:active-agent-providers-changed';
 const EMPTY_PROFILES: AgentProfile[] = [];
 
 interface ActiveAgentProvidersState {

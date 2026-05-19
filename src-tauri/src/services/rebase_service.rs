@@ -10,14 +10,14 @@ const REBASE_INTERVAL_SECS: u64 = 30 * 60;
 
 /// Spawn a background thread that periodically rebases every active workspace
 /// against its base branch. On conflict the rebase is aborted and a
-/// `forge://workspace-rebase-conflict` event is emitted.
+/// `mn://workspace-rebase-conflict` event is emitted.
 pub fn start_auto_rebase_loop(state: AppState) {
     std::thread::spawn(move || {
         // Initial delay so startup is unaffected.
         std::thread::sleep(Duration::from_secs(REBASE_INTERVAL_SECS));
         loop {
             if let Err(err) = run_rebase_pass(&state) {
-                log::warn!(target: "forge_lib", "auto-rebase pass error: {err}");
+                log::warn!(target: "mnemonic_lib", "auto-rebase pass error: {err}");
             }
             std::thread::sleep(Duration::from_secs(REBASE_INTERVAL_SECS));
         }
@@ -66,7 +66,7 @@ fn run_rebase_pass(state: &AppState) -> Result<(), String> {
 
         if !fetch_ok {
             log::warn!(
-                target: "forge_lib",
+                target: "mnemonic_lib",
                 "auto-rebase: git fetch failed for workspace {} ({})",
                 workspace.id,
                 detail.worktree_path,
@@ -114,7 +114,7 @@ fn run_rebase_pass(state: &AppState) -> Result<(), String> {
                     .map(|d| d.as_secs().to_string())
                     .unwrap_or_else(|_| "0".to_string());
                 log::info!(
-                    target: "forge_lib",
+                    target: "mnemonic_lib",
                     "auto-rebase: workspace {} rebased onto origin/{base_branch}",
                     workspace.id,
                 );
@@ -138,7 +138,7 @@ fn run_rebase_pass(state: &AppState) -> Result<(), String> {
             Ok(out) => {
                 let stderr = String::from_utf8_lossy(&out.stderr);
                 log::warn!(
-                    target: "forge_lib",
+                    target: "mnemonic_lib",
                     "auto-rebase: conflict for workspace {}: {stderr}",
                     workspace.id,
                 );
@@ -158,7 +158,7 @@ fn run_rebase_pass(state: &AppState) -> Result<(), String> {
                     )),
                 );
                 let _ = state.app_handle.emit(
-                    "forge://workspace-rebase-conflict",
+                    "mn://workspace-rebase-conflict",
                     serde_json::json!({
                         "workspaceId": workspace.id,
                         "workspaceName": workspace.name,
@@ -169,7 +169,7 @@ fn run_rebase_pass(state: &AppState) -> Result<(), String> {
             }
             Err(err) => {
                 log::warn!(
-                    target: "forge_lib",
+                    target: "mnemonic_lib",
                     "auto-rebase: git rebase failed to launch for workspace {}: {err}",
                     workspace.id,
                 );

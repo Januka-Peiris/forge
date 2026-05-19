@@ -44,7 +44,7 @@ export type NavView = 'workspaces' | 'files' | 'reviews' | 'federation' | 'setti
 
 type WorkspaceFilter = 'all' | 'active' | 'archived';
 
-const WORKSPACE_FILTER_KEY = 'forge:workspace-sidebar-filter';
+const WORKSPACE_FILTER_KEY = 'mn:workspace-sidebar-filter';
 
 function readWorkspaceFilter(): WorkspaceFilter {
   const raw = window.localStorage.getItem(WORKSPACE_FILTER_KEY);
@@ -314,7 +314,7 @@ export function Sidebar({
           variant="ghost"
           size="icon-sm"
           onClick={() => onNavigate(id)}
-          className={isActive ? 'bg-forge-surface-overlay-high text-forge-text' : 'text-forge-muted/60 hover:text-forge-text hover:bg-forge-surface-overlay'}
+          className={isActive ? 'bg-mn-surface-overlay-high text-mn-text' : 'text-mn-muted/60 hover:text-mn-text hover:bg-mn-surface-overlay'}
         >
           <Icon className="w-4 h-4" />
         </Button>
@@ -323,15 +323,15 @@ export function Sidebar({
   };
 
   return (
-    <aside className="w-full shrink-0 flex flex-col h-full bg-forge-surface">
+    <aside className="w-full shrink-0 flex flex-col h-full bg-mn-surface">
       {/* Top: primary nav + collapse */}
-      <div className="shrink-0 flex items-center justify-between px-3 py-2 border-b border-forge-border/40">
+      <div className="shrink-0 flex items-center justify-between px-3 py-2 border-b border-mn-border/40">
         <div className="flex items-center gap-0.5">
           {primaryNav.map(renderNavBtn)}
         </div>
         <div className="flex items-center gap-1">
           {totalSpend && (
-            <span className="text-ui-caption font-mono text-forge-muted/50 shrink-0" title="Total estimated agent spend">
+            <span className="text-ui-caption font-mono text-mn-muted/50 shrink-0" title="Total estimated agent spend">
               {totalSpend}
             </span>
           )}
@@ -341,7 +341,7 @@ export function Sidebar({
               variant="ghost"
               size="icon-xs"
               onClick={onCollapse}
-              className="shrink-0 text-forge-muted/50 hover:text-forge-text hover:bg-forge-surface-overlay"
+              className="shrink-0 text-mn-muted/50 hover:text-mn-text hover:bg-mn-surface-overlay"
               title="Collapse sidebar"
             >
               <ChevronLeft className="h-3.5 w-3.5" strokeWidth={2.25} />
@@ -353,7 +353,7 @@ export function Sidebar({
       <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3">
         <>
         <div className="flex items-center justify-between px-2">
-          <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest">Workspaces</p>
+          <p className="text-xs font-semibold text-mn-muted uppercase tracking-widest">Workspaces</p>
           <div className="flex items-center gap-0.5">
             {onAddRepository && (
               <Tooltip content="Add Repository" side="bottom">
@@ -361,7 +361,7 @@ export function Sidebar({
                   variant="ghost"
                   size="icon-xs"
                   onClick={onAddRepository}
-                  className="text-forge-muted/60 hover:text-forge-text hover:bg-forge-surface-overlay"
+                  className="text-mn-muted/60 hover:text-mn-text hover:bg-mn-surface-overlay"
                 >
                   <FolderPlus className="w-3 h-3" />
                 </Button>
@@ -372,7 +372,7 @@ export function Sidebar({
                 variant="ghost"
                 size="icon-xs"
                 onClick={() => onNewWorkspace()}
-                className="text-forge-orange hover:text-forge-text"
+                className="text-mn-orange hover:text-mn-text"
               >
                 <Plus className="w-3 h-3" />
               </Button>
@@ -382,9 +382,9 @@ export function Sidebar({
 
         <div className="mt-2 px-2 flex items-center gap-2">
           <div className="relative flex-1">
-            <Filter className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-forge-muted pointer-events-none z-10" />
+            <Filter className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-mn-muted pointer-events-none z-10" />
             <Select value={filter} onValueChange={(v) => setFilter(v as WorkspaceFilter)}>
-              <SelectTrigger className="w-full pl-6 pr-2 py-1 text-xs bg-forge-card border-forge-border rounded-md h-auto">
+              <SelectTrigger className="w-full pl-6 pr-2 py-1 text-xs bg-mn-card border-mn-border rounded-md h-auto">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -395,9 +395,9 @@ export function Sidebar({
             </Select>
           </div>
           <div className="relative flex-1">
-            <ArrowUpDown className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-forge-muted pointer-events-none z-10" />
+            <ArrowUpDown className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-mn-muted pointer-events-none z-10" />
             <Select value={sort} onValueChange={(v) => setSort(v as 'recent' | 'name' | 'status')}>
-              <SelectTrigger className="w-full pl-6 pr-2 py-1 text-xs bg-forge-card border-forge-border rounded-md h-auto">
+              <SelectTrigger className="w-full pl-6 pr-2 py-1 text-xs bg-mn-card border-mn-border rounded-md h-auto">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -412,19 +412,19 @@ export function Sidebar({
         {/* Search input */}
         <div className="mt-2 px-2">
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-forge-muted pointer-events-none z-10" />
+            <Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-mn-muted pointer-events-none z-10" />
             <Input
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Filter workspaces… ⌘K"
-              className="pl-7 pr-3 py-1 text-xs h-auto bg-forge-card border-forge-border placeholder:text-forge-muted/50"
+              className="pl-7 pr-3 py-1 text-xs h-auto bg-mn-card border-mn-border placeholder:text-mn-muted/50"
             />
           </div>
         </div>
 
         {federatedGroups.length > 0 && (
           <div className="mt-3 space-y-1.5 px-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-forge-muted/60">Federated tasks</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-mn-muted/60">Federated tasks</p>
             {federatedGroups.map((group) => {
               const running = group.members.filter((workspace) => workspace.status === 'Running').length;
               const review = group.members.filter((workspace) => workspace.status === 'Review Ready').length;
@@ -440,18 +440,18 @@ export function Sidebar({
                       onSelectWorkspace(group.parent.id);
                     }
                   }}
-                  className="w-full rounded-lg border border-forge-border/60 bg-forge-card/60 px-2 py-1.5 text-left hover:border-forge-orange/30 hover:bg-forge-orange/5"
+                  className="w-full rounded-lg border border-mn-border/60 bg-mn-card/60 px-2 py-1.5 text-left hover:border-mn-orange/30 hover:bg-mn-orange/5"
                 >
                   <div className="flex items-center gap-1.5">
-                    <Network className="h-3 w-3 shrink-0 text-forge-orange" />
-                    <span className="truncate text-[11px] font-semibold text-forge-text">{group.parent?.name}</span>
-                    <span className="ml-auto shrink-0 text-[10px] text-forge-muted">{group.totalMembers} repos</span>
+                    <Network className="h-3 w-3 shrink-0 text-mn-orange" />
+                    <span className="truncate text-[11px] font-semibold text-mn-text">{group.parent?.name}</span>
+                    <span className="ml-auto shrink-0 text-[10px] text-mn-muted">{group.totalMembers} repos</span>
                   </div>
-                  <div className="mt-1 flex items-center gap-1.5 text-[10px] text-forge-muted">
+                  <div className="mt-1 flex items-center gap-1.5 text-[10px] text-mn-muted">
                     {running > 0 && <span>{running} running</span>}
                     {review > 0 && <span>{review} review</span>}
-                    {blocked > 0 && <span className="text-forge-red">{blocked} blocked</span>}
-                    {warnings > 0 && <span className="text-forge-yellow">{warnings} warning{warnings === 1 ? '' : 's'}</span>}
+                    {blocked > 0 && <span className="text-mn-red">{blocked} blocked</span>}
+                    {warnings > 0 && <span className="text-mn-yellow">{warnings} warning{warnings === 1 ? '' : 's'}</span>}
                     {running === 0 && review === 0 && blocked === 0 && warnings === 0 && <span>{group.members.length} waiting/active</span>}
                   </div>
                 </button>
@@ -462,16 +462,16 @@ export function Sidebar({
 
         <div className="mt-4 space-y-4">
           {repositories.length === 0 && workspaces.length === 0 && (
-            <div className="rounded-xl bg-forge-orange/5 border border-dashed border-forge-orange/20 px-4 py-5 text-center">
-              <FolderPlus className="mx-auto mb-2 h-6 w-6 text-forge-orange opacity-60" />
-              <p className="text-ui-label font-bold text-forge-text">No repositories</p>
-              <p className="mt-1 text-ui-caption text-forge-muted leading-relaxed">
-                Add repo roots and scan in <span className="text-forge-text font-semibold">Settings</span> to start creating workspaces.
+            <div className="rounded-xl bg-mn-orange/5 border border-dashed border-mn-orange/20 px-4 py-5 text-center">
+              <FolderPlus className="mx-auto mb-2 h-6 w-6 text-mn-orange opacity-60" />
+              <p className="text-ui-label font-bold text-mn-text">No repositories</p>
+              <p className="mt-1 text-ui-caption text-mn-muted leading-relaxed">
+                Add repo roots and scan in <span className="text-mn-text font-semibold">Settings</span> to start creating workspaces.
               </p>
               <Button 
                 variant="outline" 
                 size="xs" 
-                className="mt-3 w-full border-forge-orange/30 text-forge-orange hover:bg-forge-orange/10"
+                className="mt-3 w-full border-mn-orange/30 text-mn-orange hover:bg-mn-orange/10"
                 onClick={onAddRepository}
               >
                 Add Root Path
@@ -493,13 +493,13 @@ export function Sidebar({
                     repoHoverTimeoutRef.current = setTimeout(() => setHoveredRepoId(null), 150);
                   }}
                 >
-                  <div className="shrink-0 text-forge-muted/40 group-hover:text-forge-muted/70 transition-colors">
+                  <div className="shrink-0 text-mn-muted/40 group-hover:text-mn-muted/70 transition-colors">
                     {isCollapsed ? <ChevronRight className="w-3 h-3" strokeWidth={2.5} /> : <ChevronDown className="w-3 h-3" strokeWidth={2.5} />}
                   </div>
-                  <p className="text-xs font-semibold uppercase tracking-widest text-forge-muted/50 truncate group-hover:text-forge-muted/80 transition-colors">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-mn-muted/50 truncate group-hover:text-mn-muted/80 transition-colors">
                     {repo.name}
                   </p>
-                  <span className="text-ui-caption text-forge-muted/35">({repo.workspaces.length})</span>
+                  <span className="text-ui-caption text-mn-muted/35">({repo.workspaces.length})</span>
                   {hoveredRepoId === repo.id && !repo.id.startsWith('name:') && (
                     <Tooltip content="Remove Repository" side="top">
                       <Button
@@ -509,7 +509,7 @@ export function Sidebar({
                           e.stopPropagation();
                           onRemoveRepository(repo.id);
                         }}
-                        className="text-forge-muted hover:bg-forge-red/15 hover:text-forge-red"
+                        className="text-mn-muted hover:bg-mn-red/15 hover:text-mn-red"
                       >
                         <Trash2 className="w-3 h-3" />
                       </Button>
@@ -526,7 +526,7 @@ export function Sidebar({
                           : repo.id;
                         onNewWorkspace(id);
                       }}
-                      className="ml-auto text-forge-muted hover:bg-forge-surface-overlay hover:text-forge-orange"
+                      className="ml-auto text-mn-muted hover:bg-mn-surface-overlay hover:text-mn-orange"
                     >
                       <Plus className="w-3 h-3" />
                     </Button>
@@ -535,7 +535,7 @@ export function Sidebar({
                 {!isCollapsed && (
                   <div className="space-y-1">
                     {repo.workspaces.length === 0 ? (
-                      <p className="px-2 py-1 text-xs text-forge-muted leading-relaxed">No workspaces in this repo yet. Use + to create one.</p>
+                      <p className="px-2 py-1 text-xs text-mn-muted leading-relaxed">No workspaces in this repo yet. Use + to create one.</p>
                     ) : (
                       repo.workspaces.map((workspace) => {
                         const isSelected = workspace.id === selectedWorkspaceId;
@@ -581,20 +581,20 @@ export function Sidebar({
                                 title="Select for batch send"
                               >
                                 {batchSelected.has(workspace.id)
-                                  ? <CheckSquare className="w-3.5 h-3.5 text-forge-green" />
-                                  : <SquareIcon className="w-3.5 h-3.5 text-forge-muted" />}
+                                  ? <CheckSquare className="w-3.5 h-3.5 text-mn-cyan" />
+                                  : <SquareIcon className="w-3.5 h-3.5 text-mn-muted" />}
                               </button>
                             }
                             suffix={
                               (attention?.unreadCount || hasConflict) ? (
                                 <div className="flex items-center gap-1">
                                   {!!attention?.unreadCount && (
-                                    <span className="shrink-0 rounded-full bg-forge-orange px-1.5 py-0.5 text-[10px] font-bold text-white shadow-amber-glow">
+                                    <span className="shrink-0 rounded-full bg-mn-orange px-1.5 py-0.5 text-[10px] font-bold text-white shadow-amber-glow">
                                       {attention.unreadCount > 99 ? '99+' : attention.unreadCount}
                                     </span>
                                   )}
                                   {hasConflict && (
-                                    <span className="shrink-0 rounded-full border border-forge-red/30 bg-forge-red/15 px-1.5 py-0.5 text-[10px] font-bold text-forge-red">
+                                    <span className="shrink-0 rounded-full border border-mn-red/30 bg-mn-red/15 px-1.5 py-0.5 text-[10px] font-bold text-mn-red">
                                       conflict
                                     </span>
                                   )}
@@ -610,7 +610,7 @@ export function Sidebar({
                                     e.stopPropagation();
                                     onArchiveWorkspace(workspace.id);
                                   }}
-                                  className="text-forge-muted hover:bg-forge-green/15 hover:text-forge-green"
+                                  className="text-mn-muted hover:bg-mn-cyan/15 hover:text-mn-cyan"
                                 >
                                   {isArchived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
                                 </Button>
@@ -630,7 +630,7 @@ export function Sidebar({
       </div>
       {workspaceContextMenu && (
         <div
-          className="fixed z-50 min-w-[220px] rounded-panel border border-forge-border bg-forge-surface p-1 shadow-forge-panel"
+          className="fixed z-50 min-w-[220px] rounded-panel border border-mn-border bg-mn-surface p-1 shadow-mn-panel"
           style={{ left: workspaceContextMenu.x, top: workspaceContextMenu.y }}
           onClick={(event) => event.stopPropagation()}
         >
@@ -690,20 +690,20 @@ export function Sidebar({
 
       {/* Orchestrator panel */}
       {orchestrator !== null && (
-        <div className="shrink-0 border-t border-forge-border/60 bg-forge-surface/80 px-3 py-2.5">
+        <div className="shrink-0 border-t border-mn-border/60 bg-mn-surface/80 px-3 py-2.5">
           <div className="flex items-center justify-between mb-1.5">
             <div className="flex items-center gap-1.5">
-              <Brain className={`h-3.5 w-3.5 ${orchestrator.enabled ? 'text-forge-orange animate-pulse' : 'text-forge-muted'}`} />
-              <span className="text-sm font-semibold text-forge-text">Orchestrator</span>
+              <Brain className={`h-3.5 w-3.5 ${orchestrator.enabled ? 'text-mn-orange animate-pulse' : 'text-mn-muted'}`} />
+              <span className="text-sm font-semibold text-mn-text">Orchestrator</span>
               {orchestrator.enabled && (
-                <span className="text-xs px-1.5 py-0.5 rounded-full bg-forge-orange/15 text-forge-orange border border-forge-orange/20">
+                <span className="text-xs px-1.5 py-0.5 rounded-full bg-mn-orange/15 text-mn-orange border border-mn-orange/20">
                   Opus
                 </span>
               )}
             </div>
             <button
               onClick={() => void handleOrchestratorToggle(!orchestrator.enabled)}
-              className={`relative h-5 w-9 rounded-full transition-colors ${orchestrator.enabled ? 'bg-forge-orange' : 'bg-forge-border'}`}
+              className={`relative h-5 w-9 rounded-full transition-colors ${orchestrator.enabled ? 'bg-mn-orange' : 'bg-mn-border'}`}
               title={orchestrator.enabled ? 'Disable orchestrator' : 'Enable orchestrator'}
             >
               <span
@@ -713,18 +713,18 @@ export function Sidebar({
           </div>
           {orchestrator.enabled && (
             <div className="space-y-1">
-              <p className="text-xs text-forge-muted">
-                Brain: <span className="text-forge-text font-mono">{orchestrator.model}</span> · change in Settings → AI Models
+              <p className="text-xs text-mn-muted">
+                Brain: <span className="text-mn-text font-mono">{orchestrator.model}</span> · change in Settings → AI Models
               </p>
               {orchestrator.lastRunAt && (
-                <p className="text-xs text-forge-muted">
+                <p className="text-xs text-mn-muted">
                   Last run: {orchestrator.lastRunAt} · {orchestrator.lastActions.length} action(s)
                 </p>
               )}
               {orchestrator.lastActions.length > 0 && (
                 <div className="mt-1 space-y-0.5">
                   {orchestrator.lastActions.slice(0, 3).map((a, i) => (
-                    <p key={i} className="text-xs text-forge-muted truncate">
+                    <p key={i} className="text-xs text-mn-muted truncate">
                       → {a.action} {a.workspaceId ?? ''}{a.prompt ? `: ${a.prompt.slice(0, 40)}…` : ''}
                     </p>
                   ))}
@@ -733,22 +733,22 @@ export function Sidebar({
             </div>
           )}
           {!orchestrator.enabled && (
-            <p className="text-xs text-forge-muted">Monitors agents every 5 min · configure model in Settings</p>
+            <p className="text-xs text-mn-muted">Monitors agents every 5 min · configure model in Settings</p>
           )}
         </div>
       )}
 
       {batchMode && (
-        <div className="shrink-0 border-t border-forge-border bg-forge-surface px-3 py-3">
+        <div className="shrink-0 border-t border-mn-border bg-mn-surface px-3 py-3">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-semibold text-forge-green">
+            <span className="text-sm font-semibold text-mn-cyan">
               {batchSelected.size} workspace{batchSelected.size === 1 ? '' : 's'} selected
             </span>
             <Button
               variant="ghost"
               size="icon-xs"
               onClick={clearBatch}
-              className="text-forge-muted hover:text-forge-text"
+              className="text-mn-muted hover:text-mn-text"
             >
               <XIcon className="h-3.5 w-3.5" />
             </Button>
@@ -759,13 +759,13 @@ export function Sidebar({
             onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void sendBatch(); }}
             placeholder="Send prompt to all selected agents…"
             rows={3}
-            className="border-forge-border bg-black/30 px-2.5 py-2 text-sm placeholder:text-forge-muted/60 focus:border-forge-green/40"
+            className="border-mn-border bg-black/30 px-2.5 py-2 text-sm placeholder:text-mn-muted/60 focus:border-mn-cyan/40"
           />
           <Button
             variant="default"
             onClick={() => void sendBatch()}
             disabled={batchSending || !batchPrompt.trim()}
-            className="mt-2 w-full bg-forge-green/90 text-white hover:bg-forge-green"
+            className="mt-2 w-full bg-mn-cyan/90 text-white hover:bg-mn-cyan"
           >
             <Send className="h-3 w-3" />
             {batchSending ? 'Sending…' : `Send to ${batchSelected.size}`}
@@ -774,7 +774,7 @@ export function Sidebar({
       )}
 
       {/* Bottom: secondary nav */}
-      <div className="shrink-0 flex items-center gap-0.5 px-3 py-2 border-t border-forge-border/40">
+      <div className="shrink-0 flex items-center gap-0.5 px-3 py-2 border-t border-mn-border/40">
         {secondaryNav.map(renderNavBtn)}
       </div>
     </aside>
@@ -792,7 +792,7 @@ function SidebarContextAction({
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center rounded-btn px-2.5 py-1.5 text-left text-xs text-forge-text hover:bg-forge-surface-overlay"
+      className="flex w-full items-center rounded-btn px-2.5 py-1.5 text-left text-xs text-mn-text hover:bg-mn-surface-overlay"
     >
       {children}
     </button>

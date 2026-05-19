@@ -27,7 +27,7 @@ pub fn run_workspace_hooks(
     phase: HookPhase,
     context: &Value,
 ) -> Result<(), String> {
-    let config = workspace_script_service::get_workspace_forge_config(state, workspace_id)?;
+    let config = workspace_script_service::get_workspace_mnemonic_config(state, workspace_id)?;
     let commands = match hook_kind {
         "run" => match phase {
             HookPhase::Pre => config.hooks.pre_run,
@@ -90,7 +90,7 @@ pub fn run_workspace_hooks(
         let output = std::process::Command::new("zsh")
             .args(["-lc", command])
             .current_dir(&root)
-            .env("FORGE_HOOK_CONTEXT", &ctx_json)
+            .env("MNEMONIC_HOOK_CONTEXT", &ctx_json)
             .output();
 
         let ended = now_secs();
@@ -152,7 +152,7 @@ pub fn get_workspace_hook_inspector(
     state: &AppState,
     workspace_id: &str,
 ) -> Result<WorkspaceHookInspector, String> {
-    let config = workspace_script_service::get_workspace_forge_config(state, workspace_id)?;
+    let config = workspace_script_service::get_workspace_mnemonic_config(state, workspace_id)?;
     let risky_scripts_enabled =
         settings_repository::get_value(&state.db, "allow_risky_workspace_scripts")?
             .map(|value| value == "true")

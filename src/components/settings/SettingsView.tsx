@@ -70,7 +70,7 @@ function SettingsGroup({
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <section className="overflow-hidden rounded-xl border border-forge-border bg-forge-card/70">
+    <section className="overflow-hidden rounded-xl border border-mn-border bg-mn-card/70">
       <button
         type="button"
         className="flex w-full items-center justify-between gap-4 px-4 py-2.5 text-left transition-colors hover:bg-white/[0.03]"
@@ -81,19 +81,19 @@ function SettingsGroup({
           <div className="flex items-center gap-2">
             <ChevronDown
               className={cn(
-                'h-4 w-4 shrink-0 text-forge-muted transition-transform',
+                'h-4 w-4 shrink-0 text-mn-muted transition-transform',
                 !open && '-rotate-90',
               )}
             />
-            <h2 className="text-[14px] font-bold text-forge-text">{title}</h2>
+            <h2 className="text-[14px] font-bold text-mn-text">{title}</h2>
           </div>
-          <p className="mt-0.5 pl-6 text-[11px] text-forge-muted">{description}</p>
+          <p className="mt-0.5 pl-6 text-[11px] text-mn-muted">{description}</p>
         </div>
-        <span className="shrink-0 rounded-full border border-forge-border bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-forge-muted">
+        <span className="shrink-0 rounded-full border border-mn-border bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-mn-muted">
           {meta}
         </span>
       </button>
-      <div className={cn('space-y-4 border-t border-forge-border/60 bg-forge-bg/20 p-3', !open && 'hidden')}>
+      <div className={cn('space-y-4 border-t border-mn-border/60 bg-mn-bg/20 p-3', !open && 'hidden')}>
         {children}
       </div>
     </section>
@@ -136,18 +136,18 @@ function AgentSetupCard({
   };
 
   return (
-    <div className="rounded-xl border border-forge-border bg-forge-card p-4">
+    <div className="rounded-xl border border-mn-border bg-mn-card p-4">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <PlugZap className="h-4 w-4 text-forge-green" />
-            <h2 className="text-[14px] font-bold text-forge-text">Agent Setup</h2>
+            <PlugZap className="h-4 w-4 text-mn-cyan" />
+            <h2 className="text-[14px] font-bold text-mn-text">Agent Setup</h2>
           </div>
-          <p className="mt-0.5 text-[11px] text-forge-muted">
+          <p className="mt-0.5 text-[11px] text-mn-muted">
             Pick the providers you actually use. Fresh installs default to detected tools only.
           </p>
         </div>
-        <span className="shrink-0 rounded-full border border-forge-border bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-forge-muted">
+        <span className="shrink-0 rounded-full border border-mn-border bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-mn-muted">
           {activeProviderIds.size} active
         </span>
       </div>
@@ -161,13 +161,13 @@ function AgentSetupCard({
               key={provider.id}
               className={cn(
                 'rounded-lg border p-3 transition-colors',
-                active ? 'border-forge-green/35 bg-forge-green/5' : 'border-forge-border/70 bg-black/10',
+                active ? 'border-mn-cyan/35 bg-mn-cyan/5' : 'border-mn-border/70 bg-black/10',
               )}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="truncate text-[12px] font-semibold text-forge-text">{provider.shortLabel}</p>
-                  <p className={cn('mt-0.5 text-[10px]', detected ? 'text-forge-green' : 'text-forge-muted')}>
+                  <p className="truncate text-[12px] font-semibold text-mn-text">{provider.shortLabel}</p>
+                  <p className={cn('mt-0.5 text-[10px]', detected ? 'text-mn-cyan' : 'text-mn-muted')}>
                     {detected ? 'Detected' : provider.id === 'openai' ? 'Manual' : 'Missing'}
                   </p>
                 </div>
@@ -177,14 +177,14 @@ function AgentSetupCard({
                   onCheckedChange={(checked) => void updateProvider(provider.id, checked)}
                 />
               </div>
-              <p className="mt-2 line-clamp-2 text-[10px] leading-snug text-forge-muted">{provider.setupHint}</p>
+              <p className="mt-2 line-clamp-2 text-[10px] leading-snug text-mn-muted">{provider.setupHint}</p>
             </div>
           );
         })}
       </div>
 
       {(message || error || !hasSavedPreference) && (
-        <p className="mt-3 text-[12px] text-forge-muted">
+        <p className="mt-3 text-[12px] text-mn-muted">
           {message || error || 'Using detected defaults until you toggle a provider.'}
         </p>
       )}
@@ -218,19 +218,19 @@ function AiModelsCard({ activeProviderIds }: { activeProviderIds: ReadonlySet<Ag
     }
   };
 
-  if (!modelSettings) return <div className="text-[12px] text-forge-muted">Loading model settings…</div>;
+  if (!modelSettings) return <div className="text-[12px] text-mn-muted">Loading model settings…</div>;
 
   return (
-    <div className="rounded-xl border border-forge-border bg-forge-card p-4">
+    <div className="rounded-xl border border-mn-border bg-mn-card p-4">
       <div className="mb-4">
-        <h2 className="text-[14px] font-bold text-forge-text">AI Models</h2>
-        <p className="text-[11px] text-forge-muted mt-0.5">Choose defaults for active providers. Disabled provider values stay saved but hidden.</p>
+        <h2 className="text-[14px] font-bold text-mn-text">AI Models</h2>
+        <p className="text-[11px] text-mn-muted mt-0.5">Choose defaults for active providers. Disabled provider values stay saved but hidden.</p>
       </div>
       <div className="space-y-4">
         {activeProviderIds.has('claude_code') && (
         <div>
-          <label className="text-[12px] font-semibold text-forge-text block mb-1">Claude default model</label>
-          <p className="text-[11px] text-forge-muted mb-2">Used when starting or focusing Claude chats.</p>
+          <label className="text-[12px] font-semibold text-mn-text block mb-1">Claude default model</label>
+          <p className="text-[11px] text-mn-muted mb-2">Used when starting or focusing Claude chats.</p>
           <Select
             value={modelSettings.claudeAgentModel || modelSettings.agentModel}
             onValueChange={(v) => setModelSettings({ ...modelSettings, claudeAgentModel: v, agentModel: v })}
@@ -249,8 +249,8 @@ function AiModelsCard({ activeProviderIds }: { activeProviderIds: ReadonlySet<Ag
         )}
         {activeProviderIds.has('codex') && (
         <div>
-          <label className="text-[12px] font-semibold text-forge-text block mb-1">Codex default model</label>
-          <p className="text-[11px] text-forge-muted mb-2">Used when starting or focusing Codex chats.</p>
+          <label className="text-[12px] font-semibold text-mn-text block mb-1">Codex default model</label>
+          <p className="text-[11px] text-mn-muted mb-2">Used when starting or focusing Codex chats.</p>
           <Select
             value={modelSettings.codexAgentModel}
             onValueChange={(v) => setModelSettings({ ...modelSettings, codexAgentModel: v })}
@@ -269,8 +269,8 @@ function AiModelsCard({ activeProviderIds }: { activeProviderIds: ReadonlySet<Ag
         )}
         {activeProviderIds.has('kimi_code') && (
         <div>
-          <label className="text-[12px] font-semibold text-forge-text block mb-1">Kimi default model</label>
-          <p className="text-[11px] text-forge-muted mb-2">Used when starting or focusing Kimi chats.</p>
+          <label className="text-[12px] font-semibold text-mn-text block mb-1">Kimi default model</label>
+          <p className="text-[11px] text-mn-muted mb-2">Used when starting or focusing Kimi chats.</p>
           <Select
             value={modelSettings.kimiAgentModel}
             onValueChange={(v) => setModelSettings({ ...modelSettings, kimiAgentModel: v })}
@@ -288,13 +288,13 @@ function AiModelsCard({ activeProviderIds }: { activeProviderIds: ReadonlySet<Ag
         </div>
         )}
         {!activeProviderIds.has('claude_code') && !activeProviderIds.has('codex') && !activeProviderIds.has('kimi_code') && (
-          <p className="rounded-lg border border-forge-border/70 bg-black/10 p-3 text-[12px] text-forge-muted">
+          <p className="rounded-lg border border-mn-border/70 bg-black/10 p-3 text-[12px] text-mn-muted">
             No CLI agent providers are active. Enable Claude, Codex, or Kimi in Agent Setup to edit their model defaults.
           </p>
         )}
         <div>
-          <label className="text-[12px] font-semibold text-forge-text block mb-1">Orchestrator brain model</label>
-          <p className="text-[11px] text-forge-muted mb-2">Used by the Orchestrator to analyse workspaces and dispatch agent prompts. Supports Claude and OpenAI models.</p>
+          <label className="text-[12px] font-semibold text-mn-text block mb-1">Orchestrator brain model</label>
+          <p className="text-[11px] text-mn-muted mb-2">Used by the Orchestrator to analyse workspaces and dispatch agent prompts. Supports Claude and OpenAI models.</p>
           <Select value={modelSettings.orchestratorModel} onValueChange={(v) => setModelSettings({ ...modelSettings, orchestratorModel: v })}>
             <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -303,7 +303,7 @@ function AiModelsCard({ activeProviderIds }: { activeProviderIds: ReadonlySet<Ag
           </Select>
         </div>
       </div>
-      {message && <p className="mt-3 text-[12px] text-forge-muted">{message}</p>}
+      {message && <p className="mt-3 text-[12px] text-mn-muted">{message}</p>}
       <Button type="button" size="sm" onClick={() => void handleSave()} disabled={saving} className="mt-4">
         <Save className="w-3.5 h-3.5" />
         {saving ? 'Saving…' : 'Save model settings'}
@@ -322,15 +322,15 @@ function RepoContextCard() {
   }, []);
 
   return (
-    <div className="rounded-xl border border-forge-border bg-forge-card p-4">
+    <div className="rounded-xl border border-mn-border bg-mn-card p-4">
       <div className="mb-4">
-        <h2 className="text-[14px] font-bold text-forge-text">Repo Context</h2>
-        <p className="text-[11px] text-forge-muted mt-0.5">Inject repo map and diffs into the first prompt of each session.</p>
+        <h2 className="text-[14px] font-bold text-mn-text">Repo Context</h2>
+        <p className="text-[11px] text-mn-muted mt-0.5">Inject repo map and diffs into the first prompt of each session.</p>
       </div>
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-[12px] text-forge-text/70">Inject context into prompts</p>
-          <p className="text-[11px] text-forge-muted mt-0.5">Sends repo map + diffs at session start</p>
+          <p className="text-[12px] text-mn-text/70">Inject context into prompts</p>
+          <p className="text-[11px] text-mn-muted mt-0.5">Sends repo map + diffs at session start</p>
         </div>
         <Switch
           checked={contextEnabled}
@@ -365,8 +365,8 @@ function TrustAndSafetyCard() {
   const updateAutoRebase = (checked: boolean) => {
     setAutoRebaseEnabled(checked);
     setMessage(checked
-      ? 'Auto-rebase enabled. Forge will periodically rebase active workspaces and report conflicts.'
-      : 'Auto-rebase disabled. Forge will not change branches in the background.');
+      ? 'Auto-rebase enabled. Mnemonic will periodically rebase active workspaces and report conflicts.'
+      : 'Auto-rebase disabled. Mnemonic will not change branches in the background.');
     void setSetting('auto_rebase_enabled', checked ? 'true' : 'false').catch((err) => {
       setMessage(err instanceof Error ? err.message : String(err));
     });
@@ -375,7 +375,7 @@ function TrustAndSafetyCard() {
   const updateAutoSetup = (checked: boolean) => {
     setAutoSetupEnabled(checked);
     setMessage(checked
-      ? 'Automatic setup enabled for new Forge-managed workspaces.'
+      ? 'Automatic setup enabled for new Mnemonic-managed workspaces.'
       : 'Automatic setup disabled. New workspaces will wait for manual setup.');
     void setSetting('auto_run_setup_enabled', checked ? 'true' : 'false').catch((err) => {
       setMessage(err instanceof Error ? err.message : String(err));
@@ -385,7 +385,7 @@ function TrustAndSafetyCard() {
   const updateRiskyScripts = (checked: boolean) => {
     setRiskyScriptsEnabled(checked);
     setMessage(checked
-      ? 'Risky workspace scripts enabled. Forge will still record every configured script execution in activity.'
+      ? 'Risky workspace scripts enabled. Mnemonic will still record every configured script execution in activity.'
       : 'Risky workspace scripts blocked. Destructive setup/run/teardown commands will not start.');
     void setSetting('allow_risky_workspace_scripts', checked ? 'true' : 'false').catch((err) => {
       setMessage(err instanceof Error ? err.message : String(err));
@@ -393,39 +393,39 @@ function TrustAndSafetyCard() {
   };
 
   return (
-    <div className="rounded-xl border border-forge-border bg-forge-card p-4">
+    <div className="rounded-xl border border-mn-border bg-mn-card p-4">
       <div className="mb-4">
-        <h2 className="text-[14px] font-bold text-forge-text">Trust & Safety</h2>
-        <p className="text-[11px] text-forge-muted mt-0.5">Keep background Git behavior explicit and inspectable.</p>
+        <h2 className="text-[14px] font-bold text-mn-text">Trust & Safety</h2>
+        <p className="text-[11px] text-mn-muted mt-0.5">Keep background Git behavior explicit and inspectable.</p>
       </div>
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-[12px] text-forge-text/80">Auto-rebase active workspaces</p>
-          <p className="text-[11px] text-forge-muted mt-0.5">
-            Off by default. When enabled, Forge periodically rebases active workspaces onto their base branch and surfaces conflicts.
+          <p className="text-[12px] text-mn-text/80">Auto-rebase active workspaces</p>
+          <p className="text-[11px] text-mn-muted mt-0.5">
+            Off by default. When enabled, Mnemonic periodically rebases active workspaces onto their base branch and surfaces conflicts.
           </p>
         </div>
         <Switch checked={autoRebaseEnabled} onCheckedChange={updateAutoRebase} />
       </div>
-      <div className="mt-4 flex items-center justify-between gap-4 border-t border-forge-border/60 pt-4">
+      <div className="mt-4 flex items-center justify-between gap-4 border-t border-mn-border/60 pt-4">
         <div>
-          <p className="text-[12px] text-forge-text/80">Auto-run setup for new workspaces</p>
-          <p className="text-[11px] text-forge-muted mt-0.5">
-            Off by default. When enabled, Forge immediately runs `.forge/config.json` setup commands after creating a managed worktree.
+          <p className="text-[12px] text-mn-text/80">Auto-run setup for new workspaces</p>
+          <p className="text-[11px] text-mn-muted mt-0.5">
+            Off by default. When enabled, Mnemonic immediately runs `.mnemonic/config.json` setup commands after creating a managed worktree.
           </p>
         </div>
         <Switch checked={autoSetupEnabled} onCheckedChange={updateAutoSetup} />
       </div>
-      <div className="mt-4 flex items-center justify-between gap-4 border-t border-forge-border/60 pt-4">
+      <div className="mt-4 flex items-center justify-between gap-4 border-t border-mn-border/60 pt-4">
         <div>
-          <p className="text-[12px] text-forge-text/80">Allow risky workspace scripts</p>
-          <p className="text-[11px] text-forge-muted mt-0.5">
+          <p className="text-[12px] text-mn-text/80">Allow risky workspace scripts</p>
+          <p className="text-[11px] text-mn-muted mt-0.5">
             Off by default. When disabled, configured setup/run/teardown scripts that look destructive are blocked and logged.
           </p>
         </div>
         <Switch checked={riskyScriptsEnabled} onCheckedChange={updateRiskyScripts} />
       </div>
-      {message && <p className="mt-3 text-[12px] text-forge-muted">{message}</p>}
+      {message && <p className="mt-3 text-[12px] text-mn-muted">{message}</p>}
     </div>
   );
 }
@@ -476,16 +476,16 @@ function NotificationSettingsCard() {
   };
 
   return (
-    <div className="rounded-xl border border-forge-border bg-forge-card p-4">
+    <div className="rounded-xl border border-mn-border bg-mn-card p-4">
       <div className="mb-4">
-        <h2 className="text-[14px] font-bold text-forge-text">Notifications</h2>
-        <p className="text-[11px] text-forge-muted mt-0.5">Control notification severity and dedupe/folding behavior.</p>
+        <h2 className="text-[14px] font-bold text-mn-text">Notifications</h2>
+        <p className="text-[11px] text-mn-muted mt-0.5">Control notification severity and dedupe/folding behavior.</p>
       </div>
 
       <div className="space-y-4">
         <div>
-          <label className="text-[12px] font-semibold text-forge-text block mb-1">Minimum notification level</label>
-          <p className="text-[11px] text-forge-muted mb-2">Notifications below this level are ignored.</p>
+          <label className="text-[12px] font-semibold text-mn-text block mb-1">Minimum notification level</label>
+          <p className="text-[11px] text-mn-muted mb-2">Notifications below this level are ignored.</p>
           <Select value={minLevel} onValueChange={(value) => saveMinLevel(value as 'info' | 'warn' | 'error')}>
             <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -497,14 +497,14 @@ function NotificationSettingsCard() {
         </div>
 
         <div>
-          <label className="text-[12px] font-semibold text-forge-text block mb-1">Dedupe window (seconds)</label>
-          <p className="text-[11px] text-forge-muted mb-2">Repeated notifications in this window are folded into one item.</p>
+          <label className="text-[12px] font-semibold text-mn-text block mb-1">Dedupe window (seconds)</label>
+          <p className="text-[11px] text-mn-muted mb-2">Repeated notifications in this window are folded into one item.</p>
           <div className="flex items-center gap-2">
             <input
               value={dedupeSecondsInput}
               onChange={(event) => setDedupeSecondsInput(event.target.value)}
               onBlur={saveDedupeSeconds}
-              className="h-9 w-28 rounded-md border border-forge-border bg-forge-bg px-2 text-[12px] text-forge-text focus:border-forge-blue/40 focus:outline-none"
+              className="h-9 w-28 rounded-md border border-mn-border bg-mn-bg px-2 text-[12px] text-mn-text focus:border-mn-blue/40 focus:outline-none"
               inputMode="numeric"
               aria-label="Notification dedupe seconds"
             />
@@ -515,7 +515,7 @@ function NotificationSettingsCard() {
         </div>
       </div>
 
-      {message && <p className="mt-3 text-[12px] text-forge-muted">{message}</p>}
+      {message && <p className="mt-3 text-[12px] text-mn-muted">{message}</p>}
     </div>
   );
 }
@@ -533,9 +533,9 @@ export function SettingsView({
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
-      <div className="px-6 pt-6 pb-4 border-b border-forge-border shrink-0">
-        <h1 className="text-[22px] font-bold text-forge-text tracking-tight">Settings</h1>
-        <p className="text-[12px] text-forge-muted mt-1.5">Open a section only when you need to edit it.</p>
+      <div className="px-6 pt-6 pb-4 border-b border-mn-border shrink-0">
+        <h1 className="text-[22px] font-bold text-mn-text tracking-tight">Settings</h1>
+        <p className="text-[12px] text-mn-muted mt-1.5">Open a section only when you need to edit it.</p>
       </div>
 
       <div className="flex-1 overflow-y-auto p-5 space-y-3">

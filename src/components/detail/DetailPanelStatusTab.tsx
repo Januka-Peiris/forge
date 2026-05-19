@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { GitPullRequest, Loader2, Network, Plus } from 'lucide-react';
-import type { ActivityItem as ForgeActivityItem, Workspace } from '../../types';
+import type { ActivityItem as MnemonicActivityItem, Workspace } from '../../types';
 import type { WorkspaceCockpitSummary } from '../../lib/workspace-cockpit';
 import { cockpitToneClass } from '../../lib/workspace-cockpit';
 import { CockpitLine, ChecksShippingPanel, LifecyclePanel, ShippingGuidePanel } from './DetailPanelCockpitSections';
 import { ChangeUnderstandingPanel, ReviewBlockersPanel, SimpleNextActionsPanel } from './DetailPanelInsightsSections';
 import { ActivitySection, SafeIterationSection } from './DetailPanelWorkflowSections';
-import type { ForgeWorkspaceConfig } from '../../types/workspace-scripts';
+import type { MnemonicWorkspaceConfig } from '../../types/workspace-scripts';
 import type { WorkspaceReadiness } from '../../types/workspace-readiness';
 import type { WorkspacePrDraft, WorkspacePrStatus } from '../../types/pr-draft';
 import type { WorkspaceCheckpoint, WorkspaceCheckpointRestorePlan } from '../../types/checkpoint';
@@ -25,7 +25,7 @@ interface DetailPanelStatusTabProps {
   statusDepth: 'simple' | 'deep';
   onStatusDepthChange: (depth: 'simple' | 'deep') => void;
   changedFileCount: number;
-  forgeConfig: ForgeWorkspaceConfig | null;
+  mnemonicConfig: MnemonicWorkspaceConfig | null;
   workspacePrStatus: WorkspacePrStatus | null;
   workspacePrDraft: WorkspacePrDraft | null;
   prDraftRefreshing: boolean;
@@ -60,7 +60,7 @@ interface DetailPanelStatusTabProps {
   canCreatePr: boolean;
   activityOpen: boolean;
   timelineLoading: boolean;
-  timelineItems: ForgeActivityItem[];
+  timelineItems: MnemonicActivityItem[];
   activityRows: Array<{ label: string; time: string }>;
   timelineExpanded: boolean;
   onOpenReviewFile?: (path?: string) => void;
@@ -104,14 +104,14 @@ function artifactKindLabel(kind: CoordinationArtifactKind): string {
 function statusClass(status: CoordinationArtifact['status']): string {
   switch (status) {
     case 'active':
-      return 'border-forge-blue/30 bg-forge-blue/10 text-forge-blue';
+      return 'border-mn-blue/30 bg-mn-blue/10 text-mn-blue';
     case 'resolved':
-      return 'border-forge-green/30 bg-forge-green/10 text-forge-green';
+      return 'border-mn-cyan/30 bg-mn-cyan/10 text-mn-cyan';
     case 'dismissed':
-      return 'border-forge-muted/30 bg-white/5 text-forge-muted';
+      return 'border-mn-muted/30 bg-white/5 text-mn-muted';
     case 'draft':
     default:
-      return 'border-forge-yellow/30 bg-forge-yellow/10 text-forge-yellow';
+      return 'border-mn-yellow/30 bg-mn-yellow/10 text-mn-yellow';
   }
 }
 
@@ -173,14 +173,14 @@ function CoordinationArtifactsSection({ workspace }: { workspace: Workspace }) {
 
   return (
     <div className="px-4 pb-4">
-      <div className="rounded-xl border border-forge-border bg-forge-card/70 p-3">
+      <div className="rounded-xl border border-mn-border bg-mn-card/70 p-3">
         <div className="mb-2 flex items-center justify-between gap-2">
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <Network className="h-3.5 w-3.5 text-forge-orange" />
-              <p className="text-xs font-semibold uppercase tracking-widest text-forge-muted">Coordination artifacts</p>
+              <Network className="h-3.5 w-3.5 text-mn-orange" />
+              <p className="text-xs font-semibold uppercase tracking-widest text-mn-muted">Coordination artifacts</p>
             </div>
-            <p className="mt-0.5 text-xs text-forge-muted">Group handoffs for this federated task.</p>
+            <p className="mt-0.5 text-xs text-mn-muted">Group handoffs for this federated task.</p>
           </div>
           <Button type="button" variant="ghost" size="xs" onClick={() => void loadArtifacts()} disabled={loading || saving}>
             {loading ? 'Loading…' : 'Refresh'}
@@ -189,66 +189,66 @@ function CoordinationArtifactsSection({ workspace }: { workspace: Workspace }) {
 
         <div className="space-y-2">
           {artifacts.length === 0 && !loading ? (
-            <p className="rounded-lg border border-dashed border-forge-border/70 bg-black/10 px-2 py-2 text-xs text-forge-muted">
+            <p className="rounded-lg border border-dashed border-mn-border/70 bg-black/10 px-2 py-2 text-xs text-mn-muted">
               No coordination artifacts yet. Add one when another repo needs a structured handoff.
             </p>
           ) : null}
 
           {artifacts.slice(0, 5).map((artifact) => (
-            <div key={artifact.id} className="rounded-lg border border-forge-border/60 bg-black/10 px-2 py-2">
+            <div key={artifact.id} className="rounded-lg border border-mn-border/60 bg-black/10 px-2 py-2">
               <div className="flex items-start gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="rounded border border-forge-border/60 bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-forge-muted">
+                    <span className="rounded border border-mn-border/60 bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-mn-muted">
                       {artifactKindLabel(artifact.artifactKind)}
                     </span>
                     <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${statusClass(artifact.status)}`}>
                       {artifact.status}
                     </span>
                   </div>
-                  <p className="mt-1 text-sm font-semibold text-forge-text">{artifact.title}</p>
+                  <p className="mt-1 text-sm font-semibold text-mn-text">{artifact.title}</p>
                 </div>
               </div>
-              <p className="mt-1 text-xs text-forge-muted">
-                Source <span className="font-mono text-forge-text/80">{artifact.sourceWorkspaceId}</span>
+              <p className="mt-1 text-xs text-mn-muted">
+                Source <span className="font-mono text-mn-text/80">{artifact.sourceWorkspaceId}</span>
                 {artifact.targetWorkspaceId ? (
-                  <> · Target <span className="font-mono text-forge-text/80">{artifact.targetWorkspaceId}</span></>
+                  <> · Target <span className="font-mono text-mn-text/80">{artifact.targetWorkspaceId}</span></>
                 ) : (
                   <> · Group-wide</>
                 )}
               </p>
               {artifact.body.trim() && (
-                <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-forge-text/80">{artifact.body}</p>
+                <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-mn-text/80">{artifact.body}</p>
               )}
             </div>
           ))}
 
           {artifacts.length > 5 && (
-            <p className="text-[11px] text-forge-muted">Showing 5 of {artifacts.length} artifacts.</p>
+            <p className="text-[11px] text-mn-muted">Showing 5 of {artifacts.length} artifacts.</p>
           )}
         </div>
 
-        <div className="mt-3 space-y-2 rounded-lg border border-forge-border/60 bg-black/10 p-2">
+        <div className="mt-3 space-y-2 rounded-lg border border-mn-border/60 bg-black/10 p-2">
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-            <label className="space-y-1 text-xs text-forge-muted">
+            <label className="space-y-1 text-xs text-mn-muted">
               Kind
               <select
                 value={artifactKind}
                 onChange={(event) => setArtifactKind(event.target.value as CoordinationArtifactKind)}
-                className="w-full rounded border border-forge-border bg-forge-card px-2 py-1 text-xs text-forge-text"
+                className="w-full rounded border border-mn-border bg-mn-card px-2 py-1 text-xs text-mn-text"
               >
                 {COORDINATION_ARTIFACT_KIND_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
             </label>
-            <label className="space-y-1 text-xs text-forge-muted">
-              Target workspace ID <span className="text-forge-muted/60">optional</span>
+            <label className="space-y-1 text-xs text-mn-muted">
+              Target workspace ID <span className="text-mn-muted/60">optional</span>
               <input
                 value={targetWorkspaceId}
                 onChange={(event) => setTargetWorkspaceId(event.target.value)}
                 placeholder="Group-wide"
-                className="w-full rounded border border-forge-border bg-forge-card px-2 py-1 text-xs text-forge-text placeholder:text-forge-muted/50"
+                className="w-full rounded border border-mn-border bg-mn-card px-2 py-1 text-xs text-mn-text placeholder:text-mn-muted/50"
               />
             </label>
           </div>
@@ -256,16 +256,16 @@ function CoordinationArtifactsSection({ workspace }: { workspace: Workspace }) {
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             placeholder="Artifact title"
-            className="w-full rounded border border-forge-border bg-forge-card px-2 py-1 text-xs text-forge-text placeholder:text-forge-muted/50"
+            className="w-full rounded border border-mn-border bg-mn-card px-2 py-1 text-xs text-mn-text placeholder:text-mn-muted/50"
           />
           <textarea
             value={body}
             onChange={(event) => setBody(event.target.value)}
             placeholder="Brief handoff details…"
             rows={2}
-            className="w-full resize-none rounded border border-forge-border bg-forge-card px-2 py-1 text-xs text-forge-text placeholder:text-forge-muted/50"
+            className="w-full resize-none rounded border border-mn-border bg-mn-card px-2 py-1 text-xs text-mn-text placeholder:text-mn-muted/50"
           />
-          {error && <p className="text-xs text-forge-red">{error}</p>}
+          {error && <p className="text-xs text-mn-red">{error}</p>}
           <div className="flex justify-end">
             <Button type="button" variant="default" size="xs" disabled={!canCreate} onClick={() => void handleCreate()}>
               {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
@@ -284,7 +284,7 @@ export function DetailPanelStatusTab({
   statusDepth,
   onStatusDepthChange,
   changedFileCount,
-  forgeConfig,
+  mnemonicConfig,
   workspacePrStatus,
   workspacePrDraft,
   prDraftRefreshing,
@@ -349,11 +349,11 @@ export function DetailPanelStatusTab({
   return (
     <>
       <div className="px-4 py-4">
-        <div className="rounded-xl border border-forge-border bg-forge-card/70 p-3">
+        <div className="rounded-xl border border-mn-border bg-mn-card/70 p-3">
           <div className="mb-2 flex items-center justify-between gap-2">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-forge-muted">Workspace Cockpit</p>
-              <p className="mt-0.5 text-xs text-forge-muted">Simple by default, deeper when needed.</p>
+              <p className="text-xs font-semibold uppercase tracking-widest text-mn-muted">Workspace Cockpit</p>
+              <p className="mt-0.5 text-xs text-mn-muted">Simple by default, deeper when needed.</p>
             </div>
             <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-semibold ${cockpitToneClass(cockpit.nextActionTone)}`}>
               {cockpit.nextAction}
@@ -365,18 +365,18 @@ export function DetailPanelStatusTab({
             <CockpitLine label="Checks" value={cockpit.checkSummary} />
             <CockpitLine label="Git / PR" value={`${cockpit.prSummary} · ${cockpit.trustSummary}`} />
           </div>
-          <div className="mt-3 inline-flex rounded-lg border border-forge-border bg-black/20 p-0.5">
+          <div className="mt-3 inline-flex rounded-lg border border-mn-border bg-black/20 p-0.5">
             <button
               type="button"
               onClick={() => onStatusDepthChange('simple')}
-              className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${statusDepth === 'simple' ? 'bg-white/10 text-forge-text' : 'text-forge-muted hover:text-forge-text'}`}
+              className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${statusDepth === 'simple' ? 'bg-white/10 text-mn-text' : 'text-mn-muted hover:text-mn-text'}`}
             >
               Simple
             </button>
             <button
               type="button"
               onClick={() => onStatusDepthChange('deep')}
-              className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${statusDepth === 'deep' ? 'bg-white/10 text-forge-text' : 'text-forge-muted hover:text-forge-text'}`}
+              className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${statusDepth === 'deep' ? 'bg-white/10 text-mn-text' : 'text-mn-muted hover:text-mn-text'}`}
             >
               Deep
             </button>
@@ -386,8 +386,8 @@ export function DetailPanelStatusTab({
 
       {workspace.currentTask.trim() && (
         <div className="px-4 pb-4">
-          <p className="text-xs font-semibold text-forge-muted uppercase tracking-widest mb-1.5">Current Task</p>
-          <p className="text-sm text-forge-text/90 leading-relaxed">{workspace.currentTask}</p>
+          <p className="text-xs font-semibold text-mn-muted uppercase tracking-widest mb-1.5">Current Task</p>
+          <p className="text-sm text-mn-text/90 leading-relaxed">{workspace.currentTask}</p>
         </div>
       )}
 
@@ -396,7 +396,7 @@ export function DetailPanelStatusTab({
       {statusDepth === 'simple' ? (
         <SimpleNextActionsPanel
           changedFiles={changedFileCount}
-          checkCount={forgeConfig?.run.length ?? 0}
+          checkCount={mnemonicConfig?.run.length ?? 0}
           prStatus={workspacePrStatus}
           prDraft={workspacePrDraft}
           draftRefreshing={prDraftRefreshing}
@@ -416,7 +416,7 @@ export function DetailPanelStatusTab({
       ) : (
         <>
           <ChecksShippingPanel
-            config={forgeConfig}
+            config={mnemonicConfig}
             readiness={workspaceReadiness}
             prStatus={workspacePrStatus}
             portCount={workspacePortCount}
@@ -445,7 +445,7 @@ export function DetailPanelStatusTab({
 
           <ShippingGuidePanel
             changedFiles={changedFileCount}
-            runCount={forgeConfig?.run.length ?? 0}
+            runCount={mnemonicConfig?.run.length ?? 0}
             prStatus={workspacePrStatus}
             prDraft={workspacePrDraft}
             draftRefreshing={prDraftRefreshing}
@@ -482,13 +482,13 @@ export function DetailPanelStatusTab({
 
           {workspaceHookInspector && workspaceHookInspector.recentEvents.length > 0 && (
             <div className="px-4 pb-4">
-              <div className="rounded-xl border border-forge-border bg-forge-card/70 p-3">
-                <p className="text-xs font-semibold uppercase tracking-widest text-forge-muted">Recent hook / guardrail activity</p>
+              <div className="rounded-xl border border-mn-border bg-mn-card/70 p-3">
+                <p className="text-xs font-semibold uppercase tracking-widest text-mn-muted">Recent hook / guardrail activity</p>
                 <div className="mt-2 space-y-1">
                   {workspaceHookInspector.recentEvents.slice(0, 4).map((event) => (
-                    <div key={event.id} className="rounded border border-forge-border/50 bg-black/10 px-2 py-1.5 text-xs">
-                      <p className="text-forge-text/85">{event.label ?? event.event}</p>
-                      <p className="text-[11px] text-forge-muted">{event.status} · {event.detail ?? 'No additional details'}</p>
+                    <div key={event.id} className="rounded border border-mn-border/50 bg-black/10 px-2 py-1.5 text-xs">
+                      <p className="text-mn-text/85">{event.label ?? event.event}</p>
+                      <p className="text-[11px] text-mn-muted">{event.status} · {event.detail ?? 'No additional details'}</p>
                     </div>
                   ))}
                 </div>
@@ -512,20 +512,20 @@ export function DetailPanelStatusTab({
 
           <div className="px-4 pb-4">
             {workspace.prStatus && workspace.prNumber ? (
-              <div className="flex items-center gap-2.5 rounded-lg bg-forge-green/10 border border-forge-green/20 px-3 py-2.5">
-                <GitPullRequest className="w-4 h-4 text-forge-green shrink-0" />
+              <div className="flex items-center gap-2.5 rounded-lg bg-mn-cyan/10 border border-mn-cyan/20 px-3 py-2.5">
+                <GitPullRequest className="w-4 h-4 text-mn-cyan shrink-0" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-forge-green">PR #{workspace.prNumber}</p>
-                  <p className="text-xs text-forge-muted capitalize">{workspace.prStatus}</p>
+                  <p className="text-sm font-semibold text-mn-cyan">PR #{workspace.prNumber}</p>
+                  <p className="text-xs text-mn-muted capitalize">{workspace.prStatus}</p>
                 </div>
               </div>
             ) : (
               <>
-                {prError && <p className="text-xs text-forge-red mb-2">{prError}</p>}
+                {prError && <p className="text-xs text-mn-red mb-2">{prError}</p>}
                 <button
                   disabled={prCreating || !canCreatePr}
                   onClick={onCreatePr}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-forge-green/15 hover:bg-forge-green/25 disabled:opacity-50 text-sm font-semibold text-forge-green border border-forge-green/20 transition-colors"
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-mn-cyan/15 hover:bg-mn-cyan/25 disabled:opacity-50 text-sm font-semibold text-mn-cyan border border-mn-cyan/20 transition-colors"
                 >
                   {prCreating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <GitPullRequest className="w-3.5 h-3.5" />}
                   {prCreating ? 'Creating PR…' : 'Create Pull Request'}

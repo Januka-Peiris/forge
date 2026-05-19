@@ -6,7 +6,7 @@ import { WorkspaceTerminal } from './components/terminal/WorkspaceTerminal';
 import { listActivity } from './lib/tauri-api/activity';
 import { openDeepLink } from './lib/tauri-api/deep-links';
 import { getSettings } from './lib/tauri-api/settings';
-import { forgeWarn } from './lib/forge-log';
+import { mnWarn } from './lib/mn-log';
 import { measureAsync, perfMark, perfMeasure } from './lib/perf';
 import { listWorkspaces, openInCursor as openWorkspaceInCursorById } from './lib/tauri-api/workspaces';
 import { runWorkspaceSetup } from './lib/tauri-api/workspace-scripts';
@@ -24,12 +24,12 @@ import { useAppKeyboardShortcuts } from './lib/hooks/useAppKeyboardShortcuts';
 import { useEnvironmentCheck } from './lib/hooks/useEnvironmentCheck';
 import { useAppLayoutState } from './lib/hooks/useAppLayoutState';
 import { useAppNotifications } from './lib/hooks/useAppNotifications';
-import { useForgeWorkspaces } from './lib/hooks/useForgeWorkspaces';
+import { useMnemonicWorkspaces } from './lib/hooks/useMnemonicWorkspaces';
 import { useAppRepositories } from './lib/hooks/useAppRepositories';
 import { useWorkspaceAttentionState } from './lib/hooks/useWorkspaceAttentionState';
 
 
-const APP_BOOT_MARK = 'forge:app-boot';
+const APP_BOOT_MARK = 'mn:app-boot';
 perfMark(APP_BOOT_MARK);
 
 const ReviewCockpit = lazy(() => import('./components/reviews/ReviewCockpit').then((module) => ({ default: module.ReviewCockpit })));
@@ -110,7 +110,7 @@ export default function App() {
     setDisplayedWorkspaces,
     setSelectedId,
     workspaces,
-  } = useForgeWorkspaces({
+  } = useMnemonicWorkspaces({
     onActivityItems: setActivityItems,
     onError: setError,
     onViewWorkspaces: () => setView('workspaces'),
@@ -196,17 +196,17 @@ export default function App() {
         if (settingsResult.status === 'fulfilled') {
           setSettingsState(settingsResult.value);
         } else {
-          forgeWarn('startup', 'settings load failed', { err: settingsResult.reason });
+          mnWarn('startup', 'settings load failed', { err: settingsResult.reason });
         }
         if (activityResult.status === 'fulfilled') {
           setActivityItems(activityResult.value);
         } else {
-          forgeWarn('startup', 'activity load failed', { err: activityResult.reason });
+          mnWarn('startup', 'activity load failed', { err: activityResult.reason });
         }
         if (relationshipsResult.status === 'fulfilled') {
           setRepositoryRelationships(relationshipsResult.value.relationships);
         } else {
-          forgeWarn('startup', 'repository relationship load failed', { err: relationshipsResult.reason });
+          mnWarn('startup', 'repository relationship load failed', { err: relationshipsResult.reason });
         }
         scheduleAttentionLoad();
       });
@@ -235,7 +235,7 @@ export default function App() {
       window.setTimeout(() => setDeepLinkNotice(null), 4000);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      forgeWarn('deep-link', 'open failed', { url, err: message });
+      mnWarn('deep-link', 'open failed', { url, err: message });
       setDeepLinkNotice(`Deep link failed: ${message}`);
     }
   }, [loadBackendState, setSelectedId]);
@@ -243,12 +243,12 @@ export default function App() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
-    const encoded = params.get('forgeDeepLink');
+    const encoded = params.get('mnDeepLink');
     if (encoded) {
       void handleDeepLinkUrl(encoded);
     }
-    const hash = window.location.hash.startsWith('#forgeDeepLink=')
-      ? window.location.hash.slice('#forgeDeepLink='.length)
+    const hash = window.location.hash.startsWith('#mnDeepLink=')
+      ? window.location.hash.slice('#mnDeepLink='.length)
       : null;
     if (hash) {
       void handleDeepLinkUrl(decodeURIComponent(hash));
@@ -344,7 +344,7 @@ export default function App() {
 
     if (view === 'reviews') {
       return (
-        <Suspense fallback={<div className="flex flex-1 items-center justify-center text-ui-label text-forge-muted">Loading Review Cockpit…</div>}>
+        <Suspense fallback={<div className="flex flex-1 items-center justify-center text-ui-label text-mn-muted">Loading Review Cockpit…</div>}>
           <ReviewCockpit
             workspace={selected}
             selectedPath={selectedReviewPath}
@@ -380,7 +380,7 @@ export default function App() {
   const effectiveSidebarWidth = sidebarCollapsed ? collapsedRailWidth : sidebarWidth;
 
   return (
-    <div className="h-[100dvh] flex flex-col overflow-hidden bg-forge-bg text-forge-text antialiased selection:bg-forge-green/25">
+    <div className="h-[100dvh] flex flex-col overflow-hidden bg-mn-bg text-mn-text antialiased selection:bg-mn-cyan/25">
       <AppFrame
         collapsedRailWidth={collapsedRailWidth}
         inspector={(
@@ -509,21 +509,21 @@ export default function App() {
                 setSelectedId(toast.workspaceId);
                 dismissAttentionToast(toast.id);
               }}
-              className="pointer-events-auto rounded-xl border border-forge-blue/25 bg-forge-bg/95 px-3 py-2 text-left shadow-xl shadow-black/30 backdrop-blur hover:bg-forge-surface"
+              className="pointer-events-auto rounded-xl border border-mn-blue/25 bg-mn-bg/95 px-3 py-2 text-left shadow-xl shadow-black/30 backdrop-blur hover:bg-mn-surface"
             >
               <div className="flex items-center justify-between gap-3">
-                <span className="text-ui-label font-bold text-forge-blue">New workspace output</span>
-                <span className="text-ui-caption text-forge-muted">Open</span>
+                <span className="text-ui-label font-bold text-mn-blue">New workspace output</span>
+                <span className="text-ui-caption text-mn-muted">Open</span>
               </div>
-              <p className="mt-1 truncate text-ui-label font-semibold text-forge-text">{toast.workspaceName}</p>
-              <p className="mt-0.5 truncate text-ui-label text-forge-muted">{toast.text}</p>
+              <p className="mt-1 truncate text-ui-label font-semibold text-mn-text">{toast.workspaceName}</p>
+              <p className="mt-0.5 truncate text-ui-label text-mn-muted">{toast.text}</p>
             </button>
           ))}
         </div>
       )}
 
       {deepLinkNotice && (
-        <div className="fixed right-4 top-4 z-50 max-w-[420px] rounded-xl border border-forge-blue/25 bg-forge-bg/95 px-4 py-3 text-ui-label font-semibold text-forge-text shadow-xl shadow-black/30 backdrop-blur">
+        <div className="fixed right-4 top-4 z-50 max-w-[420px] rounded-xl border border-mn-blue/25 bg-mn-bg/95 px-4 py-3 text-ui-label font-semibold text-mn-text shadow-xl shadow-black/30 backdrop-blur">
           {deepLinkNotice}
         </div>
       )}

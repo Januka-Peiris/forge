@@ -206,7 +206,7 @@ pub fn format_prompt_preamble(primary_path: &str, linked: &[AgentContextWorktree
         return String::new();
     }
     let mut lines = vec![
-        "Forge linked repository context:".to_string(),
+        "Mnemonic linked repository context:".to_string(),
         format!("- Primary writable workspace: {primary_path}"),
         "- Linked repositories are read-only context unless the user explicitly asks to edit them:"
             .to_string(),
@@ -259,7 +259,7 @@ fn build_session_context_string_from_preview(
             .unwrap_or_else(|_| "unknown".to_string())
     };
 
-    let mut parts: Vec<String> = vec![format!("[FORGE CONTEXT — {}]", branch_info)];
+    let mut parts: Vec<String> = vec![format!("[MNEMONIC CONTEXT — {}]", branch_info)];
 
     if let Some(warn) = &preview.warning {
         parts.push(format!("⚠ {}", warn));
@@ -289,7 +289,7 @@ fn build_session_context_string_from_preview(
         }
     }
 
-    parts.push("[END FORGE CONTEXT]".to_string());
+    parts.push("[END MNEMONIC CONTEXT]".to_string());
 
     Some(parts.join("\n\n"))
 }
