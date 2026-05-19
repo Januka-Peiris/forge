@@ -26,7 +26,7 @@ use tauri::Manager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let _ = env_logger::Builder::from_env(
-        env_logger::Env::default().default_filter_or("forge_lib=info,info"),
+        env_logger::Env::default().default_filter_or("mnemonic_lib=info,info"),
     )
     .format_timestamp_secs()
     .try_init();
@@ -37,8 +37,8 @@ pub fn run() {
         .setup(|app| {
             let state =
                 AppState::initialize(app.handle()).map_err(Box::<dyn std::error::Error>::from)?;
-            log::info!(target: "forge_lib", "SQLite database path: {}", state.db.path().display());
-            println!("Forge SQLite database: {}", state.db.path().display());
+            log::info!(target: "mnemonic_lib", "SQLite database path: {}", state.db.path().display());
+            println!("Mnemonic SQLite database: {}", state.db.path().display());
 
             // Prune stale rows in a background thread so startup never blocks.
             // VACUUM is intentionally omitted — it rewrites the entire DB and holds
@@ -46,7 +46,7 @@ pub fn run() {
             let bg_db = state.db.clone();
             std::thread::spawn(move || {
                 if let Err(err) = bg_db.prune_old_data() {
-                    log::warn!(target: "forge_lib", "Background prune failed: {err}");
+                    log::warn!(target: "mnemonic_lib", "Background prune failed: {err}");
                 }
             });
 
@@ -68,7 +68,7 @@ pub fn run() {
                 }
             }
             if let Err(error) = coordinator_service::reconcile_all_active_runs_on_startup(&state) {
-                log::warn!(target: "forge_lib", "Failed to reconcile active coordinator runs on startup: {error}");
+                log::warn!(target: "mnemonic_lib", "Failed to reconcile active coordinator runs on startup: {error}");
             }
 
             rebase_service::start_auto_rebase_loop(state.clone());
@@ -212,7 +212,7 @@ pub fn run() {
             workspace_ports::list_workspace_ports,
             workspace_ports::open_workspace_port,
             workspace_ports::kill_workspace_port_process,
-            workspace_scripts::get_workspace_forge_config,
+            workspace_scripts::get_workspace_mnemonic_config,
             workspace_scripts::run_workspace_setup,
             workspace_scripts::start_workspace_run_command,
             workspace_scripts::restart_workspace_run_command,
@@ -235,5 +235,5 @@ pub fn run() {
             workspace_tasks::get_workspace_task_snapshot,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Forge Tauri application");
+        .expect("error while running Mnemonic Tauri application");
 }

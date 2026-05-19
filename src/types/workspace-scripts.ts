@@ -3,22 +3,22 @@ import type { TerminalSession } from './terminal';
 import type { AgentProfile } from './agent-profile';
 import type { RepositoryRelationshipKind } from './repository-relationship';
 
-export interface ForgeWorkspaceConfig {
+export interface MnemonicWorkspaceConfig {
   exists: boolean;
   path?: string | null;
   setup: string[];
   run: string[];
   teardown: string[];
-  hooks: ForgeWorkspaceHooks;
+  hooks: MnemonicWorkspaceHooks;
   agentProfiles: AgentProfile[];
-  mcpServers: ForgeMcpServerConfig[];
+  mcpServers: MnemonicMcpServerConfig[];
   mcpWarnings: string[];
-  repositoryRelationships: ForgeRepositoryRelationshipConfig[];
+  repositoryRelationships: MnemonicRepositoryRelationshipConfig[];
   repositoryRelationshipWarnings: string[];
   warning?: string | null;
 }
 
-export interface ForgeWorkspaceHooks {
+export interface MnemonicWorkspaceHooks {
   preRun: string[];
   postRun: string[];
   preTool: string[];
@@ -27,7 +27,7 @@ export interface ForgeWorkspaceHooks {
   postShip: string[];
 }
 
-export interface ForgeMcpServerConfig {
+export interface MnemonicMcpServerConfig {
   id: string;
   transport: string;
   command?: string | null;
@@ -37,7 +37,7 @@ export interface ForgeMcpServerConfig {
   enabled: boolean;
 }
 
-export interface ForgeRepositoryRelationshipConfig {
+export interface MnemonicRepositoryRelationshipConfig {
   to: string;
   kind: RepositoryRelationshipKind | string;
   label?: string | null;

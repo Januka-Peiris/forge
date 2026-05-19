@@ -88,7 +88,7 @@ fn scan_workspace_ports(
     ports.sort_by_key(|port| port.port);
     ports.dedup_by_key(|port| (port.port, port.pid));
     log::debug!(
-        target: "forge_lib",
+        target: "mnemonic_lib",
         "scan_workspace_ports workspace={} ports={} elapsed_ms={}",
         workspace_id,
         ports.len(),

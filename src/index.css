@@ -8,27 +8,27 @@
 
 @layer base {
   :root {
-    --background: 214 14% 8%;
-    --foreground: 0 0% 98%;
-    --card: 214 12% 13%;
-    --card-foreground: 0 0% 98%;
-    --popover: 214 14% 11%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 155 100% 43%;
-    --primary-foreground: 155 100% 98%;
-    --secondary: 38 92% 50%;
-    --secondary-foreground: 38 100% 98%;
-    --tertiary: 142 69% 58%;
-    --tertiary-foreground: 144 100% 98%;
-    --muted: 214 12% 15%;
-    --muted-foreground: 0 0% 55%;
-    --accent: 214 12% 15%;
-    --accent-foreground: 0 0% 98%;
+    --background: 228 25% 5%;
+    --foreground: 0 0% 94%;
+    --card: 224 22% 9%;
+    --card-foreground: 0 0% 94%;
+    --popover: 224 22% 8%;
+    --popover-foreground: 0 0% 94%;
+    --primary: 195 100% 50%;
+    --primary-foreground: 195 100% 98%;
+    --secondary: 24 94% 53%;
+    --secondary-foreground: 24 100% 98%;
+    --tertiary: 271 81% 56%;
+    --tertiary-foreground: 271 100% 98%;
+    --muted: 224 18% 12%;
+    --muted-foreground: 220 10% 52%;
+    --accent: 224 18% 12%;
+    --accent-foreground: 0 0% 94%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 214 14% 20%;
-    --input: 214 14% 20%;
-    --ring: 155 100% 43%;
+    --border: 224 18% 16%;
+    --input: 224 18% 16%;
+    --ring: 195 100% 50%;
     --radius: 0.72rem;
     --radius-panel: 0.92rem;
     --radius-button: 0.78rem;
@@ -52,7 +52,7 @@
     background: linear-gradient(
       to bottom,
       transparent,
-      rgba(34, 197, 94, 0.03) 50%,
+      rgba(0, 212, 255, 0.03) 50%,
       transparent
     );
     background-size: 100% 200%;
@@ -66,8 +66,8 @@
   }
   body {
     margin: 0;
-    background-color: #0f1317;
-    color: #fafafa;
+    background-color: #0a0c10;
+    color: #f0f0f0;
     font-family: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;

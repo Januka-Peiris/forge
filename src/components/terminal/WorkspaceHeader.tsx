@@ -70,31 +70,31 @@ export function WorkspaceHeader({
   const localAgentProfiles = agentProfiles.filter((profile) => (profile.agent === 'local_llm' || profile.local) && isAgentProfileActive(profile, activeProviderIds));
 
   return (
-    <div className="shrink-0 border-b border-forge-border bg-forge-bg/95 backdrop-blur-md">
+    <div className="shrink-0 border-b border-mn-border bg-mn-bg/95 backdrop-blur-md">
       <div className="flex h-11 items-center justify-between gap-2 px-4">
         <div className="flex min-w-0 flex-1 items-center gap-1.5 text-[11px]">
           <div className="flex min-w-0 shrink items-center gap-1.5">
-            <Box className="h-3.5 w-3.5 shrink-0 text-forge-muted" />
-            <span className="truncate font-bold text-forge-text">{workspace.repo}</span>
+            <Box className="h-3.5 w-3.5 shrink-0 text-mn-muted" />
+            <span className="truncate font-bold text-mn-text">{workspace.repo}</span>
           </div>
 
-          <ChevronRight className="h-3 w-3 shrink-0 text-forge-dim" />
+          <ChevronRight className="h-3 w-3 shrink-0 text-mn-dim" />
 
           <div className="flex min-w-0 shrink items-center gap-1">
-            <GitBranch className="h-3.5 w-3.5 shrink-0 text-forge-muted" />
-            <span className="truncate font-mono text-forge-text/80">{workspace.branch}</span>
+            <GitBranch className="h-3.5 w-3.5 shrink-0 text-mn-muted" />
+            <span className="truncate font-mono text-mn-text/80">{workspace.branch}</span>
           </div>
 
-          <span className="shrink-0 text-forge-border/40">/</span>
+          <span className="shrink-0 text-mn-border/40">/</span>
 
-          <h1 className="shrink-0 truncate font-bold text-forge-green">{workspace.name}</h1>
+          <h1 className="shrink-0 truncate font-bold text-mn-cyan">{workspace.name}</h1>
 
           {workspace.currentTask.trim() && (
             <>
-              <ChevronRight className="h-3 w-3 shrink-0 text-forge-dim" />
-              <div className="flex min-w-0 items-center gap-1.5 overflow-hidden text-forge-muted">
+              <ChevronRight className="h-3 w-3 shrink-0 text-mn-dim" />
+              <div className="flex min-w-0 items-center gap-1.5 overflow-hidden text-mn-muted">
                 <Layout className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate font-medium text-forge-green/90">{workspace.currentTask}</span>
+                <span className="truncate font-medium text-mn-cyan/90">{workspace.currentTask}</span>
               </div>
             </>
           )}
@@ -106,28 +106,28 @@ export function WorkspaceHeader({
               <Button
                 variant="ghost"
                 size="icon-xs"
-                className="h-7 w-7 text-forge-muted hover:text-forge-text"
+                className="h-7 w-7 text-mn-muted hover:text-mn-text"
                 title="Coordinator and Orchestrator guidance"
               >
                 <HelpCircle className="h-3.5 w-3.5" />
               </Button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-[360px] max-w-[calc(100vw-24px)]">
-              <p className="text-xs font-bold uppercase tracking-widest text-forge-muted">How to use Forge modes</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-mn-muted">How to use Mnemonic modes</p>
               <div className="mt-2 space-y-2 text-xs leading-relaxed">
                 <div>
-                  <p className="font-semibold text-forge-text">Direct agent mode</p>
-                  <p className="text-forge-muted">Best for focused edits, debugging, and quick iterations in a single chat or terminal tab.</p>
+                  <p className="font-semibold text-mn-text">Direct agent mode</p>
+                  <p className="text-mn-muted">Best for focused edits, debugging, and quick iterations in a single chat or terminal tab.</p>
                 </div>
                 <div>
-                  <p className="font-semibold text-forge-text">Coordinator mode</p>
-                  <p className="text-forge-muted">Use when work needs planning + delegation. A brain profile decides next steps, coder workers execute, and timeline cards summarize review-ready outcomes.</p>
+                  <p className="font-semibold text-mn-text">Coordinator mode</p>
+                  <p className="text-mn-muted">Use when work needs planning + delegation. A brain profile decides next steps, coder workers execute, and timeline cards summarize review-ready outcomes.</p>
                 </div>
                 <div>
-                  <p className="font-semibold text-forge-text">Orchestrator</p>
-                  <p className="text-forge-muted">Background app-level automation that watches workspace state and can trigger follow-up coordination/checks. Use for continuous flow across multiple workspaces.</p>
+                  <p className="font-semibold text-mn-text">Orchestrator</p>
+                  <p className="text-mn-muted">Background app-level automation that watches workspace state and can trigger follow-up coordination/checks. Use for continuous flow across multiple workspaces.</p>
                 </div>
-                <div className="rounded border border-forge-border/60 bg-black/10 px-2 py-1 text-[11px] text-forge-dim">
+                <div className="rounded border border-mn-border/60 bg-black/10 px-2 py-1 text-[11px] text-mn-dim">
                   Tip: Start with Direct for small tasks, Coordinator for multi-step goals, and Orchestrator for ongoing automation.
                 </div>
               </div>
@@ -140,7 +140,7 @@ export function WorkspaceHeader({
               size="xs"
               disabled={busy}
               onClick={() => onCreateTerminal('agent', 'claude_code', 'Claude')}
-              className="h-7 px-2 text-[11px] border-forge-green/20 text-forge-green hover:bg-forge-green/5"
+              className="h-7 px-2 text-[11px] border-mn-cyan/20 text-mn-cyan hover:bg-mn-cyan/5"
             >
               <span className="hidden sm:inline">New Claude</span>
               <span className="sm:hidden">+ Claude</span>
@@ -149,7 +149,7 @@ export function WorkspaceHeader({
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon-xs" className="h-7 w-7 text-forge-muted hover:text-forge-text">
+              <Button variant="ghost" size="icon-xs" className="h-7 w-7 text-mn-muted hover:text-mn-text">
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -197,13 +197,13 @@ export function WorkspaceHeader({
                 onSelect={onInterruptFocusedAgent}
                 title="Sends interrupt (e.g. Ctrl+C) to the focused terminal tab"
               >
-                <Square className="h-3.5 w-3.5 text-forge-yellow" /> Interrupt terminal
+                <Square className="h-3.5 w-3.5 text-mn-yellow" /> Interrupt terminal
               </DropdownMenuItem>
               {onOpenInCursor && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
-                    className="text-forge-blue focus:text-forge-blue"
+                    className="text-mn-blue focus:text-mn-blue"
                     onSelect={() => {
                       try {
                         onOpenInCursor();
@@ -231,9 +231,9 @@ export function WorkspaceHeader({
                 key={session.id}
                 type="button"
                 onClick={() => onAttachTerminal(session)}
-                className={`group flex max-w-[200px] shrink-0 items-center gap-2 rounded-md px-2.5 py-1 text-left transition-all ${active ? 'bg-white/10 text-forge-text ring-1 ring-white/20' : 'text-forge-muted hover:bg-white/5 hover:text-forge-text/85'}`}
+                className={`group flex max-w-[200px] shrink-0 items-center gap-2 rounded-md px-2.5 py-1 text-left transition-all ${active ? 'bg-white/10 text-mn-text ring-1 ring-white/20' : 'text-mn-muted hover:bg-white/5 hover:text-mn-text/85'}`}
               >
-                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${session.status === 'running' ? 'bg-forge-blue animate-pulse' : 'bg-forge-muted/50'}`} />
+                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${session.status === 'running' ? 'bg-mn-blue animate-pulse' : 'bg-mn-muted/50'}`} />
                 <span className="truncate text-[11px] font-bold">{title}</span>
                 <span
                   role="button"
@@ -242,7 +242,7 @@ export function WorkspaceHeader({
                     event.stopPropagation();
                     onCloseTerminal(session.id);
                   }}
-                  className="rounded p-0.5 text-forge-muted opacity-0 group-hover:opacity-100 hover:bg-white/10 hover:text-forge-text"
+                  className="rounded p-0.5 text-mn-muted opacity-0 group-hover:opacity-100 hover:bg-white/10 hover:text-mn-text"
                 >
                   <X className="h-2.5 w-2.5" />
                 </span>
@@ -253,7 +253,7 @@ export function WorkspaceHeader({
       )}
 
       {error && (
-        <div className="mx-4 mt-2 flex items-start gap-2 rounded-lg border border-forge-red/20 bg-forge-red/10 px-3 py-2 text-sm text-forge-red">
+        <div className="mx-4 mt-2 flex items-start gap-2 rounded-lg border border-mn-red/20 bg-mn-red/10 px-3 py-2 text-sm text-mn-red">
           <PlugZap className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>{error}</span>
         </div>
@@ -265,7 +265,7 @@ export function WorkspaceHeader({
             <button
               key={session.id}
               onClick={() => onAttachTerminal(session)}
-              className="shrink-0 rounded border border-forge-border bg-white/5 px-2 py-1 text-xs text-forge-muted hover:bg-white/10"
+              className="shrink-0 rounded border border-mn-border bg-white/5 px-2 py-1 text-xs text-mn-muted hover:bg-white/10"
             >
               {session.title || PROFILE_LABELS[session.profile as TerminalProfile] || session.profile} · {session.status}
             </button>

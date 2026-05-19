@@ -54,14 +54,14 @@ pub fn get_repository_workspace_options(
 
 #[tauri::command]
 pub fn delete_workspace(state: State<'_, AppState>, workspace_id: String) -> Result<(), String> {
-    log::info!(target: "forge_lib", "delete_workspace command: workspace_id={workspace_id}");
+    log::info!(target: "mnemonic_lib", "delete_workspace command: workspace_id={workspace_id}");
     let res = workspace_service::delete_workspace(&state, &workspace_id);
     match &res {
         Ok(()) => {
-            log::info!(target: "forge_lib", "delete_workspace ok: workspace_id={workspace_id}")
+            log::info!(target: "mnemonic_lib", "delete_workspace ok: workspace_id={workspace_id}")
         }
         Err(e) => {
-            log::warn!(target: "forge_lib", "delete_workspace failed: workspace_id={workspace_id} err={e}")
+            log::warn!(target: "mnemonic_lib", "delete_workspace failed: workspace_id={workspace_id} err={e}")
         }
     }
     res

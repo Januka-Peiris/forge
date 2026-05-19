@@ -89,7 +89,7 @@ pub(super) fn reconcile_orphan_running_session(
     }
     let ended_at = terminal_service::timestamp();
     log::info!(
-        target: "forge_lib",
+        target: "mnemonic_lib",
         "reconcile_orphan_running_session: session_id={} workspace_id={} role={} -> {} (no active PTY)",
         latest.id,
         workspace_id,
@@ -134,7 +134,7 @@ pub(super) fn spawn_terminal_reader(
                     }
                 }
                 Err(err) => {
-                    let _ = tx.send(Err(format!("\r\n[forge] terminal read failed: {err}\r\n")));
+                    let _ = tx.send(Err(format!("\r\n[mnemonic] terminal read failed: {err}\r\n")));
                     break;
                 }
             }
@@ -187,7 +187,7 @@ pub(super) fn spawn_terminal_reader(
                                 {
                                     if cost_float >= limit {
                                         let _ = app_handle.emit(
-                                            "forge://workspace-budget-exceeded",
+                                            "mn://workspace-budget-exceeded",
                                             serde_json::json!({
                                                 "workspaceId": workspace_id,
                                                 "cost": cost,
@@ -276,7 +276,7 @@ pub(super) fn spawn_terminal_monitor(
                     &workspace_id,
                     &session_id,
                     "system",
-                    &format!("\r\n[forge] terminal exited: {exit_status:?}\r\n"),
+                    &format!("\r\n[mnemonic] terminal exited: {exit_status:?}\r\n"),
                 );
                 let _ = terminal_repository::mark_prompt_status_by_session(
                     &state.db,
@@ -303,7 +303,7 @@ pub(super) fn spawn_terminal_monitor(
                     &workspace_id,
                     &session_id,
                     "system",
-                    &format!("\r\n[forge] terminal wait failed: {err}\r\n"),
+                    &format!("\r\n[mnemonic] terminal wait failed: {err}\r\n"),
                 );
                 let _ = terminal_repository::mark_prompt_status_by_session(
                     &state.db,

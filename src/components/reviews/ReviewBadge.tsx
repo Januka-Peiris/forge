@@ -7,11 +7,11 @@ interface ReviewBadgeProps {
 
 export function ReviewBadge({ tone, children }: ReviewBadgeProps) {
   const classes = {
-    neutral: 'border-forge-border bg-forge-surface-overlay text-forge-muted',
-    green: 'border-forge-green/25 bg-forge-green/10 text-forge-green',
-    yellow: 'border-forge-yellow/25 bg-forge-yellow/10 text-forge-yellow',
-    red: 'border-forge-red/25 bg-forge-red/10 text-forge-red',
-    blue: 'border-forge-blue/25 bg-forge-blue/10 text-forge-blue',
+    neutral: 'border-mn-border bg-mn-surface-overlay text-mn-muted',
+    green: 'border-mn-cyan/25 bg-mn-cyan/10 text-mn-cyan',
+    yellow: 'border-mn-yellow/25 bg-mn-yellow/10 text-mn-yellow',
+    red: 'border-mn-red/25 bg-mn-red/10 text-mn-red',
+    blue: 'border-mn-blue/25 bg-mn-blue/10 text-mn-blue',
   }[tone];
 
   return (

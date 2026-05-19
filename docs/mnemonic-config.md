@@ -1,6 +1,6 @@
-# Forge Workspace Config
+# Mnemonic Workspace Config
 
-Forge reads optional workspace configuration from:
+Mnemonic reads optional workspace configuration from:
 
 ```text
 .forge/config.json
@@ -8,7 +8,7 @@ Forge reads optional workspace configuration from:
 
 This file is repo/workspace-local and is intended for local orchestration: setup commands, check commands, teardown commands, agent profiles, and MCP metadata.
 
-Forge does **not** treat this as a cloud/platform config. It should stay practical, inspectable, and safe by default.
+Mnemonic does **not** treat this as a cloud/platform config. It should stay practical, inspectable, and safe by default.
 
 ## Minimal Example
 
@@ -39,7 +39,7 @@ Array of shell commands for preparing a workspace.
 Notes:
 
 - Auto-run setup is off by default.
-- Setup can be started manually from Forge.
+- Setup can be started manually from Mnemonic.
 - Risky setup commands are blocked unless explicitly allowed in Settings.
 
 ### `run`
@@ -55,7 +55,7 @@ Array of shell commands for checks, tests, dev servers, or other workspace runs.
 Notes:
 
 - Run commands execute in inspectable terminals.
-- Forge records script execution in activity.
+- Mnemonic records script execution in activity.
 - Risky run commands are blocked unless explicitly allowed in Settings.
 
 ### `teardown`
@@ -136,7 +136,7 @@ Common fields:
 
 ## Local LLM Profiles
 
-Local LLMs are configured as normal agent profiles. Forge does not start or manage model servers for you; it launches the configured local command in an inspectable terminal and passes normal Forge prompt metadata into that session.
+Local LLMs are configured as normal agent profiles. Mnemonic does not start or manage model servers for you; it launches the configured local command in an inspectable terminal and passes normal Mnemonic prompt metadata into that session.
 
 You can create app-wide local profiles from:
 
@@ -144,7 +144,7 @@ You can create app-wide local profiles from:
 Settings → Agent Profiles & Local LLMs
 ```
 
-App-level profiles are saved in Forge settings and are available to every workspace. Repo/workspace `.forge/config.json` profiles can still add or override profiles for a specific codebase. For Ollama, Settings can also discover installed models from `ollama list` so you can pick a local model instead of typing it manually.
+App-level profiles are saved in Mnemonic settings and are available to every workspace. Repo/workspace `.forge/config.json` profiles can still add or override profiles for a specific codebase. For Ollama, Settings can also discover installed models from `ollama list` so you can pick a local model instead of typing it manually.
 
 Use the **Test** action in Settings to validate a local profile before launching it in a workspace. The diagnostic checks command availability, local endpoint metadata, localhost TCP reachability, and Ollama model presence when relevant. It does not send a prompt, pull models, or start/stop servers.
 
@@ -193,17 +193,17 @@ You can override or add repo-specific profiles:
 Notes:
 
 - Local profiles are developer-depth configuration, not cloud-agent hosting.
-- `endpoint` is metadata for visibility and prompt context; Forge does not inject secrets.
+- `endpoint` is metadata for visibility and prompt context; Mnemonic does not inject secrets.
 - `command` and `args` stay visible and inspectable.
 - Common aliases such as `ollama`, `llama.cpp`, `lmstudio`, and `openai-compatible` normalize to `local_llm`.
-- If a local model server is not running, the terminal command will fail visibly instead of Forge silently managing it.
+- If a local model server is not running, the terminal command will fail visibly instead of Mnemonic silently managing it.
 - Profile resolution order is built-in defaults, then app-level profiles, then workspace `.forge/config.json` profiles.
 
 ## MCP Servers
 
 Use `mcpServers`, `mcp_servers`, or `mcp` to describe MCP servers available for this workspace.
 
-This is currently metadata/config discovery. Forge passes enabled MCP server metadata into agent prompt context, but does not yet launch or manage MCP server processes.
+This is currently metadata/config discovery. Mnemonic passes enabled MCP server metadata into agent prompt context, but does not yet launch or manage MCP server processes.
 
 ### Object Form
 
@@ -259,7 +259,7 @@ Validation notes:
 
 ## Repository Relationships
 
-Use `repositoryRelationships` or `repository_relationships` to describe lightweight links to other repositories known to Forge. These links are federation metadata only: each repo keeps its own independent intelligence index, cache, graph, summaries, and workspace overlays.
+Use `repositoryRelationships` or `repository_relationships` to describe lightweight links to other repositories known to Mnemonic. These links are federation metadata only: each repo keeps its own independent intelligence index, cache, graph, summaries, and workspace overlays.
 
 ```json
 {
@@ -281,7 +281,7 @@ Relationship fields:
 - `label`: optional short human-readable description.
 - `notes`: optional longer coordination notes.
 
-Config-managed relationships are read-only in Forge. App-managed relationships can be created and removed from Settings, and Forge merges duplicate app/config relationships by source + target + kind.
+Config-managed relationships are read-only in Mnemonic. App-managed relationships can be created and removed from Settings, and Mnemonic merges duplicate app/config relationships by source + target + kind.
 
 ## Full Example
 

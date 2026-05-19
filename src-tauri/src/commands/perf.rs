@@ -8,7 +8,7 @@ pub fn measure_command<T>(name: &str, f: impl FnOnce() -> T) -> T {
     let elapsed = start.elapsed();
     if elapsed >= SLOW_COMMAND_THRESHOLD {
         log::info!(
-            target: "forge_lib",
+            target: "mnemonic_lib",
             "slow tauri command: {name} took {}ms",
             elapsed.as_millis()
         );

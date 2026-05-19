@@ -39,7 +39,7 @@ pub fn mark_stale_running_abandoned(db: &Database, timestamp: &str) -> Result<()
             UPDATE workspace_runs
             SET status = 'abandoned',
                 finished_at = ?1,
-                error_message = 'Forge restarted before this run completed',
+                error_message = 'Mnemonic restarted before this run completed',
                 updated_at = CURRENT_TIMESTAMP
             WHERE status = 'running'
             "#,

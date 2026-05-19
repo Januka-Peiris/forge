@@ -26,7 +26,7 @@ export function WorkspaceCard({ workspace, isSelected, onSelect }: WorkspaceCard
       suffix={
         <ChevronRight
           className={`w-4 h-4 transition-all ${
-            isSelected ? 'text-forge-green' : 'text-forge-muted opacity-0 group-hover:opacity-100'
+            isSelected ? 'text-mn-cyan' : 'text-mn-muted opacity-0 group-hover:opacity-100'
           }`}
         />
       }

@@ -1,3 +1,3 @@
 fn main() {
-    forge_lib::run();
+    mnemonic_lib::run();
 }

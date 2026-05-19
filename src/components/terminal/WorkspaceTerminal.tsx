@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as ContextMenu from '@radix-ui/react-context-menu';
 import { Terminal as TerminalIcon } from 'lucide-react';
-import type { AgentProfile, DiscoveredRepository, ForgeWorkspaceConfig, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
+import type { AgentProfile, DiscoveredRepository, MnemonicWorkspaceConfig, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
 import type { AgentChatNextAction } from '../../types/agent-chat';
 import type { WorkspaceCoordinatorStatus } from '../../types/coordinator';
 import type { WorkspaceChangedFile } from '../../types/git-review';
@@ -16,7 +16,7 @@ import {
 } from '../../lib/tauri-api/terminal';
 import { CommandApprovalModal, type PendingCommand } from '../modals/CommandApprovalModal';
 import {
-  getWorkspaceForgeConfig,
+  getWorkspaceMnemonicConfig,
 } from '../../lib/tauri-api/workspace-scripts';
 import { listWorkspacePromptTemplates } from '../../lib/tauri-api/prompt-templates';
 import { getWorkspaceAgentContext } from '../../lib/tauri-api/agent-context';
@@ -36,7 +36,7 @@ import {
   defaultWorkspaceAgentProfileId,
   listWorkspaceAgentProfiles,
 } from '../../lib/tauri-api/agent-profiles';
-import { forgeWarn } from '../../lib/forge-log';
+import { mnWarn } from '../../lib/mn-log';
 import { useAgentProfile } from '../../lib/hooks/useAgentProfile';
 import { formatSessionError } from '../../lib/ui-errors';
 import { TerminalPane } from './WorkspaceTerminalPane';
@@ -70,8 +70,8 @@ const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-6';
 const DEFAULT_CODEX_MODEL = 'gpt-5.4';
 const DEFAULT_KIMI_MODEL = 'kimi-for-coding';
 
-const FILE_PREVIEW_WIDTH_KEY = 'forge:file-preview-width';
-const COMPOSER_SETTINGS_KEY = 'forge:composer-settings';
+const FILE_PREVIEW_WIDTH_KEY = 'mn:file-preview-width';
+const COMPOSER_SETTINGS_KEY = 'mn:composer-settings';
 
 const COMPOSER_SETTINGS_DEFAULTS: ComposerSettings = {
   selectedModel: '',
@@ -156,7 +156,7 @@ export function WorkspaceTerminal({
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [, setCommandBusy] = useState<string | null>(null);
-  const [forgeConfig, setForgeConfig] = useState<ForgeWorkspaceConfig | null>(null);
+  const [mnemonicConfig, setMnemonicConfig] = useState<MnemonicWorkspaceConfig | null>(null);
   const [, setPorts] = useState<WorkspacePort[]>([]);
   const [, setPortsBusy] = useState(false);
   const [promptTemplateWarning, setPromptTemplateWarning] = useState<string | null>(null);
@@ -213,7 +213,7 @@ export function WorkspaceTerminal({
 
   const setActionError = useCallback((err: unknown) => {
     const msg = formatSessionError(err);
-    forgeWarn('terminal', 'action error', { err, message: msg });
+    mnWarn('terminal', 'action error', { err, message: msg });
     setError(msg);
   }, []);
   const showCoordinatorToast = useCallback((message: string) => {
@@ -290,12 +290,12 @@ export function WorkspaceTerminal({
   }, [appendOutput, focusedIdRef, getNextSeq, setActionError, setNextSeq, workspaceId]);
 
 
-  const refreshForgeConfig = useCallback(async () => {
+  const refreshMnemonicConfig = useCallback(async () => {
     if (!workspaceId) return;
     try {
-      setForgeConfig(await getWorkspaceForgeConfig(workspaceId));
+      setMnemonicConfig(await getWorkspaceMnemonicConfig(workspaceId));
     } catch (err) {
-      setForgeConfig({
+      setMnemonicConfig({
         exists: false,
         setup: [],
         run: [],
@@ -325,7 +325,7 @@ export function WorkspaceTerminal({
       setPromptTemplates(result.templates);
       setPromptTemplateWarning(result.warning ?? null);
     } catch (err) {
-      forgeWarn('prompt-templates', 'load error', { err });
+      mnWarn('prompt-templates', 'load error', { err });
       setPromptTemplates([]);
       setPromptTemplateWarning(formatSessionError(err));
     }
@@ -336,7 +336,7 @@ export function WorkspaceTerminal({
     try {
       setAgentContext(await getWorkspaceAgentContext(workspaceId));
     } catch (err) {
-      forgeWarn('agent-context', 'load error', { err });
+      mnWarn('agent-context', 'load error', { err });
       setAgentContext(null);
     }
   }, [workspaceId]);
@@ -346,7 +346,7 @@ export function WorkspaceTerminal({
     try {
       setWorkspaceHealth(await getWorkspaceHealth(workspaceId));
     } catch (err) {
-      forgeWarn('workspace-health', 'load error', { err });
+      mnWarn('workspace-health', 'load error', { err });
       setWorkspaceHealth(null);
       setWorkspaceReadiness(null);
     }
@@ -357,7 +357,7 @@ export function WorkspaceTerminal({
     try {
       setWorkspaceReadiness(await getWorkspaceReadiness(workspaceId));
     } catch (err) {
-      forgeWarn('workspace-readiness', 'load error', { err });
+      mnWarn('workspace-readiness', 'load error', { err });
       setWorkspaceReadiness(null);
     }
   }, [workspaceId]);
@@ -372,7 +372,7 @@ export function WorkspaceTerminal({
       setChangedFiles(files);
       setReviewCockpit(cockpit);
     } catch (err) {
-      forgeWarn('agent-workbench', 'load error', { err });
+      mnWarn('agent-workbench', 'load error', { err });
       setChangedFiles([]);
       setReviewCockpit(null);
     }
@@ -399,7 +399,7 @@ export function WorkspaceTerminal({
         };
       });
     } catch (err) {
-      forgeWarn('agent-profiles', 'load error', { err });
+      mnWarn('agent-profiles', 'load error', { err });
       setAgentProfiles([]);
     }
   }, [setSelectedProfileId, workspaceId]);
@@ -421,7 +421,7 @@ export function WorkspaceTerminal({
       const kimiModel = settings.kimiAgentModel || DEFAULT_KIMI_MODEL;
       setProviderModelDefaults({ claude: claudeModel, codex: codexModel, kimi: kimiModel });
     } catch (err) {
-      forgeWarn('agent-models', 'load error', { err });
+      mnWarn('agent-models', 'load error', { err });
     }
   }, []);
 
@@ -515,7 +515,7 @@ export function WorkspaceTerminal({
     focusedIdRef.current = null;
     setVisibleSessions([]);
     setAllSessions([]);
-    setForgeConfig(null);
+    setMnemonicConfig(null);
     setPorts([]);
     setPromptTemplateWarning(null);
     setAgentContext(null);
@@ -544,7 +544,7 @@ export function WorkspaceTerminal({
   useEffect(() => {
     resetWorkspaceState();
     if (workspaceId) {
-      void refreshForgeConfig();
+      void refreshMnemonicConfig();
       void refreshPromptTemplates();
       void refreshAgentContext();
       void refreshAgentProfiles();
@@ -566,7 +566,7 @@ export function WorkspaceTerminal({
         window.clearTimeout(healthTimer);
       };
     }
-  }, [refreshAgentContext, refreshAgentProfiles, refreshCoordinatorStatus, refreshForgeConfig, refreshHealth, refreshModelSettings, refreshReadiness, refreshPromptTemplates, refreshSessions, refreshWorkbenchState, resetWorkspaceState, workspaceId]);
+  }, [refreshAgentContext, refreshAgentProfiles, refreshCoordinatorStatus, refreshMnemonicConfig, refreshHealth, refreshModelSettings, refreshReadiness, refreshPromptTemplates, refreshSessions, refreshWorkbenchState, resetWorkspaceState, workspaceId]);
 
   useEffect(() => {
     setComposerSettings((current) => {
@@ -761,7 +761,7 @@ export function WorkspaceTerminal({
     focusedSession,
     selectedProfileId,
     composerSettings,
-    forgeConfig,
+    mnemonicConfig,
     refreshWorkbenchState,
     refreshReadiness,
     refreshCoordinatorStatus,
@@ -787,9 +787,9 @@ export function WorkspaceTerminal({
   }, [refreshWorkbenchState]);
 
   const handleCoordinatorRunTests = useCallback(() => {
-    if (!forgeConfig?.run[0]) return;
+    if (!mnemonicConfig?.run[0]) return;
     void startRunCommand(0);
-  }, [forgeConfig?.run, startRunCommand]);
+  }, [mnemonicConfig?.run, startRunCommand]);
 
   const handleCoordinatorAskReviewer = useCallback(() => {
     const action: AgentChatNextAction = {
@@ -896,9 +896,9 @@ export function WorkspaceTerminal({
     if (!session) {
       return (
         <div
-          className={`flex min-h-0 flex-1 flex-col rounded-md border bg-forge-bg p-3 ${focused ? 'border-forge-green/50 shadow-lg shadow-emerald-950/20' : 'border-forge-border'}`}
+          className={`flex min-h-0 flex-1 flex-col rounded-md border bg-mn-bg p-3 ${focused ? 'border-mn-cyan/50 shadow-lg shadow-emerald-950/20' : 'border-mn-border'}`}
         >
-          <p className="text-sm text-forge-muted">No session selected. Create a terminal above.</p>
+          <p className="text-sm text-mn-muted">No session selected. Create a terminal above.</p>
         </div>
       );
     }
@@ -927,15 +927,15 @@ export function WorkspaceTerminal({
     return (
       <div className="flex flex-1 min-h-0 items-center justify-center p-8">
         <div className="text-center">
-          <TerminalIcon className="mx-auto mb-3 h-8 w-8 text-forge-muted" />
-          <p className="text-sm text-forge-muted">Select a workspace to start a terminal</p>
+          <TerminalIcon className="mx-auto mb-3 h-8 w-8 text-mn-muted" />
+          <p className="text-sm text-mn-muted">Select a workspace to start a terminal</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-forge-bg">
+    <div className="flex min-h-0 flex-1 flex-col bg-mn-bg">
       {pendingCommand && (
         <CommandApprovalModal
           pending={pendingCommand}
@@ -968,7 +968,7 @@ export function WorkspaceTerminal({
         onCreateWorkspaceForRepo={onCreateWorkspaceForRepo}
       />
       {coordinatorToast && (
-        <div className="mx-2 mt-2 rounded border border-forge-blue/30 bg-forge-blue/10 px-3 py-1.5 text-xs text-forge-blue">
+        <div className="mx-2 mt-2 rounded border border-mn-blue/30 bg-mn-blue/10 px-3 py-1.5 text-xs text-mn-blue">
           {coordinatorToast}
         </div>
       )}
@@ -984,7 +984,7 @@ export function WorkspaceTerminal({
         onAskReviewer={handleCoordinatorAskReviewer}
         onCreatePr={handleCoordinatorCreatePr}
         canReviewDiff={changedFiles.length > 0}
-        canRunTests={Boolean(forgeConfig?.run[0])}
+        canRunTests={Boolean(mnemonicConfig?.run[0])}
         canAskReviewer={false}
         canCreatePr={changedFiles.length > 0 && !workspace.prNumber}
         hasExistingPr={Boolean(workspace.prNumber)}
@@ -1030,7 +1030,7 @@ export function WorkspaceTerminal({
               renderLeaf={renderTileLeaf}
             />
           ) : (
-            <div className="flex h-full items-center justify-center text-sm text-forge-muted">
+            <div className="flex h-full items-center justify-center text-sm text-mn-muted">
               Select a session above.
             </div>
           )}
@@ -1093,13 +1093,13 @@ function TerminalContextMenu({
     <ContextMenu.Root>
       <ContextMenu.Trigger asChild>{children}</ContextMenu.Trigger>
       <ContextMenu.Portal>
-        <ContextMenu.Content className="z-50 min-w-[180px] rounded-md border border-forge-border bg-forge-surface p-1 shadow-xl shadow-black/40">
+        <ContextMenu.Content className="z-50 min-w-[180px] rounded-md border border-mn-border bg-mn-surface p-1 shadow-xl shadow-black/40">
           <ContextMenu.Item
             onSelect={onKillSession}
-            className="flex cursor-pointer select-none items-center rounded px-2 py-1.5 text-xs text-forge-red outline-none hover:bg-forge-red/10"
+            className="flex cursor-pointer select-none items-center rounded px-2 py-1.5 text-xs text-mn-red outline-none hover:bg-mn-red/10"
           >
             Kill Session
-            <kbd className="ml-auto font-sans text-[10px] text-forge-dim">⌘W</kbd>
+            <kbd className="ml-auto font-sans text-[10px] text-mn-dim">⌘W</kbd>
           </ContextMenu.Item>
         </ContextMenu.Content>
       </ContextMenu.Portal>

@@ -21,7 +21,7 @@ function pick<T>(items: readonly T[]): T {
 }
 
 /** Returns a fresh `adjective-noun` slug suitable as a workspace display name. */
-export function suggestForgeWorkspaceLabel(): string {
+export function suggestMnemonicWorkspaceLabel(): string {
   const adj = pick(ADJECTIVES);
   let noun = pick(NOUNS);
   // Avoid redundant "ember-ember" style pairs when both lists overlap.

@@ -202,22 +202,22 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
   const coordinatorProfiles = agentProfilesForCoordinatorPicker(activeEffectiveProfiles);
 
   return (
-    <div className="rounded-xl border border-forge-border bg-forge-card p-4">
+    <div className="rounded-xl border border-mn-border bg-mn-card p-4">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-[14px] font-bold text-forge-text">Agent Profiles & Local LLMs</h2>
-          <p className="mt-0.5 text-[11px] text-forge-muted">Configure inspectable CLI-backed agents. Repo `.forge/config.json` profiles can still override these.</p>
+          <h2 className="text-[14px] font-bold text-mn-text">Agent Profiles & Local LLMs</h2>
+          <p className="mt-0.5 text-[11px] text-mn-muted">Configure inspectable CLI-backed agents. Repo `.forge/config.json` profiles can still override these.</p>
         </div>
-        <span className={`rounded-full border px-2 py-0.5 text-[10px] ${ollamaStatus === 'ok' ? 'border-forge-green/30 text-forge-green' : 'border-forge-border text-forge-muted'}`}>
+        <span className={`rounded-full border px-2 py-0.5 text-[10px] ${ollamaStatus === 'ok' ? 'border-mn-cyan/30 text-mn-cyan' : 'border-mn-border text-mn-muted'}`}>
           Ollama {ollamaStatus}
         </span>
       </div>
 
-      <div className="mb-4 rounded-lg border border-forge-border/70 bg-black/10 p-3">
+      <div className="mb-4 rounded-lg border border-mn-border/70 bg-black/10 p-3">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-[12px] font-semibold text-forge-text">Default workspace agent profile</p>
-            <p className="text-[11px] text-forge-muted">Used by workspace/review composers unless a workspace-specific selection is already active.</p>
+            <p className="text-[12px] font-semibold text-mn-text">Default workspace agent profile</p>
+            <p className="text-[11px] text-mn-muted">Used by workspace/review composers unless a workspace-specific selection is already active.</p>
           </div>
           <Select
             value={defaultProfileId}
@@ -239,14 +239,14 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
         </div>
       </div>
 
-      <div className="mb-4 rounded-lg border border-forge-border/70 bg-black/10 p-3">
+      <div className="mb-4 rounded-lg border border-mn-border/70 bg-black/10 p-3">
         <div className="mb-2">
-          <p className="text-[12px] font-semibold text-forge-text">Coordinator defaults</p>
-          <p className="text-[11px] text-forge-muted">Used by workspace Coordinator mode unless a launch override is provided.</p>
+          <p className="text-[12px] font-semibold text-mn-text">Coordinator defaults</p>
+          <p className="text-[11px] text-mn-muted">Used by workspace Coordinator mode unless a launch override is provided.</p>
         </div>
         <div className="grid gap-2 md:grid-cols-2">
           <div>
-            <label className="mb-1 block text-[11px] font-semibold text-forge-text">Brain profile</label>
+            <label className="mb-1 block text-[11px] font-semibold text-mn-text">Brain profile</label>
             <Select
               value={coordinatorBrainProfileId}
               onValueChange={(value) => {
@@ -265,7 +265,7 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
             </Select>
           </div>
           <div>
-            <label className="mb-1 block text-[11px] font-semibold text-forge-text">Coder profile</label>
+            <label className="mb-1 block text-[11px] font-semibold text-mn-text">Coder profile</label>
             <Select
               value={coordinatorCoderProfileId}
               onValueChange={(value) => {
@@ -291,19 +291,19 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
           const source = appProfileIds.has(profile.id) ? 'app' : DEFAULT_PROFILE_IDS.has(profile.id) ? 'built-in' : 'repo';
           const diagnostic = diagnostics[profile.id];
           return (
-            <div key={profile.id} className="rounded-lg border border-forge-border/70 bg-forge-surface/50 p-3">
+            <div key={profile.id} className="rounded-lg border border-mn-border/70 bg-mn-surface/50 p-3">
               <div className="flex items-start gap-2">
-                {profile.local ? <Cpu className="mt-0.5 h-3.5 w-3.5 text-forge-green" /> : <Bot className="mt-0.5 h-3.5 w-3.5 text-forge-orange" />}
+                {profile.local ? <Cpu className="mt-0.5 h-3.5 w-3.5 text-mn-cyan" /> : <Bot className="mt-0.5 h-3.5 w-3.5 text-mn-orange" />}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="truncate text-[12px] font-semibold text-forge-text">{profile.label}</p>
-                    <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-forge-muted">{source}</span>
-                    {profile.local && <span className="rounded bg-forge-green/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-forge-green">local</span>}
+                    <p className="truncate text-[12px] font-semibold text-mn-text">{profile.label}</p>
+                    <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-mn-muted">{source}</span>
+                    {profile.local && <span className="rounded bg-mn-cyan/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-mn-cyan">local</span>}
                   </div>
-                  <p className="mt-0.5 truncate font-mono text-[10px] text-forge-muted">
+                  <p className="mt-0.5 truncate font-mono text-[10px] text-mn-muted">
                     {formatCommandPreview(profile.command, profile.args)}
                   </p>
-                  <p className="mt-0.5 truncate text-[10px] text-forge-muted">
+                  <p className="mt-0.5 truncate text-[10px] text-mn-muted">
                     {profile.provider ?? profile.agent}{profile.model ? ` · ${profile.model}` : ''}{profile.endpoint ? ` · ${profile.endpoint}` : ''}
                   </p>
                 </div>
@@ -330,21 +330,21 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
                   )}
                   {source === 'app' && (
                     <Button variant="ghost" size="icon-xs" disabled={saving} onClick={() => void deleteAppProfile(profile.id)} title="Delete app profile">
-                      <Trash2 className="h-3.5 w-3.5 text-forge-red" />
+                      <Trash2 className="h-3.5 w-3.5 text-mn-red" />
                     </Button>
                   )}
                 </div>
               </div>
               {diagnostic && (
-                <div className="mt-2 rounded border border-forge-border/50 bg-black/15 p-2">
-                  <p className={`text-[11px] font-semibold ${diagnostic.status === 'ok' ? 'text-forge-green' : diagnostic.status === 'error' ? 'text-forge-red' : 'text-forge-yellow'}`}>
+                <div className="mt-2 rounded border border-mn-border/50 bg-black/15 p-2">
+                  <p className={`text-[11px] font-semibold ${diagnostic.status === 'ok' ? 'text-mn-cyan' : diagnostic.status === 'error' ? 'text-mn-red' : 'text-mn-yellow'}`}>
                     {diagnostic.summary}
                   </p>
-                  <p className="mt-0.5 truncate font-mono text-[10px] text-forge-muted">{diagnostic.commandPreview}</p>
+                  <p className="mt-0.5 truncate font-mono text-[10px] text-mn-muted">{diagnostic.commandPreview}</p>
                   <div className="mt-1 space-y-0.5">
                     {diagnostic.checks.map((check) => (
-                      <p key={check.name} className="text-[10px] text-forge-muted">
-                        <span className={check.status === 'ok' ? 'text-forge-green' : check.status === 'error' ? 'text-forge-red' : 'text-forge-yellow'}>
+                      <p key={check.name} className="text-[10px] text-mn-muted">
+                        <span className={check.status === 'ok' ? 'text-mn-cyan' : check.status === 'error' ? 'text-mn-red' : 'text-mn-yellow'}>
                           {check.name}: {check.status}
                         </span>
                         {' · '}
@@ -358,25 +358,25 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
           );
         })}
         {activeEffectiveProfiles.length === 0 && (
-          <div className="rounded-lg border border-forge-border/70 bg-black/10 p-3 text-[12px] text-forge-muted">
+          <div className="rounded-lg border border-mn-border/70 bg-black/10 p-3 text-[12px] text-mn-muted">
             No active agent providers. Enable a provider in Agent Setup to choose defaults or manage profiles.
           </div>
         )}
       </div>
 
-      <div className="mt-4 rounded-lg border border-forge-border/70 bg-black/10 p-3">
+      <div className="mt-4 rounded-lg border border-mn-border/70 bg-black/10 p-3">
         <div className="mb-3">
-          <p className="text-[12px] font-semibold text-forge-text">
+          <p className="text-[12px] font-semibold text-mn-text">
             {editingProfileId ? 'Edit app-level profile' : 'Add app-level profile'}
           </p>
-          <p className="text-[11px] text-forge-muted">
+          <p className="text-[11px] text-mn-muted">
             {editingProfileId ? `Editing ${editingProfileId}.` : 'Saved for all workspaces. Use local providers for terminal-driven agents and OpenAI for coordinator planning.'}
           </p>
         </div>
         <div className="grid gap-2 md:grid-cols-2">
           <LabeledInput label="Label" value={label} onChange={setLabel} />
           <div>
-            <label className="mb-1 block text-[11px] font-semibold text-forge-text">Provider</label>
+            <label className="mb-1 block text-[11px] font-semibold text-mn-text">Provider</label>
             <Select
               value={provider}
               onValueChange={(value) => {
@@ -408,7 +408,7 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
           </div>
           {provider === 'ollama' && (
             <div>
-              <label className="mb-1 block text-[11px] font-semibold text-forge-text">Installed Ollama model</label>
+              <label className="mb-1 block text-[11px] font-semibold text-mn-text">Installed Ollama model</label>
               <Select
                 value={ollamaModels.some((item) => item.name === model) ? model : ''}
                 onValueChange={(value) => {
@@ -436,12 +436,12 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
           <LabeledInput label="Args" value={argsText} onChange={setArgsText} placeholder={provider === 'openai' ? '(unused for OpenAI API)' : 'run qwen2.5-coder'} />
         </div>
         <div className="mt-3 flex items-center justify-between gap-3">
-          <p className="text-[11px] text-forge-muted">
+          <p className="text-[11px] text-mn-muted">
             {provider === 'openai'
-              ? <>Requires <span className="font-mono text-forge-text/80">OPENAI_API_KEY</span> in the Forge app environment.</>
+              ? <>Requires <span className="font-mono text-mn-text/80">OPENAI_API_KEY</span> in the Mnemonic app environment.</>
               : provider === 'ollama' && ollamaModels.length > 0
               ? `${ollamaModels.length} Ollama model(s) discovered.`
-              : <>Tip: for Ollama run <span className="font-mono text-forge-text/80">ollama pull {model || 'llama3.2'}</span> first. Args support single/double quotes.</>}
+              : <>Tip: for Ollama run <span className="font-mono text-mn-text/80">ollama pull {model || 'llama3.2'}</span> first. Args support single/double quotes.</>}
           </p>
           <div className="flex items-center gap-2">
             <Button size="sm" variant="secondary" onClick={() => void refresh()} disabled={saving}>
@@ -459,7 +459,7 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
           </div>
         </div>
       </div>
-      {message && <p className="mt-3 text-[12px] text-forge-muted">{message}</p>}
+      {message && <p className="mt-3 text-[12px] text-mn-muted">{message}</p>}
     </div>
   );
 }
@@ -467,7 +467,7 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
 function LabeledInput({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string }) {
   return (
     <div>
-      <label className="mb-1 block text-[11px] font-semibold text-forge-text">{label}</label>
+      <label className="mb-1 block text-[11px] font-semibold text-mn-text">{label}</label>
       <Input value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
     </div>
   );

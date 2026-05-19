@@ -45,7 +45,7 @@ interface CoordinatorResultCard {
 }
 
 function stateKey(workspaceId: string) {
-  return `forge:coordinator-timeline:${workspaceId}`;
+  return `mn:coordinator-timeline:${workspaceId}`;
 }
 
 function isScale(value: string | null | undefined): value is 'low' | 'medium' | 'high' {
@@ -132,9 +132,9 @@ function artifactReviewPath(result: CoordinatorResultPayload): string | null {
 }
 
 function triadChipTone(value: string): string {
-  if (value === 'high') return 'border-forge-red/40 bg-forge-red/10 text-forge-red';
-  if (value === 'low') return 'border-forge-green/40 bg-forge-green/10 text-forge-green';
-  return 'border-forge-yellow/35 bg-forge-yellow/10 text-forge-yellow';
+  if (value === 'high') return 'border-mn-red/40 bg-mn-red/10 text-mn-red';
+  if (value === 'low') return 'border-mn-cyan/40 bg-mn-cyan/10 text-mn-cyan';
+  return 'border-mn-yellow/35 bg-mn-yellow/10 text-mn-yellow';
 }
 
 function derivedRisk(result: CoordinatorResultPayload): 'low' | 'medium' | 'high' {
@@ -252,12 +252,12 @@ export function CoordinatorTimeline({
 
   if (viewState === 'hidden') {
     return (
-      <div className="mx-2 mt-2 flex items-center justify-between rounded border border-forge-border/70 bg-forge-card/40 px-2 py-1 text-[11px]">
-        <span className="text-forge-muted">Coordinator · {statusText}</span>
+      <div className="mx-2 mt-2 flex items-center justify-between rounded border border-mn-border/70 bg-mn-card/40 px-2 py-1 text-[11px]">
+        <span className="text-mn-muted">Coordinator · {statusText}</span>
         <button
           type="button"
           onClick={() => setPersistedViewState('collapsed')}
-          className="rounded border border-forge-border px-1.5 py-0.5 text-[10px] text-forge-muted hover:bg-forge-surface-overlay"
+          className="rounded border border-mn-border px-1.5 py-0.5 text-[10px] text-mn-muted hover:bg-mn-surface-overlay"
         >
           Show timeline
         </button>
@@ -266,11 +266,11 @@ export function CoordinatorTimeline({
   }
 
   return (
-    <div className="mx-2 mt-2 rounded-lg border border-forge-border bg-forge-card/60 p-2">
+    <div className="mx-2 mt-2 rounded-lg border border-mn-border bg-mn-card/60 p-2">
       <div className="mb-2 flex items-center justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-forge-muted">Coordinator timeline</p>
-          <p className="text-[11px] text-forge-muted">
+          <p className="text-xs font-bold uppercase tracking-widest text-mn-muted">Coordinator timeline</p>
+          <p className="text-[11px] text-mn-muted">
             {status.activeRun ? `Run ${status.activeRun.id}` : 'No active run'} · {status.mode}
           </p>
         </div>
@@ -278,21 +278,21 @@ export function CoordinatorTimeline({
           <button
             type="button"
             onClick={() => setPersistedViewState(viewState === 'expanded' ? 'collapsed' : 'expanded')}
-            className="rounded border border-forge-border px-2 py-1 text-[11px] text-forge-muted hover:bg-forge-surface-overlay"
+            className="rounded border border-mn-border px-2 py-1 text-[11px] text-mn-muted hover:bg-mn-surface-overlay"
           >
             {viewState === 'expanded' ? 'Collapse' : 'Expand'}
           </button>
           <button
             type="button"
             onClick={() => setPersistedViewState('hidden')}
-            className="rounded border border-forge-border px-2 py-1 text-[11px] text-forge-muted hover:bg-forge-surface-overlay"
+            className="rounded border border-mn-border px-2 py-1 text-[11px] text-mn-muted hover:bg-mn-surface-overlay"
           >
             Dismiss
           </button>
           <button
             type="button"
             onClick={onRefresh}
-            className="rounded border border-forge-border px-2 py-1 text-[11px] text-forge-muted hover:bg-forge-surface-overlay"
+            className="rounded border border-mn-border px-2 py-1 text-[11px] text-mn-muted hover:bg-mn-surface-overlay"
           >
             Refresh
           </button>
@@ -300,13 +300,13 @@ export function CoordinatorTimeline({
       </div>
 
       {viewState === 'collapsed' && (
-        <div className="flex items-center justify-between rounded border border-forge-border/70 bg-black/10 px-2 py-1 text-[11px]">
-          <span className={status.activeRun ? 'text-forge-orange' : 'text-forge-muted'}>
+        <div className="flex items-center justify-between rounded border border-mn-border/70 bg-black/10 px-2 py-1 text-[11px]">
+          <span className={status.activeRun ? 'text-mn-orange' : 'text-mn-muted'}>
             {statusText}
           </span>
           {newestResultCard ? (
             <span className="flex max-w-[68%] items-center gap-1 overflow-hidden">
-              <span className="truncate text-forge-muted" title={newestResultCard.result.decision}>
+              <span className="truncate text-mn-muted" title={newestResultCard.result.decision}>
                 {newestResultCard.result.decision}
               </span>
               <span className={`rounded border px-1 py-0 text-[10px] ${triadChipTone(newestResultCard.result.confidence)}`}>
@@ -317,7 +317,7 @@ export function CoordinatorTimeline({
               </span>
             </span>
           ) : status.plannerLastMessage ? (
-            <span className="max-w-[65%] truncate text-forge-muted" title={status.plannerLastMessage}>
+            <span className="max-w-[65%] truncate text-mn-muted" title={status.plannerLastMessage}>
               {status.plannerLastMessage}
             </span>
           ) : null}
@@ -326,10 +326,10 @@ export function CoordinatorTimeline({
 
       {viewState === 'expanded' && (
         <div className="max-h-[300px] space-y-2 overflow-y-auto pr-1">
-      <div className="rounded border border-forge-border/70 bg-black/10 p-2">
+      <div className="rounded border border-mn-border/70 bg-black/10 p-2">
         <div className="mb-2 flex items-center justify-between">
-          <p className="text-[11px] font-semibold text-forge-text">Coordinator result cards</p>
-          <span className="text-[10px] text-forge-muted">
+          <p className="text-[11px] font-semibold text-mn-text">Coordinator result cards</p>
+          <span className="text-[10px] text-mn-muted">
             {visibleResultCards.length}/{resultCards.length || 0}
           </span>
         </div>
@@ -339,24 +339,24 @@ export function CoordinatorTimeline({
               const expanded = !!expandedResultIds[card.action.id];
               const reviewPath = artifactReviewPath(card.result);
               return (
-                <div key={`result-${card.action.id}`} className="rounded border border-forge-border/60 bg-black/20 p-2">
+                <div key={`result-${card.action.id}`} className="rounded border border-mn-border/60 bg-black/20 p-2">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="text-[11px] font-semibold text-forge-text">
+                      <p className="text-[11px] font-semibold text-mn-text">
                         {card.result.status} · {card.action.actionKind}
-                        {!card.structured && <span className="ml-1 text-[10px] text-forge-yellow">(fallback)</span>}
+                        {!card.structured && <span className="ml-1 text-[10px] text-mn-yellow">(fallback)</span>}
                       </p>
-                      <p className="truncate text-[10px] text-forge-muted">{card.action.createdAt} · {card.action.workerId ?? 'general'}</p>
+                      <p className="truncate text-[10px] text-mn-muted">{card.action.createdAt} · {card.action.workerId ?? 'general'}</p>
                     </div>
                     <button
                       type="button"
                       onClick={() => setExpandedResultIds((current) => ({ ...current, [card.action.id]: !current[card.action.id] }))}
-                      className="rounded border border-forge-border px-1.5 py-0.5 text-[10px] text-forge-muted hover:bg-forge-surface-overlay"
+                      className="rounded border border-mn-border px-1.5 py-0.5 text-[10px] text-mn-muted hover:bg-mn-surface-overlay"
                     >
                       {expanded ? 'Less' : 'More'}
                     </button>
                   </div>
-                  <p className="mt-1 text-[11px] text-forge-text">{card.result.decision}</p>
+                  <p className="mt-1 text-[11px] text-mn-text">{card.result.decision}</p>
                   <div className="mt-1 flex flex-wrap gap-1">
                     <span className={`rounded border px-1.5 py-0.5 text-[10px] ${triadChipTone(derivedRisk(card.result))}`}>
                       Risk {derivedRisk(card.result)}
@@ -370,19 +370,19 @@ export function CoordinatorTimeline({
                   </div>
                   {expanded && (
                     <div className="mt-2 space-y-1 text-[10px]">
-                      <p className="text-forge-dim">Goal: {card.result.goal}</p>
+                      <p className="text-mn-dim">Goal: {card.result.goal}</p>
                       {card.result.evidence.length > 0 && (
                         <div>
-                          <p className="font-semibold text-forge-muted">Evidence</p>
-                          <ul className="list-disc pl-4 text-forge-dim">
+                          <p className="font-semibold text-mn-muted">Evidence</p>
+                          <ul className="list-disc pl-4 text-mn-dim">
                             {card.result.evidence.map((item, index) => <li key={`ev-${card.action.id}-${index}`}>{item}</li>)}
                           </ul>
                         </div>
                       )}
                       {card.result.risks.length > 0 && (
                         <div>
-                          <p className="font-semibold text-forge-muted">Risks</p>
-                          <ul className="list-disc pl-4 text-forge-yellow">
+                          <p className="font-semibold text-mn-muted">Risks</p>
+                          <ul className="list-disc pl-4 text-mn-yellow">
                             {card.result.risks.map((item, index) => <li key={`rk-${card.action.id}-${index}`}>{item}</li>)}
                           </ul>
                         </div>
@@ -394,7 +394,7 @@ export function CoordinatorTimeline({
                       type="button"
                       disabled={!canReviewDiff}
                       onClick={onReviewDiff}
-                      className="rounded border border-forge-blue/30 bg-forge-blue/10 px-1.5 py-0.5 text-[10px] text-forge-blue disabled:opacity-50"
+                      className="rounded border border-mn-blue/30 bg-mn-blue/10 px-1.5 py-0.5 text-[10px] text-mn-blue disabled:opacity-50"
                     >
                       Review diff
                     </button>
@@ -402,7 +402,7 @@ export function CoordinatorTimeline({
                       type="button"
                       disabled={!canRunTests}
                       onClick={onRunTests}
-                      className="rounded border border-forge-border px-1.5 py-0.5 text-[10px] text-forge-muted disabled:opacity-50"
+                      className="rounded border border-mn-border px-1.5 py-0.5 text-[10px] text-mn-muted disabled:opacity-50"
                     >
                       Run tests
                     </button>
@@ -410,7 +410,7 @@ export function CoordinatorTimeline({
                       type="button"
                       disabled={!canAskReviewer}
                       onClick={onAskReviewer}
-                      className="rounded border border-forge-border px-1.5 py-0.5 text-[10px] text-forge-muted disabled:opacity-50"
+                      className="rounded border border-mn-border px-1.5 py-0.5 text-[10px] text-mn-muted disabled:opacity-50"
                     >
                       Ask reviewer
                     </button>
@@ -418,7 +418,7 @@ export function CoordinatorTimeline({
                       type="button"
                       disabled={!canCreatePr || hasExistingPr}
                       onClick={onCreatePr}
-                      className="rounded border border-forge-green/30 bg-forge-green/10 px-1.5 py-0.5 text-[10px] text-forge-green disabled:opacity-50"
+                      className="rounded border border-mn-cyan/30 bg-mn-cyan/10 px-1.5 py-0.5 text-[10px] text-mn-cyan disabled:opacity-50"
                     >
                       {hasExistingPr ? 'PR exists' : 'Create PR'}
                     </button>
@@ -426,7 +426,7 @@ export function CoordinatorTimeline({
                       type="button"
                       disabled={!onOpenReviewCockpit}
                       onClick={() => onOpenReviewCockpit?.(reviewPath)}
-                      className="rounded border border-forge-border px-1.5 py-0.5 text-[10px] text-forge-muted disabled:opacity-50"
+                      className="rounded border border-mn-border px-1.5 py-0.5 text-[10px] text-mn-muted disabled:opacity-50"
                     >
                       Open review cockpit
                     </button>
@@ -436,13 +436,13 @@ export function CoordinatorTimeline({
             })}
           </div>
         ) : (
-          <p className="text-[11px] text-forge-muted">No structured coordinator results yet.</p>
+          <p className="text-[11px] text-mn-muted">No structured coordinator results yet.</p>
         )}
         {resultCards.length > visibleResultCount && (
           <button
             type="button"
             onClick={() => setVisibleResultCount((current) => current + 10)}
-            className="mt-2 rounded border border-forge-border px-2 py-0.5 text-[10px] text-forge-muted hover:bg-forge-surface-overlay"
+            className="mt-2 rounded border border-mn-border px-2 py-0.5 text-[10px] text-mn-muted hover:bg-mn-surface-overlay"
           >
             Load more
           </button>
@@ -450,23 +450,23 @@ export function CoordinatorTimeline({
       </div>
 
       {replayNotice && (
-        <div className="mb-2 rounded border border-forge-blue/30 bg-forge-blue/10 px-2 py-1 text-[11px] text-forge-blue">
+        <div className="mb-2 rounded border border-mn-blue/30 bg-mn-blue/10 px-2 py-1 text-[11px] text-mn-blue">
           {replayNotice}
         </div>
       )}
 
       {status.activeRun && (
-        <div className="mb-2 rounded border border-forge-border/70 bg-black/10 p-2 text-[11px]">
-          <p className="text-forge-text">
-            <span className="text-forge-muted">Goal:</span> {status.activeRun.goal}
+        <div className="mb-2 rounded border border-mn-border/70 bg-black/10 p-2 text-[11px]">
+          <p className="text-mn-text">
+            <span className="text-mn-muted">Goal:</span> {status.activeRun.goal}
           </p>
-          <p className="text-forge-muted">
+          <p className="text-mn-muted">
             brain={profileLabel(agentProfiles, status.activeRun.brainProfileId)} · coder={profileLabel(agentProfiles, status.activeRun.coderProfileId)}
           </p>
           {!!status.activeRun.lastError && (
-            <p className="mt-1 text-forge-yellow">Planner fallback: {status.activeRun.lastError}</p>
+            <p className="mt-1 text-mn-yellow">Planner fallback: {status.activeRun.lastError}</p>
           )}
-          <p className="mt-1 text-forge-muted">
+          <p className="mt-1 text-mn-muted">
             planner={status.plannerAdapter ?? 'unknown'} · parse={status.plannerParseMode ?? 'unknown'} · fallback={status.plannerFallback ? 'yes' : 'no'}
           </p>
         </div>
@@ -484,40 +484,40 @@ export function CoordinatorTimeline({
               }}
               className={`rounded border px-1.5 py-0.5 text-[10px] ${
                 workerFilter === worker.id
-                  ? 'border-forge-blue/40 bg-forge-blue/15 text-forge-blue'
+                  ? 'border-mn-blue/40 bg-mn-blue/15 text-mn-blue'
                   : worker.status === 'running'
-                  ? 'border-forge-green/30 bg-forge-green/10 text-forge-green'
-                  : 'border-forge-border bg-black/10 text-forge-muted'
+                  ? 'border-mn-cyan/30 bg-mn-cyan/10 text-mn-cyan'
+                  : 'border-mn-border bg-black/10 text-mn-muted'
               }`}
               title={worker.lastPrompt ?? ''}
             >
               {worker.id} · {profileLabel(agentProfiles, worker.profileId)} · {worker.status}
             </button>
           ))}
-          <span className="rounded border border-forge-border bg-black/10 px-1.5 py-0.5 text-[10px] text-forge-muted">
+          <span className="rounded border border-mn-border bg-black/10 px-1.5 py-0.5 text-[10px] text-mn-muted">
             active workers: {activeWorkers.length}
           </span>
         </div>
       )}
 
       {selectedWorker && (
-        <div className="mb-2 rounded border border-forge-border/70 bg-black/10 p-2 text-[11px]">
-          <p className="font-semibold text-forge-text">Worker {selectedWorker.id}</p>
-          <p className="text-forge-muted">
+        <div className="mb-2 rounded border border-mn-border/70 bg-black/10 p-2 text-[11px]">
+          <p className="font-semibold text-mn-text">Worker {selectedWorker.id}</p>
+          <p className="text-mn-muted">
             profile={profileLabel(agentProfiles, selectedWorker.profileId)} · status={selectedWorker.status}
           </p>
           {selectedWorker.lastSessionId && (
-            <p className="text-forge-muted">session={selectedWorker.lastSessionId}</p>
+            <p className="text-mn-muted">session={selectedWorker.lastSessionId}</p>
           )}
           {selectedWorker.lastPrompt && (
-            <p className="mt-1 line-clamp-2 text-forge-muted">{selectedWorker.lastPrompt}</p>
+            <p className="mt-1 line-clamp-2 text-mn-muted">{selectedWorker.lastPrompt}</p>
           )}
           {selectedWorkerActions.length > 0 && (
-            <div className="mt-1 border-t border-forge-border/40 pt-1">
-              <p className="text-[10px] uppercase tracking-widest text-forge-muted">Recent worker actions</p>
+            <div className="mt-1 border-t border-mn-border/40 pt-1">
+              <p className="text-[10px] uppercase tracking-widest text-mn-muted">Recent worker actions</p>
               <div className="mt-1 space-y-0.5">
                 {selectedWorkerActions.map((action) => (
-                  <p key={`worker-detail-${action.id}`} className="text-[10px] text-forge-muted">
+                  <p key={`worker-detail-${action.id}`} className="text-[10px] text-mn-muted">
                     {action.createdAt} · {action.actionKind}
                   </p>
                 ))}
@@ -528,7 +528,7 @@ export function CoordinatorTimeline({
       )}
 
       <div className="mb-2 flex flex-wrap items-center gap-1 text-[10px]">
-        <span className="text-forge-muted">Filter:</span>
+        <span className="text-mn-muted">Filter:</span>
         {(['all', 'planner', 'worker', 'notify', 'lifecycle'] as const).map((kind) => (
           <button
             key={kind}
@@ -536,8 +536,8 @@ export function CoordinatorTimeline({
             onClick={() => setKindFilter(kind)}
             className={`rounded border px-1.5 py-0.5 ${
               kindFilter === kind
-                ? 'border-forge-blue/40 bg-forge-blue/15 text-forge-blue'
-                : 'border-forge-border bg-black/10 text-forge-muted'
+                ? 'border-mn-blue/40 bg-mn-blue/15 text-mn-blue'
+                : 'border-mn-border bg-black/10 text-mn-muted'
             }`}
           >
             {kind}
@@ -548,8 +548,8 @@ export function CoordinatorTimeline({
           onClick={() => setWorkerFilter('all')}
           className={`rounded border px-1.5 py-0.5 ${
             workerFilter === 'all'
-              ? 'border-forge-blue/40 bg-forge-blue/15 text-forge-blue'
-              : 'border-forge-border bg-black/10 text-forge-muted'
+              ? 'border-mn-blue/40 bg-mn-blue/15 text-mn-blue'
+              : 'border-mn-border bg-black/10 text-mn-muted'
           }`}
         >
           worker: {workerFilter === 'all' ? 'all' : workerFilter}
@@ -559,11 +559,11 @@ export function CoordinatorTimeline({
       {groupedByWorker.size > 0 && (
         <div className="mb-2 grid gap-1 md:grid-cols-2">
           {Array.from(groupedByWorker.entries()).slice(0, 4).map(([workerId, actions]) => (
-            <div key={`group-${workerId}`} className="rounded border border-forge-border/60 bg-black/10 p-1.5">
-              <p className="text-[10px] font-semibold text-forge-text">
+            <div key={`group-${workerId}`} className="rounded border border-mn-border/60 bg-black/10 p-1.5">
+              <p className="text-[10px] font-semibold text-mn-text">
                 {workerId === 'general' ? 'General' : workerId} · {actions.length} actions
               </p>
-              <p className="line-clamp-1 text-[10px] text-forge-muted">
+              <p className="line-clamp-1 text-[10px] text-mn-muted">
                 {actions[0]?.actionKind ?? '—'} {actions[0]?.message ? `· ${actions[0].message}` : ''}
               </p>
             </div>
@@ -577,31 +577,31 @@ export function CoordinatorTimeline({
             key={action.id}
             className={`rounded border p-1.5 ${
               action.actionKind === 'validation_error'
-                ? 'border-forge-yellow/40 bg-forge-yellow/10'
+                ? 'border-mn-yellow/40 bg-mn-yellow/10'
                 : action.actionKind.startsWith('replay_')
-                ? 'border-forge-blue/35 bg-forge-blue/10'
-                : 'border-forge-border/60 bg-black/10'
+                ? 'border-mn-blue/35 bg-mn-blue/10'
+                : 'border-mn-border/60 bg-black/10'
             }`}
           >
             <button
               type="button"
               onClick={() => setExpandedActionId((current) => (current === action.id ? null : action.id))}
-              className="w-full text-left text-forge-text"
+              className="w-full text-left text-mn-text"
             >
               <span className="font-semibold">{action.actionKind}</span>
               {action.workerId ? ` · ${action.workerId}` : ''}
-              <span className="ml-1 text-forge-muted">{action.createdAt}</span>
+              <span className="ml-1 text-mn-muted">{action.createdAt}</span>
             </button>
-            {action.message && <p className="text-forge-muted">{action.message}</p>}
+            {action.message && <p className="text-mn-muted">{action.message}</p>}
             {(action.replayKind || action.replayedFromActionId) && (
-              <p className="text-forge-dim">
+              <p className="text-mn-dim">
                 replay={action.replayKind ?? 'exact'}
                 {action.replayedFromActionId ? ` · from ${action.replayedFromActionId}` : ''}
               </p>
             )}
-            {action.prompt && <p className="line-clamp-2 text-forge-muted">{action.prompt}</p>}
+            {action.prompt && <p className="line-clamp-2 text-mn-muted">{action.prompt}</p>}
             {expandedActionId === action.id && action.rawJson && (
-              <pre className="mt-1 max-h-28 overflow-auto rounded border border-forge-border bg-black/30 p-1 text-[10px] text-forge-muted">
+              <pre className="mt-1 max-h-28 overflow-auto rounded border border-mn-border bg-black/30 p-1 text-[10px] text-mn-muted">
                 {action.rawJson}
               </pre>
             )}
@@ -627,7 +627,7 @@ export function CoordinatorTimeline({
                       })
                       .finally(() => setReplayBusyActionId(null));
                   }}
-                  className="rounded border border-forge-blue/30 bg-forge-blue/10 px-1.5 py-0.5 text-[10px] text-forge-blue hover:bg-forge-blue/20"
+                  className="rounded border border-mn-blue/30 bg-mn-blue/10 px-1.5 py-0.5 text-[10px] text-mn-blue hover:bg-mn-blue/20"
                 >
                   {replayBusyActionId === action.id ? 'Replaying…' : 'Replay action'}
                 </button>
@@ -641,21 +641,21 @@ export function CoordinatorTimeline({
                         [action.id]: current[action.id] ?? action.prompt ?? '',
                       }));
                     }}
-                    className="ml-1 rounded border border-forge-border px-1.5 py-0.5 text-[10px] text-forge-muted hover:bg-forge-surface-overlay"
+                    className="ml-1 rounded border border-mn-border px-1.5 py-0.5 text-[10px] text-mn-muted hover:bg-mn-surface-overlay"
                   >
                     {editingActionId === action.id ? 'Hide edit' : 'Replay with edit'}
                   </button>
                 )}
                 {replayedAtByActionId[action.id] && (
-                  <span className="ml-2 text-[10px] text-forge-muted">
+                  <span className="ml-2 text-[10px] text-mn-muted">
                     replayed at {replayedAtByActionId[action.id]}
                   </span>
                 )}
               </div>
             )}
             {editingActionId === action.id && (
-              <div className="mt-1 rounded border border-forge-border/60 bg-black/20 p-1">
-                <p className="mb-1 text-[10px] text-forge-muted">Prompt override</p>
+              <div className="mt-1 rounded border border-mn-border/60 bg-black/20 p-1">
+                <p className="mb-1 text-[10px] text-mn-muted">Prompt override</p>
                 <textarea
                   value={promptOverrides[action.id] ?? ''}
                   onChange={(event) => {
@@ -663,14 +663,14 @@ export function CoordinatorTimeline({
                     setPromptOverrides((current) => ({ ...current, [action.id]: nextValue }));
                   }}
                   rows={3}
-                  className="w-full resize-y rounded border border-forge-border bg-forge-bg px-1.5 py-1 text-[10px] text-forge-text focus:border-forge-blue/40 focus:outline-none"
+                  className="w-full resize-y rounded border border-mn-border bg-mn-bg px-1.5 py-1 text-[10px] text-mn-text focus:border-mn-blue/40 focus:outline-none"
                 />
               </div>
             )}
           </div>
         ))}
         {filteredActions.length === 0 && (
-          <p className="text-forge-muted">No coordinator actions yet.</p>
+          <p className="text-mn-muted">No coordinator actions yet.</p>
         )}
       </div>
         </div>

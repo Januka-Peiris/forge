@@ -30,15 +30,15 @@ export function ReviewCockpitCommentItem({
     <div
       id={`review-comment-${comment.commentId}`}
       key={comment.commentId}
-      className={`p-3 ${targetCommentId === comment.commentId ? 'bg-forge-blue/10' : ''}`}
+      className={`p-3 ${targetCommentId === comment.commentId ? 'bg-mn-blue/10' : ''}`}
     >
       <div className="mb-1.5 flex items-start justify-between gap-2">
-        <span className="flex items-center gap-1 text-ui-label font-semibold text-forge-text">
-          <MessageSquare className="h-3 w-3 shrink-0 text-forge-muted" />
+        <span className="flex items-center gap-1 text-ui-label font-semibold text-mn-text">
+          <MessageSquare className="h-3 w-3 shrink-0 text-mn-muted" />
           {comment.author}
         </span>
         {(comment.path || comment.line || comment.state === 'resolved_local' || comment.threadResolved) && (
-          <span className="shrink-0 rounded bg-forge-surface-overlay px-1.5 py-0.5 font-mono text-ui-tiny text-forge-muted">
+          <span className="shrink-0 rounded bg-mn-surface-overlay px-1.5 py-0.5 font-mono text-ui-tiny text-mn-muted">
             {comment.threadOutdated
               ? 'outdated'
               : comment.threadResolved
@@ -52,7 +52,7 @@ export function ReviewCockpitCommentItem({
         )}
       </div>
 
-      <p className="max-h-28 overflow-auto whitespace-pre-wrap text-ui-label leading-relaxed text-forge-text/80">
+      <p className="max-h-28 overflow-auto whitespace-pre-wrap text-ui-label leading-relaxed text-mn-text/80">
         {comment.body}
       </p>
 
@@ -61,7 +61,7 @@ export function ReviewCockpitCommentItem({
           <button
             disabled={busy}
             onClick={() => onSelectFile(comment.path!)}
-            className="flex items-center gap-1 rounded-md border border-forge-border bg-forge-surface-overlay px-2 py-1 text-ui-caption font-semibold text-forge-muted hover:bg-forge-surface-overlay-high disabled:opacity-50"
+            className="flex items-center gap-1 rounded-md border border-mn-border bg-mn-surface-overlay px-2 py-1 text-ui-caption font-semibold text-mn-muted hover:bg-mn-surface-overlay-high disabled:opacity-50"
           >
             <FileCode className="h-3 w-3" /> Open file
           </button>
@@ -69,7 +69,7 @@ export function ReviewCockpitCommentItem({
         <button
           disabled={busy}
           onClick={() => onSendPrompt('address_comment', comment)}
-          className="flex items-center gap-1 rounded-md border border-forge-green/25 bg-forge-green/10 px-2 py-1 text-ui-caption font-semibold text-forge-green hover:bg-forge-green/15 disabled:opacity-50"
+          className="flex items-center gap-1 rounded-md border border-mn-cyan/25 bg-mn-cyan/10 px-2 py-1 text-ui-caption font-semibold text-mn-cyan hover:bg-mn-cyan/15 disabled:opacity-50"
         >
           <Send className="h-3 w-3" /> Send
         </button>
@@ -77,7 +77,7 @@ export function ReviewCockpitCommentItem({
           <button
             disabled={busy}
             onClick={() => onResolveThread(comment.commentId)}
-            className="flex items-center gap-1 rounded-md border border-forge-blue/25 bg-forge-blue/10 px-2 py-1 text-ui-caption font-semibold text-forge-blue hover:bg-forge-blue/15 disabled:opacity-50"
+            className="flex items-center gap-1 rounded-md border border-mn-blue/25 bg-mn-blue/10 px-2 py-1 text-ui-caption font-semibold text-mn-blue hover:bg-mn-blue/15 disabled:opacity-50"
           >
             Resolve thread
           </button>
@@ -86,7 +86,7 @@ export function ReviewCockpitCommentItem({
           <button
             disabled={busy}
             onClick={() => onReopenThread(comment.commentId)}
-            className="flex items-center gap-1 rounded-md border border-forge-blue/25 bg-forge-blue/10 px-2 py-1 text-ui-caption font-semibold text-forge-blue hover:bg-forge-blue/15 disabled:opacity-50"
+            className="flex items-center gap-1 rounded-md border border-mn-blue/25 bg-mn-blue/10 px-2 py-1 text-ui-caption font-semibold text-mn-blue hover:bg-mn-blue/15 disabled:opacity-50"
           >
             Reopen thread
           </button>
@@ -94,10 +94,10 @@ export function ReviewCockpitCommentItem({
         <button
           disabled={busy || comment.state === 'resolved_local'}
           onClick={() => onResolveCommentLocal(comment.commentId)}
-          className="flex items-center gap-1 rounded-md border border-forge-border bg-forge-surface-overlay px-2 py-1 text-ui-caption font-semibold text-forge-muted hover:bg-forge-surface-overlay-high disabled:opacity-50"
+          className="flex items-center gap-1 rounded-md border border-mn-border bg-mn-surface-overlay px-2 py-1 text-ui-caption font-semibold text-mn-muted hover:bg-mn-surface-overlay-high disabled:opacity-50"
           title="Local only (does not resolve on GitHub)"
         >
-          {comment.state === 'resolved_local' ? <CheckCircle2 className="h-3 w-3 text-forge-green" /> : null}
+          {comment.state === 'resolved_local' ? <CheckCircle2 className="h-3 w-3 text-mn-cyan" /> : null}
           {comment.state === 'resolved_local' ? 'Local resolved' : 'Resolve local'}
         </button>
         {comment.url && (
@@ -105,7 +105,7 @@ export function ReviewCockpitCommentItem({
             href={comment.url}
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-1 rounded-md px-2 py-1 text-ui-caption font-semibold text-forge-blue hover:bg-forge-blue/10"
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-ui-caption font-semibold text-mn-blue hover:bg-mn-blue/10"
           >
             <ExternalLink className="h-3 w-3" />
           </a>

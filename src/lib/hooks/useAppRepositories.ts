@@ -2,7 +2,7 @@ import { useCallback, useState, type Dispatch, type SetStateAction } from 'react
 import { open as openFilePicker } from '@tauri-apps/plugin-dialog';
 import { addRepository, listRepositories, removeRepository } from '../tauri-api/repositories';
 import { resolveGitRepositoryPath } from '../tauri-api/settings';
-import { forgeWarn } from '../forge-log';
+import { mnWarn } from '../mn-log';
 import type { AppSettings } from '../../types';
 
 export function useAppRepositories() {
@@ -21,14 +21,14 @@ export function useAppRepositories() {
           : current,
       );
     } catch (err) {
-      forgeWarn('repositories', 'list repositories failed', { err });
+      mnWarn('repositories', 'list repositories failed', { err });
     }
   }, []);
 
   const removeRepositoryFromSettings = useCallback(async (repositoryId: string) => {
     const repo = settingsState?.discoveredRepositories.find((item) => item.id === repositoryId);
     const label = repo?.name ?? repositoryId;
-    if (!window.confirm(`Remove repository "${label}" from Forge? This only removes it from the list — it won't delete files on disk.`)) return;
+    if (!window.confirm(`Remove repository "${label}" from Mnemonic? This only removes it from the list — it won't delete files on disk.`)) return;
     try {
       await removeRepository(repositoryId);
       setSettingsState((current) =>

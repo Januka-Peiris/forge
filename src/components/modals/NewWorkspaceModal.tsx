@@ -4,7 +4,7 @@ import { suggestRelevantRepositoriesForTask } from '../../lib/tauri-api/reposito
 import { getRepositoryWorkspaceOptions } from '../../lib/tauri-api/workspaces';
 import { listWorkspaceTemplates, createWorkspaceTemplate } from '../../lib/tauri-api/workspace-templates';
 import { formatWorkspaceCreationError } from '../../lib/ui-errors';
-import { defaultBranchForWorkspaceLabel, suggestForgeWorkspaceLabel } from '../../lib/workspace-name-generator';
+import { defaultBranchForWorkspaceLabel, suggestMnemonicWorkspaceLabel } from '../../lib/workspace-name-generator';
 import { agentTypeForProvider } from '../../lib/active-agent-providers';
 import { useActiveAgentProviders } from '../../lib/hooks/useActiveAgentProviders';
 import type { AgentType, CreateManyWorkspacesResult, CreateWorkspaceInput, DiscoveredRepository, RepositoryWorkspaceOptions } from '../../types';
@@ -31,7 +31,7 @@ interface NewWorkspaceModalProps {
 
 export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositories, initialRepositoryId, initialParentWorkspaceId, initialSourceWorkspaceId, initialFederatedTaskName }: NewWorkspaceModalProps) {
   const firstRepo = repositories[0];
-  const [name, setName] = useState(() => suggestForgeWorkspaceLabel());
+  const [name, setName] = useState(() => suggestMnemonicWorkspaceLabel());
   const nameRef = useRef(name);
   nameRef.current = name;
   const [repositoryId, setRepositoryId] = useState(initialRepositoryId ?? firstRepo?.id ?? '');
@@ -118,7 +118,7 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
   }, [repositoryId]);
 
   const shuffleWorkspaceLabel = () => {
-    const next = suggestForgeWorkspaceLabel();
+    const next = suggestMnemonicWorkspaceLabel();
     setName(next);
     if (sourceMode === 'new_branch') {
       setBranchName(defaultBranchForWorkspaceLabel(next));
@@ -151,7 +151,7 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
   ), [relatedScopeSuggestions, selectedScopeRepoIds]);
 
   const primaryInput = (): CreateWorkspaceInput => ({
-    name: name.trim() || suggestForgeWorkspaceLabel(),
+    name: name.trim() || suggestMnemonicWorkspaceLabel(),
     repo,
     baseBranch,
     agent,
@@ -168,7 +168,7 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
   const relatedWorkspaceInput = (suggestion: RepositoryScopeSuggestion): CreateWorkspaceInput | null => {
     const repository = repositories.find((candidate) => candidate.id === suggestion.repoId);
     if (!repository) return null;
-    const baseName = name.trim() || suggestForgeWorkspaceLabel();
+    const baseName = name.trim() || suggestMnemonicWorkspaceLabel();
     const primaryBranch = branchName.trim() || defaultBranchForWorkspaceLabel(baseName);
     const repoSlug = slugify(repository.name);
     return {
@@ -272,7 +272,7 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
         <DialogBody className="space-y-4 max-h-[65vh] overflow-y-auto">
           {templates.length > 0 && (
             <div>
-              <p className="text-[11px] font-semibold text-forge-muted uppercase tracking-wider mb-2">Quick Start Templates</p>
+              <p className="text-[11px] font-semibold text-mn-muted uppercase tracking-wider mb-2">Quick Start Templates</p>
               <div className="flex gap-2 overflow-x-auto pb-1">
                 {templates.map((tmpl) => (
                   <button
@@ -282,10 +282,10 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
                       setTaskPrompt(tmpl.taskPrompt);
                       setAgent(tmpl.agent as AgentType);
                     }}
-                    className="shrink-0 flex flex-col gap-1 px-3 py-2 rounded-lg border border-forge-border bg-forge-card hover:border-forge-orange/40 hover:bg-forge-orange/5 text-left min-w-[120px] max-w-[160px] transition-colors"
+                    className="shrink-0 flex flex-col gap-1 px-3 py-2 rounded-lg border border-mn-border bg-mn-card hover:border-mn-orange/40 hover:bg-mn-orange/5 text-left min-w-[120px] max-w-[160px] transition-colors"
                   >
-                    <span className="text-[11px] font-semibold text-forge-text truncate">{tmpl.name}</span>
-                    <span className="text-[10px] text-forge-muted px-1.5 py-0.5 rounded bg-forge-orange/10 text-forge-orange self-start">{tmpl.agent}</span>
+                    <span className="text-[11px] font-semibold text-mn-text truncate">{tmpl.name}</span>
+                    <span className="text-[10px] text-mn-muted px-1.5 py-0.5 rounded bg-mn-orange/10 text-mn-orange self-start">{tmpl.agent}</span>
                   </button>
                 ))}
               </div>
@@ -295,7 +295,7 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
               <div className="mb-1.5 flex items-center justify-between gap-2">
-                <label className="block text-[11px] font-semibold text-forge-muted uppercase tracking-wider">Branch Workspace Label</label>
+                <label className="block text-[11px] font-semibold text-mn-muted uppercase tracking-wider">Branch Workspace Label</label>
                 <Button
                   type="button"
                   variant="outline"
@@ -312,12 +312,12 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. quiet-maple (editable)"
               />
-              <p className="mt-1 text-[10px] text-forge-muted">Random two-word default (shuffle anytime). Checkouts live under <span className="font-mono text-forge-text/80">{'forge/<workspace-id>'}</span> inside the repo you pick so everything stays with that main checkout.</p>
+              <p className="mt-1 text-[10px] text-mn-muted">Random two-word default (shuffle anytime). Checkouts live under <span className="font-mono text-mn-text/80">{'mnemonic/<workspace-id>'}</span> inside the repo you pick so everything stays with that main checkout.</p>
             </div>
 
             {!initialRepositoryId && (
               <div className="col-span-2">
-                <label className="block text-[11px] font-semibold text-forge-muted uppercase tracking-wider mb-1.5">
+                <label className="block text-[11px] font-semibold text-mn-muted uppercase tracking-wider mb-1.5">
                   <div className="flex items-center gap-1.5"><FolderGit2 className="w-3 h-3" />Repository</div>
                 </label>
                 <Select value={repositoryId} onValueChange={setRepositoryId}>
@@ -339,7 +339,7 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
             )}
 
             <div>
-              <label className="block text-[11px] font-semibold text-forge-muted uppercase tracking-wider mb-1.5">
+              <label className="block text-[11px] font-semibold text-mn-muted uppercase tracking-wider mb-1.5">
                 <div className="flex items-center gap-1.5"><GitBranch className="w-3 h-3" />Start From Branch / Worktree</div>
               </label>
               <div className="mb-2 grid grid-cols-2 gap-2">
@@ -391,7 +391,7 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-forge-muted uppercase tracking-wider mb-1.5">Base Branch (for new branch workspace)</label>
+              <label className="block text-[11px] font-semibold text-mn-muted uppercase tracking-wider mb-1.5">Base Branch (for new branch workspace)</label>
               <Input
                 value={baseBranch}
                 onChange={(e) => setBaseBranch(e.target.value)}
@@ -400,7 +400,7 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
           </div>
 
           <div>
-            <label className="block text-[11px] font-semibold text-forge-muted uppercase tracking-wider mb-1.5">
+            <label className="block text-[11px] font-semibold text-mn-muted uppercase tracking-wider mb-1.5">
               <div className="flex items-center gap-1.5"><Bot className="w-3 h-3" />Agent</div>
             </label>
             {activeAgentOptions.length > 0 ? (
@@ -418,14 +418,14 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
               ))}
             </div>
             ) : (
-              <p className="rounded-lg border border-forge-border/70 bg-black/10 p-3 text-[12px] text-forge-muted">
+              <p className="rounded-lg border border-mn-border/70 bg-black/10 p-3 text-[12px] text-mn-muted">
                 No active agent providers. Enable Claude, Codex, Kimi, or Local LLM in Settings → Agent Setup before creating an agent workspace.
               </p>
             )}
           </div>
 
           <div>
-            <label className="block text-[11px] font-semibold text-forge-muted uppercase tracking-wider mb-1.5">Task Prompt</label>
+            <label className="block text-[11px] font-semibold text-mn-muted uppercase tracking-wider mb-1.5">Task Prompt</label>
             <Textarea
               value={taskPrompt}
               onChange={(e) => setTaskPrompt(e.target.value)}
@@ -435,13 +435,13 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
           </div>
 
           {initialParentWorkspaceId && (
-            <div className="rounded-lg border border-forge-blue/30 bg-forge-blue/10 p-3">
+            <div className="rounded-lg border border-mn-blue/30 bg-mn-blue/10 p-3">
               <div className="flex items-start gap-2">
-                <Network className="mt-0.5 h-3.5 w-3.5 text-forge-blue" />
+                <Network className="mt-0.5 h-3.5 w-3.5 text-mn-blue" />
                 <div>
-                  <p className="text-[12px] font-semibold text-forge-blue">Joining existing federated task</p>
-                  <p className="mt-1 text-[11px] leading-relaxed text-forge-muted">
-                    This workspace will be linked under {initialFederatedTaskName ? <span className="font-semibold text-forge-text">{initialFederatedTaskName}</span> : 'the selected parent workspace'} and will appear in the federation cockpit immediately after creation.
+                  <p className="text-[12px] font-semibold text-mn-blue">Joining existing federated task</p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-mn-muted">
+                    This workspace will be linked under {initialFederatedTaskName ? <span className="font-semibold text-mn-text">{initialFederatedTaskName}</span> : 'the selected parent workspace'} and will appear in the federation cockpit immediately after creation.
                   </p>
                 </div>
               </div>
@@ -449,14 +449,14 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
           )}
 
           {repositories.length > 1 && !initialParentWorkspaceId && (
-            <div className="rounded-lg border border-forge-border/70 bg-forge-card/50 p-3">
+            <div className="rounded-lg border border-mn-border/70 bg-mn-card/50 p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-forge-muted">
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-mn-muted">
                     <Network className="h-3 w-3" />
                     Multi-repo scope
                   </div>
-                  <p className="mt-1 text-[11px] leading-relaxed text-forge-muted">
+                  <p className="mt-1 text-[11px] leading-relaxed text-mn-muted">
                     Optional. Uses human-defined repo relationships to preview likely related workspaces.
                   </p>
                 </div>
@@ -474,17 +474,17 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
               {scopeResult && (
                 <div className="mt-3 space-y-2">
                   {relatedScopeSuggestions.length === 0 ? (
-                    <p className="rounded border border-forge-border/60 bg-forge-bg/40 px-2 py-1.5 text-[11px] text-forge-muted">
+                    <p className="rounded border border-mn-border/60 bg-mn-bg/40 px-2 py-1.5 text-[11px] text-mn-muted">
                       No related repositories suggested. This will stay a single workspace.
                     </p>
                   ) : (
                     <>
-                      <label className="flex items-center gap-2 rounded border border-forge-border/60 bg-forge-bg/40 px-2 py-1.5">
+                      <label className="flex items-center gap-2 rounded border border-mn-border/60 bg-mn-bg/40 px-2 py-1.5">
                         <Checkbox
                           checked={createRelatedWorkspaces}
                           onCheckedChange={(checked) => setCreateRelatedWorkspaces(!!checked)}
                         />
-                        <span className="text-[12px] text-forge-text/80">
+                        <span className="text-[12px] text-mn-text/80">
                           Also create selected related repo workspaces
                         </span>
                       </label>
@@ -492,7 +492,7 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
                         {relatedScopeSuggestions.slice(0, 4).map((suggestion) => (
                           <label
                             key={suggestion.repoId}
-                            className="flex cursor-pointer items-start gap-2 rounded border border-forge-border/50 bg-forge-bg/30 px-2 py-1.5"
+                            className="flex cursor-pointer items-start gap-2 rounded border border-mn-border/50 bg-mn-bg/30 px-2 py-1.5"
                           >
                             <Checkbox
                               checked={selectedScopeRepoIds.includes(suggestion.repoId)}
@@ -507,13 +507,13 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
                             />
                             <span className="min-w-0 flex-1">
                               <span className="flex flex-wrap items-center gap-1.5">
-                                <span className="text-[12px] font-semibold text-forge-text">{suggestion.repoName}</span>
+                                <span className="text-[12px] font-semibold text-mn-text">{suggestion.repoName}</span>
                                 <Badge variant={suggestion.selectedByDefault ? 'success' : 'muted'}>
                                   {suggestion.selectedByDefault ? 'likely' : 'optional'}
                                 </Badge>
                                 <Badge variant="info">{Math.round(suggestion.score)}%</Badge>
                               </span>
-                              <span className="mt-0.5 block truncate text-[10px] text-forge-muted">
+                              <span className="mt-0.5 block truncate text-[10px] text-mn-muted">
                                 {suggestion.reasons[0] ?? 'Related by repository relationship.'}
                               </span>
                             </span>
@@ -521,7 +521,7 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
                         ))}
                       </div>
                       {unselectedLikelySuggestions.length > 0 && (
-                        <p className="rounded border border-forge-yellow/30 bg-forge-yellow/10 px-2 py-1.5 text-[11px] text-forge-yellow">
+                        <p className="rounded border border-mn-yellow/30 bg-mn-yellow/10 px-2 py-1.5 text-[11px] text-mn-yellow">
                           Companion warning: {unselectedLikelySuggestions.map((suggestion) => suggestion.repoName).join(', ')} look related but are not selected for workspace creation.
                         </p>
                       )}
@@ -533,11 +533,11 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
           )}
 
           {createManyResult && (createManyResult.created.length > 0 || createManyResult.failed.length > 0) && (
-            <div className="rounded-lg border border-forge-border/70 bg-forge-card/50 p-3">
+            <div className="rounded-lg border border-mn-border/70 bg-mn-card/50 p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-forge-muted">Federated creation progress</p>
-                  <p className="mt-1 text-[11px] text-forge-muted">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-mn-muted">Federated creation progress</p>
+                  <p className="mt-1 text-[11px] text-mn-muted">
                     {createManyResult.created.length} created · {createManyResult.failed.length} failed
                   </p>
                 </div>
@@ -550,7 +550,7 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
               {createManyResult.created.length > 0 && (
                 <div className="mt-2 space-y-1">
                   {createManyResult.created.map((created) => (
-                    <p key={created.workspaceId} className="truncate text-[11px] text-forge-green">
+                    <p key={created.workspaceId} className="truncate text-[11px] text-mn-cyan">
                       Created {created.repo}: <span className="font-mono">{created.workspaceId}</span>
                     </p>
                   ))}
@@ -559,7 +559,7 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
               {createManyResult.failed.length > 0 && (
                 <div className="mt-2 space-y-1">
                   {createManyResult.failed.map((failure, index) => (
-                    <p key={`${failure.repo}-${index}`} className="text-[11px] text-forge-red">
+                    <p key={`${failure.repo}-${index}`} className="text-[11px] text-mn-red">
                       Failed {failure.repo}: {failure.error}
                     </p>
                   ))}
@@ -569,7 +569,7 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
           )}
 
           <div className="space-y-2.5 pt-1">
-            <p className="text-[11px] font-semibold text-forge-muted uppercase tracking-wider mb-1">Options</p>
+            <p className="text-[11px] font-semibold text-mn-muted uppercase tracking-wider mb-1">Options</p>
             {[
               { id: 'pr', label: 'Prepare PR draft automatically', val: createPR, set: setCreatePR },
               { id: 'cursor', label: 'Open in Cursor after setup', val: openCursor, set: setOpenCursor },
@@ -581,7 +581,7 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
                   checked={val}
                   onCheckedChange={(checked) => set(!!checked)}
                 />
-                <span className="text-[12px] text-forge-text/80 group-hover:text-forge-text transition-colors">{label}</span>
+                <span className="text-[12px] text-mn-text/80 group-hover:text-mn-text transition-colors">{label}</span>
               </label>
             ))}
           </div>
@@ -594,7 +594,7 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
                 variant="ghost"
                 size="xs"
                 onClick={() => setShowSaveTemplate(true)}
-                className="text-forge-muted hover:text-forge-orange"
+                className="text-mn-muted hover:text-mn-orange"
               >
                 <BookTemplate className="w-3 h-3" />
                 Save as template
@@ -642,9 +642,9 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
         <DialogFooter>
           <div className="flex-1">
             {error ? (
-              <p className="text-[12px] text-forge-red">{error}</p>
+              <p className="text-[12px] text-mn-red">{error}</p>
             ) : (
-              <span className="text-[12px] text-forge-muted">
+              <span className="text-[12px] text-mn-muted">
                 {loadingOptions
                   ? 'Loading repo options…'
                   : createRelatedWorkspaces && selectedRelatedSuggestions.length > 0

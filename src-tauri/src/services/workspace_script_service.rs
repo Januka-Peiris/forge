@@ -16,7 +16,7 @@ use crate::state::AppState;
 
 const CONFIG_RELATIVE_PATH: &str = ".forge/config.json";
 
-pub fn get_workspace_forge_config(
+pub fn get_workspace_mnemonic_config(
     state: &AppState,
     workspace_id: &str,
 ) -> Result<ForgeWorkspaceConfig, String> {
@@ -28,12 +28,12 @@ pub fn run_workspace_setup(
     state: &AppState,
     workspace_id: &str,
 ) -> Result<Vec<TerminalSession>, String> {
-    let config = get_workspace_forge_config(state, workspace_id)?;
+    let config = get_workspace_mnemonic_config(state, workspace_id)?;
     if let Some(warning) = config.warning.as_deref() {
         insert_script_activity(
             state,
             workspace_id,
-            "Forge config warning",
+            "Mnemonic config warning",
             "warning",
             warning,
         );
@@ -79,7 +79,7 @@ pub fn start_workspace_run_command(
     workspace_id: &str,
     command_index: usize,
 ) -> Result<TerminalSession, String> {
-    let config = get_workspace_forge_config(state, workspace_id)?;
+    let config = get_workspace_mnemonic_config(state, workspace_id)?;
     let command = config.run.get(command_index).ok_or_else(|| {
         format!(
             "Run command {} was not found in .forge/config.json",
@@ -124,7 +124,7 @@ pub fn restart_workspace_run_command(
     workspace_id: &str,
     command_index: usize,
 ) -> Result<TerminalSession, String> {
-    let config = get_workspace_forge_config(state, workspace_id)?;
+    let config = get_workspace_mnemonic_config(state, workspace_id)?;
     let command = config.run.get(command_index).ok_or_else(|| {
         format!(
             "Run command {} was not found in .forge/config.json",

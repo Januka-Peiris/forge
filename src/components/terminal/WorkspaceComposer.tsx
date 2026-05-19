@@ -202,14 +202,14 @@ export function WorkspaceComposer({
 
   useEffect(() => {
     const onFocusComposer = () => textareaRef.current?.focus();
-    window.addEventListener('forge:focus-composer', onFocusComposer);
-    return () => window.removeEventListener('forge:focus-composer', onFocusComposer);
+    window.addEventListener('mn:focus-composer', onFocusComposer);
+    return () => window.removeEventListener('mn:focus-composer', onFocusComposer);
   }, []);
 
   useEffect(() => {
     const handleTogglePlanMode = () => onTogglePlanMode();
-    window.addEventListener('forge:toggle-plan-mode', handleTogglePlanMode);
-    return () => window.removeEventListener('forge:toggle-plan-mode', handleTogglePlanMode);
+    window.addEventListener('mn:toggle-plan-mode', handleTogglePlanMode);
+    return () => window.removeEventListener('mn:toggle-plan-mode', handleTogglePlanMode);
   }, [onTogglePlanMode]);
 
   const promptMeter = useMemo(() => {
@@ -222,21 +222,21 @@ export function WorkspaceComposer({
       {
         id: 'preset-plan-act',
         title: 'Plan → Act',
-        source: 'Forge workflow',
+        source: 'Mnemonic workflow',
         body: 'Create a concise implementation plan for this workspace. Do not edit files yet.',
         preset: 'plan-act' as const,
       },
       {
         id: 'preset-plan-codex-review',
         title: 'Plan → Codex → Review',
-        source: 'Forge workflow',
-        body: 'Plan the implementation. After the plan is accepted, Forge will route implementation/review follow-up.',
+        source: 'Mnemonic workflow',
+        body: 'Plan the implementation. After the plan is accepted, Mnemonic will route implementation/review follow-up.',
         preset: 'plan-codex-review' as const,
       },
       {
         id: 'preset-implement-review-pr',
         title: 'Implement → Review → PR',
-        source: 'Forge workflow',
+        source: 'Mnemonic workflow',
         body: 'Implement the requested change, then summarize changed files, tests, and PR readiness.',
         preset: 'implement-review-pr' as const,
       },
@@ -286,7 +286,7 @@ export function WorkspaceComposer({
       setContextPreview(preview);
       if (!preview.promptContext.trim()) return;
       updatePromptInput((current) => {
-        if (current.includes('Forge repo context:')) return current;
+        if (current.includes('Mnemonic repo context:')) return current;
         const suffix = current.trim().length > 0 ? `\n\n${current.trim()}` : '';
         return `${preview.promptContext}${suffix}`;
       });
@@ -313,7 +313,7 @@ export function WorkspaceComposer({
   const injectLinkedContext = () => {
     if (!agentContext?.promptPreamble.trim()) return;
     updatePromptInput((current) => {
-      if (current.includes('Forge linked repository context:')) return current;
+      if (current.includes('Mnemonic linked repository context:')) return current;
       const suffix = current.trim().length > 0 ? `\n\n${current.trim()}` : '';
       return `${agentContext.promptPreamble}${suffix}`;
     });
@@ -479,19 +479,19 @@ export function WorkspaceComposer({
   }, [activeCoordinatorProviderOptions, activeProviderIds, onSettingsChange, settings.coordinatorBrainProvider, settings.coordinatorCoderProvider, settings.promptMode]);
 
   return (
-    <div className="shrink-0 border-t border-forge-border bg-forge-surface" style={{ height: `${composerHeight}px` }}>
+    <div className="shrink-0 border-t border-mn-border bg-mn-surface" style={{ height: `${composerHeight}px` }}>
       <div
         role="separator"
         aria-label="Resize message panel"
         onMouseDown={startComposerResize}
-        className="h-1 cursor-row-resize bg-transparent hover:bg-forge-border/70 active:bg-forge-green/60"
+        className="h-1 cursor-row-resize bg-transparent hover:bg-mn-border/70 active:bg-mn-cyan/60"
       />
       <div className="flex h-[calc(100%-4px)] min-h-0 flex-col gap-2 overflow-hidden p-2">
         <div className="shrink-0 flex items-center gap-2 overflow-x-auto">
-          <div className="flex shrink-0 items-center gap-1 rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-muted">
-            <span className="text-forge-dim">Mode</span>
+          <div className="flex shrink-0 items-center gap-1 rounded border border-mn-border bg-mn-bg px-2 py-1 text-xs text-mn-muted">
+            <span className="text-mn-dim">Mode</span>
             <Select value={settings.promptMode} onValueChange={(value) => onSettingsChange({ promptMode: value as ComposerSettings['promptMode'] })}>
-              <SelectTrigger compact className={settings.promptMode === 'coordinator' ? 'text-forge-orange' : ''}><SelectValue /></SelectTrigger>
+              <SelectTrigger compact className={settings.promptMode === 'coordinator' ? 'text-mn-orange' : ''}><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="direct">Direct</SelectItem>
                 <SelectItem value="coordinator">Coordinator</SelectItem>
@@ -523,28 +523,28 @@ export function WorkspaceComposer({
                     ))}
                   </SelectContent>
                 </Select>
-                <span className="rounded border border-forge-blue/30 bg-forge-blue/10 px-1.5 py-0.5 text-[10px] text-forge-blue">
+                <span className="rounded border border-mn-blue/30 bg-mn-blue/10 px-1.5 py-0.5 text-[10px] text-mn-blue">
                   brain {coordinatorProviderLabel(settings.coordinatorBrainProvider)}
                 </span>
-                <span className="rounded border border-forge-violet/30 bg-forge-violet/10 px-1.5 py-0.5 text-[10px] text-forge-violet">
+                <span className="rounded border border-mn-violet/30 bg-mn-violet/10 px-1.5 py-0.5 text-[10px] text-mn-violet">
                   coder {coordinatorProviderLabel(settings.coordinatorCoderProvider)}
                 </span>
                 <Popover open={coordinatorModelsOpen} onOpenChange={setCoordinatorModelsOpen}>
                   <PopoverTrigger asChild>
                     <button
                       type="button"
-                      className="rounded border border-forge-border bg-black/10 px-1.5 py-0.5 text-[10px] text-forge-muted hover:bg-white/10"
+                      className="rounded border border-mn-border bg-black/10 px-1.5 py-0.5 text-[10px] text-mn-muted hover:bg-white/10"
                       title="Coordinator provider model settings"
                     >
                       Models
                     </button>
                   </PopoverTrigger>
                   <PopoverContent align="end" className="w-[420px] max-w-[calc(100vw-24px)]">
-                    <p className="mb-2 text-xs font-semibold text-forge-text">Coordinator models & overrides</p>
+                    <p className="mb-2 text-xs font-semibold text-mn-text">Coordinator models & overrides</p>
                     <div className="grid gap-3 md:grid-cols-2">
-                      <div className="rounded border border-forge-border/70 bg-black/10 p-2">
-                        <p className="mb-2 text-[11px] font-semibold text-forge-text">Brain ({coordinatorProviderLabel(settings.coordinatorBrainProvider)})</p>
-                        <label className="mb-1 block text-[10px] uppercase tracking-widest text-forge-muted">Model</label>
+                      <div className="rounded border border-mn-border/70 bg-black/10 p-2">
+                        <p className="mb-2 text-[11px] font-semibold text-mn-text">Brain ({coordinatorProviderLabel(settings.coordinatorBrainProvider)})</p>
+                        <label className="mb-1 block text-[10px] uppercase tracking-widest text-mn-muted">Model</label>
                         <Select value={settings.coordinatorBrainModel || '__default__'} onValueChange={(value) => onSettingsChange({ coordinatorBrainModel: value === '__default__' ? '' : value })}>
                           <SelectTrigger className="w-full"><SelectValue placeholder="Default model" /></SelectTrigger>
                           <SelectContent>
@@ -557,7 +557,7 @@ export function WorkspaceComposer({
                             )}
                           </SelectContent>
                         </Select>
-                        <label className="mb-1 mt-2 block text-[10px] uppercase tracking-widest text-forge-muted">Reasoning</label>
+                        <label className="mb-1 mt-2 block text-[10px] uppercase tracking-widest text-mn-muted">Reasoning</label>
                         <Select value={settings.coordinatorBrainReasoning || '__default__'} onValueChange={(value) => onSettingsChange({ coordinatorBrainReasoning: value === '__default__' ? '' : value })}>
                           <SelectTrigger className="w-full"><SelectValue placeholder="Default reasoning" /></SelectTrigger>
                           <SelectContent>
@@ -570,7 +570,7 @@ export function WorkspaceComposer({
                             )}
                           </SelectContent>
                         </Select>
-                        <label className="mb-1 mt-2 block text-[10px] uppercase tracking-widest text-forge-muted">Advanced profile override</label>
+                        <label className="mb-1 mt-2 block text-[10px] uppercase tracking-widest text-mn-muted">Advanced profile override</label>
                         <Select value={settings.coordinatorBrainProfileId || '__none__'} onValueChange={(value) => onSettingsChange({ coordinatorBrainProfileId: value === '__none__' ? '' : value })}>
                           <SelectTrigger className="w-full"><SelectValue placeholder="None (provider default)" /></SelectTrigger>
                           <SelectContent>
@@ -582,9 +582,9 @@ export function WorkspaceComposer({
                         </Select>
                       </div>
 
-                      <div className="rounded border border-forge-border/70 bg-black/10 p-2">
-                        <p className="mb-2 text-[11px] font-semibold text-forge-text">Coder ({coordinatorProviderLabel(settings.coordinatorCoderProvider)})</p>
-                        <label className="mb-1 block text-[10px] uppercase tracking-widest text-forge-muted">Model</label>
+                      <div className="rounded border border-mn-border/70 bg-black/10 p-2">
+                        <p className="mb-2 text-[11px] font-semibold text-mn-text">Coder ({coordinatorProviderLabel(settings.coordinatorCoderProvider)})</p>
+                        <label className="mb-1 block text-[10px] uppercase tracking-widest text-mn-muted">Model</label>
                         <Select value={settings.coordinatorCoderModel || '__default__'} onValueChange={(value) => onSettingsChange({ coordinatorCoderModel: value === '__default__' ? '' : value })}>
                           <SelectTrigger className="w-full"><SelectValue placeholder="Default model" /></SelectTrigger>
                           <SelectContent>
@@ -597,7 +597,7 @@ export function WorkspaceComposer({
                             )}
                           </SelectContent>
                         </Select>
-                        <label className="mb-1 mt-2 block text-[10px] uppercase tracking-widest text-forge-muted">Reasoning</label>
+                        <label className="mb-1 mt-2 block text-[10px] uppercase tracking-widest text-mn-muted">Reasoning</label>
                         <Select value={settings.coordinatorCoderReasoning || '__default__'} onValueChange={(value) => onSettingsChange({ coordinatorCoderReasoning: value === '__default__' ? '' : value })}>
                           <SelectTrigger className="w-full"><SelectValue placeholder="Default reasoning" /></SelectTrigger>
                           <SelectContent>
@@ -610,7 +610,7 @@ export function WorkspaceComposer({
                             )}
                           </SelectContent>
                         </Select>
-                        <label className="mb-1 mt-2 block text-[10px] uppercase tracking-widest text-forge-muted">Advanced profile override</label>
+                        <label className="mb-1 mt-2 block text-[10px] uppercase tracking-widest text-mn-muted">Advanced profile override</label>
                         <Select value={settings.coordinatorCoderProfileId || '__none__'} onValueChange={(value) => onSettingsChange({ coordinatorCoderProfileId: value === '__none__' ? '' : value })}>
                           <SelectTrigger className="w-full"><SelectValue placeholder="None (provider default)" /></SelectTrigger>
                           <SelectContent>
@@ -622,18 +622,18 @@ export function WorkspaceComposer({
                         </Select>
                       </div>
                     </div>
-                    <p className="mt-2 text-[10px] text-forge-muted">
+                    <p className="mt-2 text-[10px] text-mn-muted">
                       Provider list follows Settings → Agent Setup. Profile override is optional.
                     </p>
                   </PopoverContent>
                 </Popover>
                 {activeCoordinatorProviderOptions.length === 0 && (
-                  <span className="rounded border border-forge-yellow/30 bg-forge-yellow/10 px-1.5 py-0.5 text-[10px] text-forge-yellow">
+                  <span className="rounded border border-mn-yellow/30 bg-mn-yellow/10 px-1.5 py-0.5 text-[10px] text-mn-yellow">
                     enable a provider in Settings
                   </span>
                 )}
                 <span>·</span>
-                <span className={coordinatorStatus?.activeRun ? 'text-forge-orange' : 'text-forge-muted'}>
+                <span className={coordinatorStatus?.activeRun ? 'text-mn-orange' : 'text-mn-muted'}>
                   {coordinatorStatus?.activeRun ? `running (${coordinatorWorkerCount} workers)` : 'idle'}
                 </span>
                 <button
@@ -641,8 +641,8 @@ export function WorkspaceComposer({
                   onClick={() => onSettingsChange({ coordinatorAutoStepOnWorkerComplete: !settings.coordinatorAutoStepOnWorkerComplete })}
                   className={`rounded border px-1.5 py-0.5 text-[10px] ${
                     settings.coordinatorAutoStepOnWorkerComplete
-                      ? 'border-forge-green/30 bg-forge-green/10 text-forge-green'
-                      : 'border-forge-border bg-black/10 text-forge-muted'
+                      ? 'border-mn-cyan/30 bg-mn-cyan/10 text-mn-cyan'
+                      : 'border-mn-border bg-black/10 text-mn-muted'
                   }`}
                   title="Automatically run a coordinator step when a worker completes"
                 >
@@ -683,7 +683,7 @@ export function WorkspaceComposer({
                 {latestPlannerDiagnostic && (
                   <>
                     <span>·</span>
-                    <span className="max-w-[280px] truncate text-forge-dim" title={latestPlannerDiagnostic}>
+                    <span className="max-w-[280px] truncate text-mn-dim" title={latestPlannerDiagnostic}>
                       {latestPlannerDiagnostic}
                     </span>
                   </>
@@ -692,7 +692,7 @@ export function WorkspaceComposer({
                   <button
                     type="button"
                     onClick={onStopCoordinator}
-                    className="rounded border border-forge-yellow/30 bg-forge-yellow/10 px-1.5 py-0.5 text-[10px] text-forge-yellow hover:bg-forge-yellow/20"
+                    className="rounded border border-mn-yellow/30 bg-mn-yellow/10 px-1.5 py-0.5 text-[10px] text-mn-yellow hover:bg-mn-yellow/20"
                     title="Stop active coordinator run"
                   >
                     Stop
@@ -702,22 +702,22 @@ export function WorkspaceComposer({
             )}
           </div>
 
-          <div className="flex shrink-0 items-center gap-1.5 rounded border border-forge-border bg-forge-bg px-2 py-1 text-xs text-forge-muted">
+          <div className="flex shrink-0 items-center gap-1.5 rounded border border-mn-border bg-mn-bg px-2 py-1 text-xs text-mn-muted">
               {(provider === 'claude_code' || provider === 'codex' || provider === 'kimi_code') && (
                 <>
                   <button
                     onClick={onTogglePlanMode}
                     title="Toggle Plan mode (Shift+Tab)"
-                    className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] transition-colors ${settings.selectedTaskMode === 'Plan' ? 'bg-forge-blue/15 text-forge-blue font-semibold' : 'text-forge-muted/50 hover:text-forge-muted'}`}
+                    className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] transition-colors ${settings.selectedTaskMode === 'Plan' ? 'bg-mn-blue/15 text-mn-blue font-semibold' : 'text-mn-muted/50 hover:text-mn-muted'}`}
                   >
                     <ListChecks className="h-3 w-3" />
                     <span>Plan</span>
                   </button>
-                  <div className="h-3.5 w-px bg-forge-border/50" />
+                  <div className="h-3.5 w-px bg-mn-border/50" />
                 </>
               )}
               <Select value={settings.selectedModel} onValueChange={(v) => onSettingsChange({ selectedModel: v })}>
-                <SelectTrigger compact title={`${providerLabel} model`} className="text-forge-green font-semibold"><SelectValue /></SelectTrigger>
+                <SelectTrigger compact title={`${providerLabel} model`} className="text-mn-cyan font-semibold"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {modelOptions.map((model) => (
                     <SelectItem key={model.value} value={model.value}>{compactLabel(model.value, provider)}</SelectItem>
@@ -727,7 +727,7 @@ export function WorkspaceComposer({
                   )}
                 </SelectContent>
               </Select>
-              <div className="h-3.5 w-px bg-forge-border/50" />
+              <div className="h-3.5 w-px bg-mn-border/50" />
               <div className="flex items-center gap-0.5">
                 {thinkingOptions.map((level) => (
                   <button
@@ -736,8 +736,8 @@ export function WorkspaceComposer({
                     title={level.hint ?? level.label}
                     className={`rounded px-1.5 py-0.5 text-[10px] transition-colors ${
                       settings.selectedReasoning === level.value
-                        ? 'bg-forge-violet/20 text-forge-violet font-semibold'
-                        : 'text-forge-muted/50 hover:text-forge-muted hover:bg-white/5'
+                        ? 'bg-mn-violet/20 text-mn-violet font-semibold'
+                        : 'text-mn-muted/50 hover:text-mn-muted hover:bg-white/5'
                     }`}
                   >
                     {level.label}
@@ -747,13 +747,13 @@ export function WorkspaceComposer({
               {promptMeter && (
                 <>
                   <span>·</span>
-                  <span className="text-forge-dim">{promptMeter.sessionEstTokens.toLocaleString()} tok</span>
+                  <span className="text-mn-dim">{promptMeter.sessionEstTokens.toLocaleString()} tok</span>
                 </>
               )}
               {contextPreview && (
                 <>
                   <span>·</span>
-                  <span className={contextPreview.status === 'fresh' ? 'text-forge-green' : 'text-forge-yellow'}>
+                  <span className={contextPreview.status === 'fresh' ? 'text-mn-cyan' : 'text-mn-yellow'}>
                     repo {contextPreview.status}
                   </span>
                 </>
@@ -775,63 +775,63 @@ export function WorkspaceComposer({
           />
 
           {!!agentContext?.linkedWorktrees.length && (
-            <button onClick={injectLinkedContext} className="max-w-[220px] truncate rounded-md border border-forge-blue/25 bg-forge-blue/10 px-2 py-1 text-xs font-semibold text-forge-blue hover:bg-forge-blue/15" title={agentContext.linkedWorktrees.map((item) => item.path).join('\n')}>
+            <button onClick={injectLinkedContext} className="max-w-[220px] truncate rounded-md border border-mn-blue/25 bg-mn-blue/10 px-2 py-1 text-xs font-semibold text-mn-blue hover:bg-mn-blue/15" title={agentContext.linkedWorktrees.map((item) => item.path).join('\n')}>
               <Link2 className="inline h-3 w-3" /> Insert linked context ({agentContext.linkedWorktrees.length})
             </button>
           )}
           {contextPreview && (
             <Popover>
               <PopoverTrigger asChild>
-                <button className="flex shrink-0 items-center gap-1 rounded border border-forge-border/50 bg-forge-bg px-2 py-1 text-xs text-forge-muted hover:bg-white/5">
-                  <span className={contextPreview.status === 'fresh' ? 'text-forge-green' : 'text-forge-yellow'}>@</span>
+                <button className="flex shrink-0 items-center gap-1 rounded border border-mn-border/50 bg-mn-bg px-2 py-1 text-xs text-mn-muted hover:bg-white/5">
+                  <span className={contextPreview.status === 'fresh' ? 'text-mn-cyan' : 'text-mn-yellow'}>@</span>
                   {contextPreview.items.filter((i) => i.included).length} files · {contextPreview.status}
                 </button>
               </PopoverTrigger>
               <PopoverContent align="start" className="max-w-sm">
                 <div className="mb-1.5 flex flex-wrap items-center gap-2 text-xs">
-                  <span className="font-bold uppercase tracking-widest text-forge-text">Repo context</span>
-                  <span className={`rounded-full border px-1.5 py-0.5 ${contextPreview.status === 'fresh' ? 'border-forge-green/25 bg-forge-green/10 text-forge-green' : 'border-forge-yellow/25 bg-forge-yellow/10 text-forge-yellow'}`}>
+                  <span className="font-bold uppercase tracking-widest text-mn-text">Repo context</span>
+                  <span className={`rounded-full border px-1.5 py-0.5 ${contextPreview.status === 'fresh' ? 'border-mn-cyan/25 bg-mn-cyan/10 text-mn-cyan' : 'border-mn-yellow/25 bg-mn-yellow/10 text-mn-yellow'}`}>
                     {contextPreview.status}
                   </span>
-                  <span className="text-forge-muted">{contextPreview.defaultBranch}@{contextPreview.commitHash.slice(0, 8)}</span>
-                  <span className="text-forge-muted">
+                  <span className="text-mn-muted">{contextPreview.defaultBranch}@{contextPreview.commitHash.slice(0, 8)}</span>
+                  <span className="text-mn-muted">
                     {contextPreview.maxChars === 0
                       ? <>{contextPreview.approxChars.toLocaleString()} chars · ~{roughTokenEstimateFromChars(contextPreview.approxChars).toLocaleString()} tok</>
                       : <>{contextPreview.approxChars.toLocaleString()} / {contextPreview.maxChars.toLocaleString()} chars</>
                     }
                   </span>
-                  {contextPreview.trimmed && <span className="text-forge-yellow">trimmed</span>}
+                  {contextPreview.trimmed && <span className="text-mn-yellow">trimmed</span>}
                 </div>
-                {contextPreview.warning && <div className="mb-1.5 text-xs text-forge-yellow">{contextPreview.warning}</div>}
+                {contextPreview.warning && <div className="mb-1.5 text-xs text-mn-yellow">{contextPreview.warning}</div>}
                 <div className="flex flex-wrap gap-1">
                   {contextPreview.items.slice(0, 18).map((item, index) => (
                     <span
                       key={`${item.kind}-${item.path ?? item.label}-${index}`}
                       title={`${item.path ?? item.label} · ${item.chars.toLocaleString()} chars${item.trimmed ? ' · trimmed' : ''}`}
-                      className={`max-w-[220px] truncate rounded border px-1.5 py-0.5 text-xs ${item.included ? 'border-forge-blue/20 bg-forge-blue/10 text-forge-blue' : 'border-forge-border bg-white/5 text-forge-muted line-through'}`}
+                      className={`max-w-[220px] truncate rounded border px-1.5 py-0.5 text-xs ${item.included ? 'border-mn-blue/20 bg-mn-blue/10 text-mn-blue' : 'border-mn-border bg-white/5 text-mn-muted line-through'}`}
                     >
                       {item.label}{item.trimmed ? ' …' : ''}
                     </span>
                   ))}
                   {contextPreview.items.length > 18 && (
-                    <span className="rounded border border-forge-border bg-white/5 px-1.5 py-0.5 text-xs">+{contextPreview.items.length - 18} more</span>
+                    <span className="rounded border border-mn-border bg-white/5 px-1.5 py-0.5 text-xs">+{contextPreview.items.length - 18} more</span>
                   )}
                 </div>
               </PopoverContent>
             </Popover>
           )}
           {promptTemplateWarning && (
-            <span className="text-xs text-forge-yellow">{promptTemplateWarning}</span>
+            <span className="text-xs text-mn-yellow">{promptTemplateWarning}</span>
           )}
           {workflowHint && (
-            <span className="text-xs text-forge-blue">{workflowHint}</span>
+            <span className="text-xs text-mn-blue">{workflowHint}</span>
           )}
-          <span className="text-xs text-forge-muted">Type <span className="font-mono text-forge-text/80">/</span> for workflows (e.g. <span className="font-mono text-forge-text/80">/plan-act</span>)</span>
+          <span className="text-xs text-mn-muted">Type <span className="font-mono text-mn-text/80">/</span> for workflows (e.g. <span className="font-mono text-mn-text/80">/plan-act</span>)</span>
         </div>
 
         {slashMatches.length > 0 && (
-          <div className="shrink-0 rounded-lg border border-forge-border bg-forge-card/95 p-1 shadow-xl">
-            <div className="mb-1 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-forge-muted">
+          <div className="shrink-0 rounded-lg border border-mn-border bg-mn-card/95 p-1 shadow-xl">
+            <div className="mb-1 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-mn-muted">
               Workflows & prompt templates
             </div>
             <div className="grid gap-1">
@@ -843,10 +843,10 @@ export function WorkspaceComposer({
                   className="flex min-w-0 items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left hover:bg-white/10"
                 >
                   <span className="min-w-0">
-                    <span className="block truncate text-xs font-semibold text-forge-text">{option.title}</span>
-                    <span className="block truncate text-[10px] text-forge-muted">{option.source}</span>
+                    <span className="block truncate text-xs font-semibold text-mn-text">{option.title}</span>
+                    <span className="block truncate text-[10px] text-mn-muted">{option.source}</span>
                   </span>
-                  <span className="shrink-0 rounded border border-forge-border/70 bg-black/20 px-1.5 py-0.5 font-mono text-[10px] text-forge-muted">
+                  <span className="shrink-0 rounded border border-mn-border/70 bg-black/20 px-1.5 py-0.5 font-mono text-[10px] text-mn-muted">
                     /{option.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}
                   </span>
                 </button>
@@ -858,13 +858,13 @@ export function WorkspaceComposer({
         <div className="flex min-h-0 flex-1 gap-2">
           <div className="relative flex min-h-0 w-0 flex-1">
             {dragActive && (
-              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-chat border-2 border-dashed border-forge-green/60 bg-forge-green/10 text-sm font-semibold text-forge-green shadow-inner">
+              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-chat border-2 border-dashed border-mn-cyan/60 bg-mn-cyan/10 text-sm font-semibold text-mn-cyan shadow-inner">
                 <Paperclip className="mr-2 h-4 w-4" /> Drop files here
               </div>
             )}
             <textarea
               ref={textareaRef}
-              data-forge-composer="true"
+              data-mn-composer="true"
               value={promptInput}
               onChange={(e) => updatePromptInput(e.target.value)}
               onPaste={handlePaste}
@@ -888,7 +888,7 @@ export function WorkspaceComposer({
                   ? 'Send instruction to agent (Enter interrupts agent if needed then sends, Shift+Enter for newline)…'
                   : 'Send instruction to agent (Enter to send, Shift+Enter for newline)…'
               }
-              className="h-full min-h-0 w-full resize-none overflow-y-auto rounded-chat border border-forge-border bg-forge-bg px-3 py-2 text-sm leading-relaxed text-forge-text placeholder:text-forge-muted focus:border-forge-green/40 focus:outline-none"
+              className="h-full min-h-0 w-full resize-none overflow-y-auto rounded-chat border border-mn-border bg-mn-bg px-3 py-2 text-sm leading-relaxed text-mn-text placeholder:text-mn-muted focus:border-mn-cyan/40 focus:outline-none"
               onKeyDown={(e) => {
                 if (e.key === 'Escape') { e.currentTarget.blur(); return; }
                 if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); onTogglePlanMode(); return; }
@@ -904,7 +904,7 @@ export function WorkspaceComposer({
               <button
                 type="button"
                 onClick={onInterrupt}
-                className="rounded-btn border border-forge-yellow/30 bg-forge-yellow/10 px-3 py-2 text-xs font-semibold text-forge-yellow hover:bg-forge-yellow/20"
+                className="rounded-btn border border-mn-yellow/30 bg-mn-yellow/10 px-3 py-2 text-xs font-semibold text-mn-yellow hover:bg-mn-yellow/20"
                 title="Interrupt the running agent turn"
               >
                 Interrupt
@@ -913,13 +913,13 @@ export function WorkspaceComposer({
             <button
               disabled={busy || !promptInput.trim()}
               onClick={handleSend}
-              className="rounded-btn border border-forge-green/30 bg-forge-green/5 px-3 py-2 text-sm font-semibold text-forge-green/80 hover:bg-forge-green/10 disabled:opacity-50"
+              className="rounded-btn border border-mn-cyan/30 bg-mn-cyan/5 px-3 py-2 text-sm font-semibold text-mn-cyan/80 hover:bg-mn-cyan/10 disabled:opacity-50"
               title={settings.sendBehavior === 'interrupt_send' ? 'Interrupt then send (same as Enter)' : 'Send now (same as Enter)'}
             >
               <Zap className="inline h-3.5 w-3.5" /> Send
             </button>
             {queuedCount > 0 && (
-              <div className="rounded-btn border border-forge-border/60 bg-black/20 px-2 py-1 text-center text-[11px] text-forge-muted">
+              <div className="rounded-btn border border-mn-border/60 bg-black/20 px-2 py-1 text-center text-[11px] text-mn-muted">
                 {queuedCount} queued
               </div>
             )}
@@ -932,16 +932,16 @@ export function WorkspaceComposer({
               return (
                 <span
                   key={attachment.id}
-                  className="inline-flex max-w-[260px] items-center gap-1.5 rounded-full border border-forge-border bg-forge-bg px-2 py-1 text-[11px] text-forge-muted"
+                  className="inline-flex max-w-[260px] items-center gap-1.5 rounded-full border border-mn-border bg-mn-bg px-2 py-1 text-[11px] text-mn-muted"
                   title={attachment.path}
                 >
                   <Icon className="h-3 w-3 shrink-0" />
                   <span className="truncate">{attachment.name}</span>
-                  <span className="shrink-0 text-forge-dim">{formatBytes(attachment.size)}</span>
+                  <span className="shrink-0 text-mn-dim">{formatBytes(attachment.size)}</span>
                   <button
                     type="button"
                     onClick={() => setAttachments((current) => current.filter((item) => item.id !== attachment.id))}
-                    className="rounded-full p-0.5 hover:bg-white/10 hover:text-forge-text"
+                    className="rounded-full p-0.5 hover:bg-white/10 hover:text-mn-text"
                     title="Remove chip (does not delete saved file or prompt text)"
                   >
                     <X className="h-3 w-3" />

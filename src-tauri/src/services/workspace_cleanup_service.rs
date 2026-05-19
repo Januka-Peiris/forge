@@ -26,7 +26,7 @@ pub fn cleanup_workspace(
         }
     }
 
-    let config = workspace_script_service::get_workspace_forge_config(state, &input.workspace_id)
+    let config = workspace_script_service::get_workspace_mnemonic_config(state, &input.workspace_id)
         .unwrap_or_default();
     let mut teardown_sessions = 0u32;
     if config.warning.is_none() {

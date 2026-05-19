@@ -13,8 +13,8 @@ export function TileResizeHandle({ direction, onResizeStart }: TileResizeHandleP
       onMouseDown={onResizeStart}
       className={
         direction === 'horizontal'
-          ? 'w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-forge-border/70 active:bg-forge-green/60'
-          : 'h-1 shrink-0 cursor-row-resize bg-transparent hover:bg-forge-border/70 active:bg-forge-green/60'
+          ? 'w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-mn-border/70 active:bg-mn-cyan/60'
+          : 'h-1 shrink-0 cursor-row-resize bg-transparent hover:bg-mn-border/70 active:bg-mn-cyan/60'
       }
       title="Drag to resize split"
     />

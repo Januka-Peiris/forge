@@ -58,10 +58,10 @@ export function ContextPreviewPanel({ workspaceId }: Props) {
   const pressure = Math.max(0, Math.min(1, usedTokens / budget));
   const pressureLabel = pressure >= 0.9 ? 'high' : pressure >= 0.65 ? 'moderate' : 'healthy';
   const pressureClass = pressure >= 0.9
-    ? 'bg-forge-red'
+    ? 'bg-mn-red'
     : pressure >= 0.65
-      ? 'bg-forge-yellow'
-      : 'bg-forge-green';
+      ? 'bg-mn-yellow'
+      : 'bg-mn-cyan';
 
   const topContributors = useMemo(
     () => [...(preview?.included ?? [])].sort((a, b) => b.estimatedTokens - a.estimatedTokens).slice(0, 5),
@@ -130,7 +130,7 @@ export function ContextPreviewPanel({ workspaceId }: Props) {
                 </div>
                 <p className="mt-1 text-[11px] text-white/40">
                   {preview.lowSignal
-                    ? 'Low-signal mode means Forge fell back toward changed-file diffs instead of a rich repo map.'
+                    ? 'Low-signal mode means Mnemonic fell back toward changed-file diffs instead of a rich repo map.'
                     : preview.staleMap
                       ? 'Stale context can miss default-branch changes until you refresh or rebuild.'
                       : preview.excluded.length > 0

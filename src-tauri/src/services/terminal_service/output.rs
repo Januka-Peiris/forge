@@ -35,7 +35,7 @@ pub(super) fn append_output(
     }
     if let Some(app_handle) = app_handle {
         let _ = app_handle.emit(
-            "forge://terminal-output",
+            "mn://terminal-output",
             TerminalOutputEvent {
                 workspace_id: workspace_id.to_string(),
                 chunk,

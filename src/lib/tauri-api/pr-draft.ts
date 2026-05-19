@@ -1,7 +1,7 @@
 import type { WorkspacePrDraft, WorkspacePrResult, WorkspacePrStatus } from '../../types/pr-draft';
 import { invokeCommand } from './client';
 
-const PR_STATUS_CACHE_PREFIX = 'forge:workspace-pr-status:';
+const PR_STATUS_CACHE_PREFIX = 'mn:workspace-pr-status:';
 
 function prStatusCacheKey(workspaceId: string): string {
   return `${PR_STATUS_CACHE_PREFIX}${workspaceId}`;

@@ -1,12 +1,12 @@
 [package]
-name = "forge"
+name = "mnemonic"
 version = "0.1.0"
-description = "Forge desktop shell"
-authors = ["Forge"]
+description = "Mnemonic desktop shell"
+authors = ["Mnemonic"]
 edition = "2021"
 
 [lib]
-name = "forge_lib"
+name = "mnemonic_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

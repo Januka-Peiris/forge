@@ -100,7 +100,7 @@ fn command_safety_check(profile: &AgentProfile) -> LocalLlmProfileDiagnosticChec
         diagnostic_check(
             "Command safety",
             "ok",
-            "Launch command does not match Forge's risky-command patterns.",
+            "Launch command does not match Mnemonic's risky-command patterns.",
         )
     }
 }
@@ -170,7 +170,7 @@ fn endpoint_reachability_check(profile: &AgentProfile) -> Option<LocalLlmProfile
         "Endpoint reachability",
         "warning",
         &format!(
-            "Optional local HTTP endpoint {host}:{port} was not reachable over TCP. Forge can still launch this CLI profile if the command and model checks pass. Last error: {}",
+            "Optional local HTTP endpoint {host}:{port} was not reachable over TCP. Mnemonic can still launch this CLI profile if the command and model checks pass. Last error: {}",
             errors
                 .last()
                 .cloned()

@@ -32,14 +32,14 @@ export function useWorkspaceTerminalEvents({
     let unlistenCoordinatorNotify: UnlistenFn | undefined;
     let disposed = false;
 
-    void listen<PendingCommand>('forge://command-approval-required', (event) => {
+    void listen<PendingCommand>('mn://command-approval-required', (event) => {
       if (disposed || event.payload.workspaceId !== workspaceId) return;
       setPendingCommand(event.payload);
     }).then((fn) => {
       if (disposed) fn(); else unlistenApproval = fn;
     }).catch(() => undefined);
 
-    void listen<TerminalOutputEvent>('forge://terminal-output', (event) => {
+    void listen<TerminalOutputEvent>('mn://terminal-output', (event) => {
       if (disposed || event.payload.workspaceId !== workspaceId) return;
       const chunk = event.payload.chunk;
       enqueueOutput(chunk.sessionId, [chunk]);
@@ -48,7 +48,7 @@ export function useWorkspaceTerminalEvents({
       if (disposed) fn(); else unlistenTerminalOutput = fn;
     }).catch(() => undefined);
 
-    void listen<{ workspaceId: string; message: string }>('forge://coordinator-notify', (event) => {
+    void listen<{ workspaceId: string; message: string }>('mn://coordinator-notify', (event) => {
       if (disposed || event.payload.workspaceId !== workspaceId) return;
       onCoordinatorNotify?.(event.payload);
       void refreshCoordinatorStatus();

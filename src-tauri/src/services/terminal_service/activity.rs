@@ -87,7 +87,7 @@ pub(super) fn format_blocked_terminal_launch_details(
         details.push(format!("provider: {provider}"));
     }
     format!(
-        "{}. Command matched Forge risky-command patterns.",
+        "{}. Command matched Mnemonic risky-command patterns.",
         details.join("; ")
     )
 }

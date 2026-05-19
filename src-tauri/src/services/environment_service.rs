@@ -65,7 +65,7 @@ fn check_dependency(dependency: &Dependency) -> EnvironmentCheckItem {
         Ok(Some(path)) => ("ok".to_string(), Some(path.display().to_string())),
         Ok(None) => ("missing".to_string(), None),
         Err(err) => {
-            log::warn!(target: "forge_lib", "environment check failed for {}: {err}", dependency.binary);
+            log::warn!(target: "mnemonic_lib", "environment check failed for {}: {err}", dependency.binary);
             ("unknown".to_string(), None)
         }
     };

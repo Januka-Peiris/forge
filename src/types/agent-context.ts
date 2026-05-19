@@ -32,7 +32,7 @@ export interface WorkspaceContextPreview {
   commitHash: string;
   generatedAt?: string | null;
   approxChars: number;
-  /** 0 means Forge does not enforce a character budget on repo context. */
+  /** 0 means Mnemonic does not enforce a character budget on repo context. */
   maxChars: number;
   trimmed: boolean;
   items: WorkspaceContextItem[];

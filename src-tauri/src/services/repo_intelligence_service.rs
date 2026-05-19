@@ -960,8 +960,8 @@ mod tests {
 
     fn init_git_repo(root: &Path) {
         git_run(root, &["init"]);
-        git_run(root, &["config", "user.email", "forge-tests@example.com"]);
-        git_run(root, &["config", "user.name", "Forge Tests"]);
+        git_run(root, &["config", "user.email", "mnemonic-tests@example.com"]);
+        git_run(root, &["config", "user.name", "Mnemonic Tests"]);
     }
 
     fn git_run(root: &Path, args: &[&str]) {

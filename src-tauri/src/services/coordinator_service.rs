@@ -879,7 +879,7 @@ pub fn step_workspace_coordinator(
             "notify_user" => {
                 if let Some(message) = action.message.as_deref() {
                     let _ = state.app_handle.emit(
-                        "forge://coordinator-notify",
+                        "mn://coordinator-notify",
                         serde_json::json!({
                             "workspaceId": input.workspace_id,
                             "message": message,
@@ -974,7 +974,7 @@ fn reconcile_worker_runtime_status(
         if runtime_update.should_notify {
             let message = format!("Worker {} {}", worker.id, runtime_update.next_status);
             let _ = state.app_handle.emit(
-                "forge://coordinator-notify",
+                "mn://coordinator-notify",
                 serde_json::json!({
                     "workspaceId": worker.workspace_id,
                     "message": message,
@@ -1138,7 +1138,7 @@ fn plan_actions(
     instruction: &str,
 ) -> PlanResult {
     let prompt = format!(
-        "You are Forge workspace coordinator.\n\
+        "You are Mnemonic workspace coordinator.\n\
          Return a JSON array only (no markdown) using action objects:\n\
          [{{\"action\":\"spawn_worker\",\"prompt\":\"...\"}},\
          {{\"action\":\"message_worker\",\"workerId\":\"...\",\"prompt\":\"...\"}},\

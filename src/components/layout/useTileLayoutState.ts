@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { TileContent, TileId, TileLayoutState, TileLeaf, TileNode, TileSplit } from '../../types/tile-layout';
 
-const STORAGE_PREFIX = 'forge:tile-layout:';
+const STORAGE_PREFIX = 'mn:tile-layout:';
 const MIN_TILE_PERCENT = 15;
 
 function newTileId(): TileId {

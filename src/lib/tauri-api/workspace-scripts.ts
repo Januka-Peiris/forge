@@ -1,10 +1,10 @@
 import type { TerminalSession } from '../../types/terminal';
-import type { ForgeWorkspaceConfig } from '../../types/workspace-scripts';
+import type { MnemonicWorkspaceConfig } from '../../types/workspace-scripts';
 import type { WorkspaceHookInspector } from '../../types/workspace-hooks';
 import { invokeCommand } from './client';
 
-export function getWorkspaceForgeConfig(workspaceId: string): Promise<ForgeWorkspaceConfig> {
-  return invokeCommand<ForgeWorkspaceConfig>('get_workspace_forge_config', { workspaceId });
+export function getWorkspaceMnemonicConfig(workspaceId: string): Promise<MnemonicWorkspaceConfig> {
+  return invokeCommand<MnemonicWorkspaceConfig>('get_workspace_mnemonic_config', { workspaceId });
 }
 
 export function runWorkspaceSetup(workspaceId: string): Promise<TerminalSession[]> {

@@ -53,7 +53,7 @@ pub fn set_orchestrator_enabled(state: State<'_, AppState>, enabled: bool) -> Re
         if enabled { "true" } else { "false" },
     )?;
     log::info!(
-        target: "forge_lib",
+        target: "mnemonic_lib",
         "orchestrator {}",
         if enabled { "enabled" } else { "disabled" }
     );
