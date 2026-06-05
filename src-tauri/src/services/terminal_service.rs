@@ -584,6 +584,7 @@ pub fn stop_workspace_terminal_session_by_id(
     let session = terminal_repository::get_session(&state.db, session_id)?
         .ok_or_else(|| format!("Terminal session {session_id} was not found"))?;
     detach_active_terminal(state, session_id);
+    let _ = state.pending_commands.lock().map(|mut m| m.remove(session_id));
     let ended_at = timestamp();
     terminal_repository::mark_finished(&state.db, session_id, "stopped", &ended_at, false)?;
     let task_run_id = format!("task-{}-terminal-{}", session.workspace_id, session_id);

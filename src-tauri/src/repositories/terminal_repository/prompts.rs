@@ -8,8 +8,8 @@ pub fn insert_prompt_entry(db: &Database, entry: &AgentPromptEntry) -> Result<()
         connection.execute(
             r#"
             INSERT INTO terminal_prompt_entries (
-                id, workspace_id, session_id, profile, prompt, status, created_at, sent_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, CURRENT_TIMESTAMP)
+                id, workspace_id, session_id, profile, prompt, status, created_at, sent_at, model, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, CURRENT_TIMESTAMP)
             "#,
             params![
                 entry.id,
@@ -20,6 +20,7 @@ pub fn insert_prompt_entry(db: &Database, entry: &AgentPromptEntry) -> Result<()
                 entry.status,
                 entry.created_at,
                 entry.sent_at,
+                entry.model,
             ],
         )?;
         Ok(())
@@ -76,7 +77,7 @@ pub fn list_prompts_for_workspace(
         let limit = limit.unwrap_or(50) as i64;
         let mut statement = connection.prepare(
             r#"
-            SELECT id, workspace_id, session_id, profile, prompt, status, created_at, sent_at
+            SELECT id, workspace_id, session_id, profile, prompt, status, created_at, sent_at, model
             FROM terminal_prompt_entries
             WHERE workspace_id = ?1
             ORDER BY created_at DESC
@@ -94,6 +95,7 @@ pub fn list_prompts_for_workspace(
                     status: row.get("status")?,
                     created_at: row.get("created_at")?,
                     sent_at: row.get("sent_at")?,
+                    model: row.get("model")?,
                 })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -109,7 +111,7 @@ pub fn latest_queued_prompt_for_workspace(
         connection
             .query_row(
                 r#"
-                SELECT id, workspace_id, session_id, profile, prompt, status, created_at, sent_at
+                SELECT id, workspace_id, session_id, profile, prompt, status, created_at, sent_at, model
                 FROM terminal_prompt_entries
                 WHERE workspace_id = ?1 AND status = 'queued'
                 ORDER BY created_at ASC
@@ -126,6 +128,7 @@ pub fn latest_queued_prompt_for_workspace(
                         status: row.get("status")?,
                         created_at: row.get("created_at")?,
                         sent_at: row.get("sent_at")?,
+                        model: row.get("model")?,
                     })
                 },
             )

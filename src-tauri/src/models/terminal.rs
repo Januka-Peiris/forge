@@ -139,4 +139,5 @@ pub struct AgentPromptEntry {
     pub status: String,
     pub created_at: String,
     pub sent_at: Option<String>,
+    pub model: Option<String>,
 }

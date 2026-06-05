@@ -135,6 +135,7 @@ fn serialize_result_payload(
     serde_json::to_string(&envelope).ok()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn default_result_for_action(
     run_goal: &str,
     action_kind: &str,
@@ -311,6 +312,7 @@ fn synthesize_coordinator_profile(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn resolve_coordinator_role_profile(
     state: &AppState,
     workspace_id: &str,

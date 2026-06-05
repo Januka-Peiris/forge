@@ -19,56 +19,57 @@ export function useWorkspaceTerminalEvents({
   enqueueOutput,
   bumpNextSeqFromChunk,
   setPendingCommand,
-  refreshReadiness,
-  refreshWorkbenchState,
   refreshCoordinatorStatus,
   onCoordinatorNotify,
 }: UseWorkspaceTerminalEventsParams) {
   useEffect(() => {
     if (!workspaceId) return;
 
-    let unlistenTerminalOutput: UnlistenFn | undefined;
-    let unlistenApproval: UnlistenFn | undefined;
-    let unlistenCoordinatorNotify: UnlistenFn | undefined;
     let disposed = false;
+    const promises: Promise<UnlistenFn>[] = [];
 
-    void listen<PendingCommand>('mn://command-approval-required', (event) => {
-      if (disposed || event.payload.workspaceId !== workspaceId) return;
-      setPendingCommand(event.payload);
-    }).then((fn) => {
-      if (disposed) fn(); else unlistenApproval = fn;
-    }).catch(() => undefined);
+    promises.push(
+      listen<PendingCommand>('mn://command-approval-required', (event) => {
+        if (disposed || event.payload.workspaceId !== workspaceId) return;
+        setPendingCommand(event.payload);
+      }).catch((err) => {
+        console.warn('Failed to listen for command-approval-required:', err);
+        return (() => {}) as UnlistenFn;
+      }),
+    );
 
-    void listen<TerminalOutputEvent>('mn://terminal-output', (event) => {
-      if (disposed || event.payload.workspaceId !== workspaceId) return;
-      const chunk = event.payload.chunk;
-      enqueueOutput(chunk.sessionId, [chunk]);
-      bumpNextSeqFromChunk(chunk.sessionId, chunk.seq);
-    }).then((fn) => {
-      if (disposed) fn(); else unlistenTerminalOutput = fn;
-    }).catch(() => undefined);
+    promises.push(
+      listen<TerminalOutputEvent>('mn://terminal-output', (event) => {
+        if (disposed || event.payload.workspaceId !== workspaceId) return;
+        const chunk = event.payload.chunk;
+        enqueueOutput(chunk.sessionId, [chunk]);
+        bumpNextSeqFromChunk(chunk.sessionId, chunk.seq);
+      }).catch((err) => {
+        console.warn('Failed to listen for terminal-output:', err);
+        return (() => {}) as UnlistenFn;
+      }),
+    );
 
-    void listen<{ workspaceId: string; message: string }>('mn://coordinator-notify', (event) => {
-      if (disposed || event.payload.workspaceId !== workspaceId) return;
-      onCoordinatorNotify?.(event.payload);
-      void refreshCoordinatorStatus();
-    }).then((fn) => {
-      if (disposed) fn(); else unlistenCoordinatorNotify = fn;
-    }).catch(() => undefined);
+    promises.push(
+      listen<{ workspaceId: string; message: string }>('mn://coordinator-notify', (event) => {
+        if (disposed || event.payload.workspaceId !== workspaceId) return;
+        onCoordinatorNotify?.(event.payload);
+        void refreshCoordinatorStatus();
+      }).catch((err) => {
+        console.warn('Failed to listen for coordinator-notify:', err);
+        return (() => {}) as UnlistenFn;
+      }),
+    );
 
     return () => {
       disposed = true;
-      if (unlistenTerminalOutput) unlistenTerminalOutput();
-      if (unlistenApproval) unlistenApproval();
-      if (unlistenCoordinatorNotify) unlistenCoordinatorNotify();
+      void Promise.all(promises).then((fns) => fns.forEach((fn) => fn()));
     };
   }, [
     bumpNextSeqFromChunk,
     enqueueOutput,
     onCoordinatorNotify,
     refreshCoordinatorStatus,
-    refreshReadiness,
-    refreshWorkbenchState,
     setPendingCommand,
     workspaceId,
   ]);
