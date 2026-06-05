@@ -417,10 +417,11 @@ Rules:
     // Persist log + update state.
     let _ = orchestrator_repository::insert_log(&state.db, run_at, model, workspace_ids, &actions);
 
-    if let Ok(mut last_run) = state.orchestrator_last_run.lock() {
+    if let (Ok(mut last_run), Ok(mut last_actions)) = (
+        state.orchestrator_last_run.lock(),
+        state.orchestrator_last_actions.lock(),
+    ) {
         *last_run = Some(run_at.to_string());
-    }
-    if let Ok(mut last_actions) = state.orchestrator_last_actions.lock() {
         *last_actions = actions.clone();
     }
 
@@ -699,7 +700,7 @@ fn call_openai_api(model: &str, prompt: &str) -> Result<String, String> {
 
     if !resp.status().is_success() {
         let status = resp.status();
-        let text = resp.text().unwrap_or_default();
+        let text = resp.text().unwrap_or_else(|e| format!("(failed to read body: {e})"));
         return Err(format!("OpenAI API error {status}: {text}"));
     }
 

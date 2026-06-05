@@ -399,6 +399,7 @@ fn refresh_repo_index_inner(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn apply_incremental_updates(
     db: &Database,
     repo_root: &Path,

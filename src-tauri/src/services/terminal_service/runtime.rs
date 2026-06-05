@@ -245,15 +245,18 @@ pub(super) fn spawn_terminal_monitor(
         let wait_result = child.wait();
         let ended_at = terminal_service::timestamp();
 
-        let was_active = state
-            .terminals
-            .lock()
-            .map(|registry| registry.contains_key(&session_id))
-            .unwrap_or(false);
-
-        let _ = state.terminals.lock().map(|mut registry| {
-            registry.remove(&session_id);
-        });
+        let was_active = match state.terminals.lock() {
+            Ok(mut registry) => {
+                let active = registry.contains_key(&session_id);
+                registry.remove(&session_id);
+                active
+            }
+            Err(err) => {
+                log::error!("Terminal registry lock poisoned in monitor for {session_id}: {err}");
+                false
+            }
+        };
+        let _ = state.pending_commands.lock().map(|mut m| m.remove(&session_id));
 
         match wait_result {
             Ok(exit_status) => {
@@ -320,6 +323,16 @@ pub(super) fn spawn_terminal_monitor(
     });
 }
 
+fn extract_model_from_args(args: &[String]) -> Option<&str> {
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        if arg == "--model" {
+            return iter.next().map(|s| s.as_str());
+        }
+    }
+    None
+}
+
 pub(super) fn ensure_agent_session_for_prompt(
     state: &AppState,
     workspace_id: &str,
@@ -329,6 +342,29 @@ pub(super) fn ensure_agent_session_for_prompt(
     if let Some(active) = active_for_workspace(state, workspace_id, "agent")? {
         let session = terminal_repository::get_session(&state.db, &active.session_id)?
             .ok_or_else(|| "Active agent session record was not found".to_string())?;
+
+        let requested_model = extra_args.as_deref().and_then(extract_model_from_args);
+        let current_model = extract_model_from_args(&session.args);
+
+        if let Some(requested) = requested_model {
+            if current_model != Some(requested) {
+                let _ = terminal_service::stop_workspace_terminal_session_by_id(state, &session.id);
+                return terminal_service::start_workspace_terminal_session(
+                    state,
+                    StartTerminalSessionInput {
+                        workspace_id: workspace_id.to_string(),
+                        profile: profile.to_string(),
+                        session_role: Some("agent".to_string()),
+                        cols: None,
+                        rows: None,
+                        replace_existing: Some(false),
+                        extra_args,
+                    },
+                )
+                .map(|s| (s, true));
+            }
+        }
+
         return Ok((session, false));
     }
 

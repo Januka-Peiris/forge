@@ -258,6 +258,7 @@ pub(super) fn queue_workspace_agent_prompt(
         status: "queued".to_string(),
         created_at: terminal_service::timestamp(),
         sent_at: None,
+        model: input.model.clone(),
     };
     terminal_repository::insert_prompt_entry(&state.db, &entry)?;
 
@@ -298,7 +299,22 @@ fn write_system_prompt_file(content: &str) -> Result<String, String> {
     let file_path = dir.join(format!("mn-ctx-{}.md", unique_suffix()));
     std::fs::write(&file_path, content)
         .map_err(|err| format!("Failed to write system prompt file: {err}"))?;
+    cleanup_stale_system_prompt_files(&dir);
     Ok(file_path.display().to_string())
+}
+
+fn cleanup_stale_system_prompt_files(dir: &std::path::Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let cutoff = std::time::SystemTime::now() - std::time::Duration::from_secs(24 * 60 * 60);
+    for entry in entries.flatten() {
+        if let Ok(meta) = entry.metadata() {
+            if let Ok(modified) = meta.modified() {
+                if modified < cutoff {
+                    let _ = std::fs::remove_file(entry.path());
+                }
+            }
+        }
+    }
 }
 
 pub(super) fn batch_dispatch_workspace_agent_prompt(
@@ -343,7 +359,8 @@ pub(super) fn run_next_workspace_agent_prompt(
             Some(entry) => entry,
             None => return Ok(None),
         };
-    dispatch_prompt_entry(state, &mut entry, None, None)?;
+    let model = entry.model.clone();
+    dispatch_prompt_entry(state, &mut entry, None, model.as_deref())?;
     Ok(Some(entry))
 }
 

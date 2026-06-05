@@ -690,6 +690,34 @@ export function WorkspaceTerminal({
     }
   }, []);
 
+  const onCoordinatorNotifyRef = useRef<((payload: { workspaceId: string; message: string }) => void) | null>(null);
+  onCoordinatorNotifyRef.current = (payload) => {
+    showCoordinatorToast(payload.message);
+    const match = payload.message.match(/^Worker\\s+([^\\s]+)\\s+([^\\s]+)$/i);
+    if (!match) return;
+    if (!workspaceId) return;
+    if (!composerSettings.coordinatorAutoStepOnWorkerComplete) return;
+    if (composerSettings.promptMode !== 'coordinator') return;
+    const workerId = match[1];
+    const workerStatus = match[2].toLowerCase();
+    if (
+      composerSettings.coordinatorAutoStepTrigger === 'terminal_completion'
+      && !['succeeded', 'failed', 'stopped', 'interrupted', 'completed'].includes(workerStatus)
+    ) {
+      return;
+    }
+    const signature = `${workerId}:${workerStatus}`;
+    if (lastCoordinatorAutoStepEventRef.current === signature) return;
+    lastCoordinatorAutoStepEventRef.current = signature;
+    triggerCoordinatorAutoStep(
+      `Worker ${workerId} reported status ${workerStatus}. Review progress, notify the user, and choose the next coordinator action.`,
+    );
+  };
+
+  const stableCoordinatorNotify = useCallback((payload: { workspaceId: string; message: string }) => {
+    onCoordinatorNotifyRef.current?.(payload);
+  }, []);
+
   useWorkspaceTerminalEvents({
     workspaceId,
     enqueueOutput,
@@ -698,28 +726,7 @@ export function WorkspaceTerminal({
     refreshReadiness,
     refreshWorkbenchState,
     refreshCoordinatorStatus,
-    onCoordinatorNotify: (payload) => {
-      showCoordinatorToast(payload.message);
-      const match = payload.message.match(/^Worker\\s+([^\\s]+)\\s+([^\\s]+)$/i);
-      if (!match) return;
-      if (!workspaceId) return;
-      if (!composerSettings.coordinatorAutoStepOnWorkerComplete) return;
-      if (composerSettings.promptMode !== 'coordinator') return;
-      const workerId = match[1];
-      const workerStatus = match[2].toLowerCase();
-      if (
-        composerSettings.coordinatorAutoStepTrigger === 'terminal_completion'
-        && !['succeeded', 'failed', 'stopped', 'interrupted', 'completed'].includes(workerStatus)
-      ) {
-        return;
-      }
-      const signature = `${workerId}:${workerStatus}`;
-      if (lastCoordinatorAutoStepEventRef.current === signature) return;
-      lastCoordinatorAutoStepEventRef.current = signature;
-      triggerCoordinatorAutoStep(
-        `Worker ${workerId} reported status ${workerStatus}. Review progress, notify the user, and choose the next coordinator action.`,
-      );
-    },
+    onCoordinatorNotify: stableCoordinatorNotify,
   });
 
   const {

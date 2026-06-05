@@ -43,7 +43,7 @@ pub fn load_templates_from_root(root: &Path) -> WorkspacePromptTemplates {
         }
     }
 
-    templates.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
+    templates.sort_by_key(|t| t.title.to_lowercase());
     WorkspacePromptTemplates { templates, warning }
 }
 
