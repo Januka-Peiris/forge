@@ -86,6 +86,11 @@ pub(super) fn queue_workspace_agent_prompt(
         None
     };
 
+    let is_cli_agent = matches!(
+        resolved_profile.agent.as_str(),
+        "claude_code" | "codex"
+    );
+
     let is_plan_mode = input
         .task_mode
         .as_deref()
@@ -96,14 +101,16 @@ pub(super) fn queue_workspace_agent_prompt(
         let mut prefix_parts: Vec<String> = Vec::new();
 
         if is_first_prompt {
-            let metadata = agent_profile_service::prompt_metadata_preamble_for_workspace(
-                state,
-                Some(&input.workspace_id),
-                &resolved_profile,
-                input.task_mode.as_deref(),
-                input.reasoning.as_deref(),
-            );
-            prefix_parts.push(metadata);
+            if !is_cli_agent {
+                let metadata = agent_profile_service::prompt_metadata_preamble_for_workspace(
+                    state,
+                    Some(&input.workspace_id),
+                    &resolved_profile,
+                    input.task_mode.as_deref(),
+                    input.reasoning.as_deref(),
+                );
+                prefix_parts.push(metadata);
+            }
 
             if let Ok(context) =
                 agent_context_service::get_workspace_agent_context(state, &input.workspace_id)
@@ -250,7 +257,7 @@ fn dispatch_prompt_entry(
     );
 
     let (session, _is_new_session) =
-        ensure_agent_session_for_prompt(state, &entry.workspace_id, &entry.profile, None)?;
+        ensure_agent_session_for_prompt(state, &entry.workspace_id, &entry.profile, None, entry.model.as_deref())?;
 
     let active = active_for_workspace(state, &entry.workspace_id, "agent")?
         .ok_or_else(|| "No active agent session found to send prompt".to_string())?;

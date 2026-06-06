@@ -328,10 +328,42 @@ pub(super) fn ensure_agent_session_for_prompt(
     workspace_id: &str,
     profile: &str,
     extra_args: Option<Vec<String>>,
+    requested_model: Option<&str>,
 ) -> Result<(TerminalSession, bool), String> {
     if let Some(active) = active_for_workspace(state, workspace_id, "agent")? {
         let session = terminal_repository::get_session(&state.db, &active.session_id)?
             .ok_or_else(|| "Active agent session record was not found".to_string())?;
+
+        if let Some(model) = requested_model.filter(|m| !m.is_empty()) {
+            let current_model = session
+                .args
+                .windows(2)
+                .find(|w| w[0] == "--model" || w[0] == "-m")
+                .map(|w| w[1].as_str());
+            if current_model != Some(model) {
+                log::info!(
+                    target: "mnemonic_lib",
+                    "ensure_agent_session_for_prompt: model mismatch (current={:?}, requested={model}), restarting session {}",
+                    current_model,
+                    session.id,
+                );
+                let _ = terminal_service::stop_workspace_terminal_session_by_id(state, &session.id);
+                return terminal_service::start_workspace_terminal_session(
+                    state,
+                    StartTerminalSessionInput {
+                        workspace_id: workspace_id.to_string(),
+                        profile: profile.to_string(),
+                        session_role: Some("agent".to_string()),
+                        cols: None,
+                        rows: None,
+                        replace_existing: Some(false),
+                        extra_args: Some(vec!["--model".to_string(), model.to_string()]),
+                    },
+                )
+                .map(|s| (s, true));
+            }
+        }
+
         return Ok((session, false));
     }
 
