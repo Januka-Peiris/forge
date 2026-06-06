@@ -2,7 +2,7 @@ import type { AgentProfile, EnvironmentCheckItem } from '../types';
 
 export const ACTIVE_AGENT_PROVIDERS_SETTING_KEY = 'active_agent_providers';
 
-export const AGENT_PROVIDER_IDS = ['claude_code', 'codex', 'kimi_code', 'local_llm', 'openai'] as const;
+export const AGENT_PROVIDER_IDS = ['claude_code', 'codex', 'openai'] as const;
 
 export type AgentProviderId = typeof AGENT_PROVIDER_IDS[number];
 
@@ -28,20 +28,6 @@ export const AGENT_PROVIDER_OPTIONS: AgentProviderOption[] = [
     shortLabel: 'Codex',
     binary: 'codex',
     setupHint: 'Install and authenticate the Codex CLI.',
-  },
-  {
-    id: 'kimi_code',
-    label: 'Kimi Code',
-    shortLabel: 'Kimi',
-    binary: 'kimi',
-    setupHint: 'Install and authenticate the Kimi CLI.',
-  },
-  {
-    id: 'local_llm',
-    label: 'Local LLM',
-    shortLabel: 'Local',
-    binary: 'ollama',
-    setupHint: 'Install Ollama or add a local app/workspace profile.',
   },
   {
     id: 'openai',
@@ -82,8 +68,7 @@ export function serializeActiveAgentProviders(ids: readonly AgentProviderId[]): 
 export function providerForAgentProfile(profile: AgentProfile): AgentProviderId | null {
   if (profile.agent === 'shell') return null;
   if (profile.agent === 'openai' || profile.provider === 'openai') return 'openai';
-  if (profile.agent === 'local_llm' || profile.local) return 'local_llm';
-  if (profile.agent === 'claude_code' || profile.agent === 'codex' || profile.agent === 'kimi_code') {
+  if (profile.agent === 'claude_code' || profile.agent === 'codex') {
     return profile.agent;
   }
   return null;
@@ -103,10 +88,6 @@ export function isProviderDetected(
   if (providerId === 'openai') {
     return profiles.some((profile) => profile.agent === 'openai' || profile.provider === 'openai');
   }
-  if (providerId === 'local_llm') {
-    const hasLocalProfile = profiles.some((profile) => profile.agent !== 'shell' && (profile.agent === 'local_llm' || profile.local));
-    if (hasLocalProfile) return true;
-  }
   const option = AGENT_PROVIDER_OPTIONS.find((candidate) => candidate.id === providerId);
   if (!option?.binary) return false;
   return environmentItems.some((item) => item.binary === option.binary && item.status === 'ok');
@@ -125,10 +106,6 @@ export function agentTypeForProvider(providerId: AgentProviderId) {
       return 'Claude Code';
     case 'codex':
       return 'Codex';
-    case 'kimi_code':
-      return 'Kimi Code';
-    case 'local_llm':
-      return 'Local LLM';
     case 'openai':
       return null;
   }

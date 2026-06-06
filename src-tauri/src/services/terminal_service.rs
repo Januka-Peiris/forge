@@ -59,7 +59,6 @@ fn agent_effective_model(
     let key = match profile.agent.as_str() {
         "claude_code" => "claude_agent_default_model",
         "codex" => "codex_agent_default_model",
-        "kimi_code" => "kimi_agent_default_model",
         _ => "agent_default_model",
     };
     settings_repository::get_value(&state.db, key)
@@ -275,6 +274,7 @@ pub fn create_workspace_terminal(
     let last_output_at_secs = Arc::new(AtomicU64::new(0));
     let active = Arc::new(ActiveTerminal {
         session_id: session.id.clone(),
+        terminal_kind: session.terminal_kind.clone(),
         writer: Mutex::new(writer),
         killer: Mutex::new(killer),
         master: Mutex::new(pair.master),
@@ -361,13 +361,14 @@ pub fn write_workspace_terminal_session_input(
     session_id: &str,
     data: &str,
 ) -> Result<(), String> {
-    // Gate dangerous commands on shell/utility sessions.
-    // Agent sessions (claude, codex, kimi) manage their own shell — we don't intercept those.
-    if let Ok(Some(session)) = terminal_repository::get_session(&state.db, session_id) {
-        if matches!(session.terminal_kind.as_str(), "shell" | "utility") {
-            let line = data.trim_end_matches(['\r', '\n']);
-            if !line.is_empty() && command_safety_service::is_risky_command(line) {
-                // Stash the data and ask the user before writing.
+    let is_shell_or_utility = active_for_session(state, session_id)?
+        .map(|active| matches!(active.terminal_kind.as_str(), "shell" | "utility"))
+        .unwrap_or(false);
+
+    if is_shell_or_utility {
+        let line = data.trim_end_matches(['\r', '\n']);
+        if !line.is_empty() && command_safety_service::is_risky_command(line) {
+            if let Ok(Some(session)) = terminal_repository::get_session(&state.db, session_id) {
                 state
                     .pending_commands
                     .lock()
@@ -539,27 +540,7 @@ pub fn interrupt_workspace_terminal_session(
             );
         }
         None => {
-            if let Some(session) =
-                terminal_repository::latest_for_workspace_role(&state.db, workspace_id, "agent")?
-            {
-                if session.status == "running" {
-                    send_interrupt_to_session(state, &session)?;
-                    record_terminal_lifecycle_activity(
-                        state,
-                        &session,
-                        "Terminal session interrupted",
-                    );
-                    append_log_line(
-                        state,
-                        workspace_id,
-                        &session.id,
-                        "system",
-                        "\r\n[mnemonic] interrupt sent to persistent tmux session (Ctrl-C)\r\n",
-                    );
-                }
-            } else {
-                reconcile_orphan_running_session(state, workspace_id, "agent", "interrupted")?;
-            }
+            reconcile_orphan_running_session(state, workspace_id, "agent", "interrupted")?;
         }
     }
     get_workspace_terminal_session_state(state, workspace_id)

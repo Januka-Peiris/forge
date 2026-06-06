@@ -84,7 +84,7 @@ export function WorkspaceComposerSettingsPopover({
               </SelectContent>
             </Select>
             <p className="mt-1 text-xs text-mn-muted">
-              Maps to {provider === 'codex' ? 'Codex model_reasoning_effort' : provider === 'kimi_code' ? 'Kimi --thinking / --no-thinking' : 'Claude --effort'}.
+              Maps to {provider === 'codex' ? 'Codex model_reasoning_effort' : 'Claude --effort'}.
             </p>
           </div>
           <div>

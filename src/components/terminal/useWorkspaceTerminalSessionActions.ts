@@ -60,12 +60,12 @@ export function useWorkspaceTerminalSessionActions({
   refreshReadiness,
   setActionError,
 }: UseWorkspaceTerminalSessionActionsParams) {
-  const createTerminal = async (kind: 'agent' | 'shell', profile: TerminalProfile, title?: string, profileId?: string) => {
+  const createTerminal = async (kind: 'agent' | 'shell', profile: TerminalProfile, title?: string, profileId?: string, extraArgs?: string[]) => {
     if (!workspaceId) return;
     setBusy(true);
     setError(null);
     try {
-      const session = await createWorkspaceTerminal({ workspaceId, kind, profile, profileId, title });
+      const session = await createWorkspaceTerminal({ workspaceId, kind, profile, profileId, title, extraArgs });
       if (session.terminalKind === 'agent') setSelectedProfileId(session.profile);
       setNextSeq(session.id, 0);
       focusedIdRef.current = session.id;

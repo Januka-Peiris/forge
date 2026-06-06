@@ -1,27 +1,19 @@
-import { ChevronDown, Terminal as TerminalIcon } from 'lucide-react';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
-import type { AgentProfile } from '../../types';
+import { Terminal as TerminalIcon } from 'lucide-react';
 import type { AgentProviderId } from '../../lib/active-agent-providers';
 
 interface WorkspaceTerminalEmptyStateProps {
   busy: boolean;
-  localAgentProfiles: AgentProfile[];
   activeProviderIds: ReadonlySet<AgentProviderId>;
   onStartClaude: () => void;
   onStartCodex: () => void;
-  onStartKimi: () => void;
-  onStartLocalProfile: (profile: AgentProfile) => void;
   onStartShell: () => void;
 }
 
 export function WorkspaceTerminalEmptyState({
   busy,
-  localAgentProfiles,
   activeProviderIds,
   onStartClaude,
   onStartCodex,
-  onStartKimi,
-  onStartLocalProfile,
   onStartShell,
 }: WorkspaceTerminalEmptyStateProps) {
   return (
@@ -37,33 +29,13 @@ export function WorkspaceTerminalEmptyState({
           {activeProviderIds.has('codex') && (
             <button disabled={busy} onClick={onStartCodex} className="rounded-lg border border-mn-border bg-white/5 px-3 py-2 text-sm font-semibold text-mn-text disabled:opacity-50">Start Codex</button>
           )}
-          {activeProviderIds.has('kimi_code') && (
-            <button disabled={busy} onClick={onStartKimi} className="rounded-lg border border-mn-border bg-white/5 px-3 py-2 text-sm font-semibold text-mn-text disabled:opacity-50">Start Kimi</button>
-          )}
           {activeProviderIds.size === 0 && (
             <p className="basis-full rounded-lg border border-mn-border/70 bg-black/10 p-3 text-sm text-mn-muted">
               No active agent providers. Enable one in Settings → Agent Setup, or start a shell below.
             </p>
           )}
           
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-mn-border bg-white/5 px-3 py-2 text-sm font-semibold text-mn-text disabled:opacity-50">
-                More options
-                <ChevronDown className="h-3.5 w-3.5 text-mn-muted" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="center">
-              {localAgentProfiles.map((profile) => (
-                <DropdownMenuItem key={profile.id} disabled={busy} onSelect={() => onStartLocalProfile(profile)}>
-                  Start {profile.label}
-                </DropdownMenuItem>
-              ))}
-              <DropdownMenuItem disabled={busy} onSelect={onStartShell}>
-                New Shell
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <button disabled={busy} onClick={onStartShell} className="rounded-lg border border-mn-border bg-white/5 px-3 py-2 text-sm font-semibold text-mn-text disabled:opacity-50">New Shell</button>
         </div>
       </div>
     </div>

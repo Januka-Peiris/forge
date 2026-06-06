@@ -67,7 +67,7 @@ export function WorkspaceHeader({
   onAttachTerminal,
   onSetError,
 }: WorkspaceHeaderProps) {
-  const localAgentProfiles = agentProfiles.filter((profile) => (profile.agent === 'local_llm' || profile.local) && isAgentProfileActive(profile, activeProviderIds));
+  const localAgentProfiles = agentProfiles.filter((profile) => profile.local && profile.agent !== 'shell' && isAgentProfileActive(profile, activeProviderIds));
 
   return (
     <div className="shrink-0 border-b border-mn-border bg-mn-bg/95 backdrop-blur-md">
@@ -160,16 +160,6 @@ export function WorkspaceHeader({
               {activeProviderIds.has('codex') && (
                 <DropdownMenuItem disabled={busy} onSelect={() => onCreateTerminal('agent', 'codex', 'Codex')}>
                   New Codex tab
-                </DropdownMenuItem>
-              )}
-              {activeProviderIds.has('kimi_code') && (
-                <DropdownMenuItem disabled={busy} onSelect={() => onCreateTerminal('agent', 'kimi_code', 'Kimi')}>
-                  New Kimi tab
-                </DropdownMenuItem>
-              )}
-              {activeProviderIds.has('local_llm') && (
-                <DropdownMenuItem disabled={busy} onSelect={() => onCreateTerminal('agent', 'local_llm', 'Local LLM')}>
-                  New Local LLM tab
                 </DropdownMenuItem>
               )}
               {localAgentProfiles.length > 0 && (

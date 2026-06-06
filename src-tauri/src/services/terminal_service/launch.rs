@@ -39,7 +39,7 @@ impl TerminalCommandSpec {
 
 impl TerminalProfile {
     pub fn from_agent_profile(profile: &AgentProfile, effective_model: Option<&str>) -> Self {
-        let args = if profile.command.contains("claude") || profile.command.contains("kimi") {
+        let args = if profile.command.contains("claude") {
             let mut args = profile.args.clone();
             if let Some(model) = effective_model.filter(|model| !model.is_empty()) {
                 let has_model_arg = args.iter().any(|arg| arg == "--model" || arg == "-m");
@@ -117,7 +117,6 @@ pub(super) fn default_terminal_title(kind: &str, profile: &str) -> String {
         ("shell", _) | ("utility", _) => "Shell".to_string(),
         (_, "claude_code") => "Claude".to_string(),
         (_, "codex") => "Codex".to_string(),
-        (_, "kimi_code") => "Kimi".to_string(),
         ("run", _) => "Run".to_string(),
         _ => profile.to_string(),
     }

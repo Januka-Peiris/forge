@@ -23,6 +23,7 @@ pub type RepoIntelligenceRegistry = Arc<Mutex<HashSet<String>>>;
 
 pub struct ActiveTerminal {
     pub session_id: String,
+    pub terminal_kind: String,
     pub writer: Mutex<Box<dyn Write + Send>>,
     pub killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
     pub master: Mutex<Box<dyn MasterPty + Send>>,

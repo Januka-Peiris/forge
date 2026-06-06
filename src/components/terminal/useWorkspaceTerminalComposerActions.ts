@@ -16,6 +16,7 @@ interface UseWorkspaceTerminalComposerActionsParams {
   selectedProfileId: string;
   composerSettings: ComposerSettings;
   mnemonicConfig: MnemonicWorkspaceConfig | null;
+  refreshSessions: (fetchOutput?: boolean) => Promise<void>;
   refreshWorkbenchState: () => Promise<void>;
   refreshReadiness: () => Promise<void>;
   refreshCoordinatorStatus: () => Promise<void>;
@@ -35,6 +36,7 @@ export function useWorkspaceTerminalComposerActions({
   selectedProfileId,
   composerSettings,
   mnemonicConfig,
+  refreshSessions,
   refreshWorkbenchState,
   refreshReadiness,
   refreshCoordinatorStatus,
@@ -141,6 +143,7 @@ export function useWorkspaceTerminalComposerActions({
           reasoning: selectedReasoning,
           model: composerSettings.selectedModel,
         });
+        await refreshSessions(true).catch(() => undefined);
         await refreshCoordinatorStatus().catch(() => undefined);
       } catch (err) {
         const message = formatSessionError(err);
