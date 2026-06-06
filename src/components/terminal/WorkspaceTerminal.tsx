@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as ContextMenu from '@radix-ui/react-context-menu';
 import { Terminal as TerminalIcon } from 'lucide-react';
-import type { AgentProfile, DiscoveredRepository, MnemonicWorkspaceConfig, TerminalProfile, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
+import type { AgentProfile, DiscoveredRepository, MnemonicWorkspaceConfig, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
 import type { AgentChatNextAction } from '../../types/agent-chat';
 import type { WorkspaceCoordinatorStatus } from '../../types/coordinator';
 import type { WorkspaceChangedFile } from '../../types/git-review';
@@ -52,7 +52,7 @@ import {
 import type { PromptTemplate } from '../../types/prompt-template';
 import { useSyncedRef } from '../../lib/hooks/useSyncedRef';
 import { useActiveAgentProviders } from '../../lib/hooks/useActiveAgentProviders';
-import { isAgentProfileActive, providerForAgentProfile, type AgentProviderId } from '../../lib/active-agent-providers';
+import { providerForAgentProfile, type AgentProviderId } from '../../lib/active-agent-providers';
 import { useWorkspaceTerminalOutput } from './useWorkspaceTerminalOutput';
 import { WorkspaceTerminalEmptyState } from './WorkspaceTerminalEmptyState';
 import { WorkspaceContextFooter } from './WorkspaceContextFooter';
@@ -68,7 +68,6 @@ import type { TileLeaf } from '../../types/tile-layout';
 
 const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-6';
 const DEFAULT_CODEX_MODEL = 'gpt-5.4';
-const DEFAULT_KIMI_MODEL = 'kimi-for-coding';
 
 const FILE_PREVIEW_WIDTH_KEY = 'mn:file-preview-width';
 const COMPOSER_SETTINGS_KEY = 'mn:composer-settings';
@@ -100,13 +99,6 @@ function providerFromProfileRef(profileRef?: string | null): AgentProviderId | n
       return 'claude_code';
     case 'codex':
       return 'codex';
-    case 'kimi_code':
-    case 'kimi-code':
-    case 'kimi':
-      return 'kimi_code';
-    case 'local_llm':
-    case 'local-llm':
-      return 'local_llm';
     case 'openai':
       return 'openai';
     default:
@@ -174,7 +166,6 @@ export function WorkspaceTerminal({
   const [providerModelDefaults, setProviderModelDefaults] = useState({
     claude: DEFAULT_CLAUDE_MODEL,
     codex: DEFAULT_CODEX_MODEL,
-    kimi: DEFAULT_KIMI_MODEL,
   });
   const [error, setError] = useState<string | null>(null);
   const [coordinatorStatus, setCoordinatorStatus] = useState<WorkspaceCoordinatorStatus | null>(null);
@@ -224,10 +215,6 @@ export function WorkspaceTerminal({
   const focusedSession = useMemo(
     () => visibleSessions.find((session) => session.id === focusedId) ?? visibleSessions[0] ?? null,
     [focusedId, visibleSessions],
-  );
-  const localAgentProfiles = useMemo(
-    () => agentProfiles.filter((profile) => (profile.agent === 'local_llm' || profile.local) && isAgentProfileActive(profile, activeProviders.activeProviderSet)),
-    [activeProviders.activeProviderSet, agentProfiles],
   );
   const focusedIsAgent = focusedSession?.terminalKind === 'agent' || focusedSession?.sessionRole === 'agent';
   const activePromptProfileRef = focusedIsAgent ? focusedSession?.profile : selectedProfileId;
@@ -418,8 +405,7 @@ export function WorkspaceTerminal({
       const settings = await getAiModelSettings();
       const claudeModel = settings.claudeAgentModel || settings.agentModel || DEFAULT_CLAUDE_MODEL;
       const codexModel = settings.codexAgentModel || DEFAULT_CODEX_MODEL;
-      const kimiModel = settings.kimiAgentModel || DEFAULT_KIMI_MODEL;
-      setProviderModelDefaults({ claude: claudeModel, codex: codexModel, kimi: kimiModel });
+      setProviderModelDefaults({ claude: claudeModel, codex: codexModel });
     } catch (err) {
       mnWarn('agent-models', 'load error', { err });
     }
@@ -575,19 +561,13 @@ export function WorkspaceTerminal({
       const modelIsCustom = current.selectedModel.trim().length > 0 && !isKnownComposerModel(current.selectedModel);
       const defaultModel = activePromptProvider === 'codex'
         ? providerModelDefaults.codex
-        : activePromptProvider === 'kimi_code'
-          ? providerModelDefaults.kimi
-          : activePromptProvider === 'local_llm'
-            ? activePromptProfile?.model ?? ''
-            : providerModelDefaults.claude;
+        : providerModelDefaults.claude;
       const nextModel = modelBelongsToProvider || modelIsCustom ? current.selectedModel : defaultModel;
 
       const reasoningOptions = providerReasoningOptions(activePromptProvider);
       const defaultReasoning = activePromptProvider === 'codex' || activePromptProvider === 'openai'
         ? 'medium'
-        : activePromptProvider === 'kimi_code'
-          ? 'default'
-          : 'Default';
+        : 'Default';
       const reasoningBelongsToProvider = reasoningOptions.some((option) => option.value === current.selectedReasoning);
       const nextReasoning = reasoningOptions.length === 0 || reasoningBelongsToProvider
         ? current.selectedReasoning
@@ -769,6 +749,7 @@ export function WorkspaceTerminal({
     selectedProfileId,
     composerSettings,
     mnemonicConfig,
+    refreshSessions,
     refreshWorkbenchState,
     refreshReadiness,
     refreshCoordinatorStatus,
@@ -1020,12 +1001,9 @@ export function WorkspaceTerminal({
           {visibleSessions.length === 0 ? (
             <WorkspaceTerminalEmptyState
               busy={busy}
-              localAgentProfiles={localAgentProfiles}
               activeProviderIds={activeProviders.activeProviderSet}
-              onStartClaude={() => void createTerminal('agent', 'claude_code', 'Claude')}
+              onStartClaude={() => void createTerminal('agent', 'claude_code', 'Claude', undefined, composerSettings.selectedModel ? ['--model', composerSettings.selectedModel] : undefined)}
               onStartCodex={() => void createTerminal('agent', 'codex', 'Codex')}
-              onStartKimi={() => void createTerminal('agent', 'kimi_code', 'Kimi')}
-              onStartLocalProfile={(profile) => void createTerminal('agent', profile.agent as TerminalProfile, profile.label, profile.id)}
               onStartShell={() => void createTerminal('shell', 'shell', 'Shell')}
             />
           ) : focusedSession ? (

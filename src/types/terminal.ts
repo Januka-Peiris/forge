@@ -1,4 +1,4 @@
-export type TerminalProfile = 'shell' | 'codex' | 'claude_code' | 'kimi_code' | 'local_llm' | 'openai' | string;
+export type TerminalProfile = 'shell' | 'codex' | 'claude_code' | 'openai' | string;
 export type TerminalSessionStatus = 'running' | 'succeeded' | 'failed' | 'stopped' | 'interrupted' | string;
 
 export interface TerminalSession {
@@ -66,6 +66,7 @@ export interface CreateWorkspaceTerminalInput {
   title?: string;
   command?: string;
   args?: string[];
+  extraArgs?: string[];
   cols?: number;
   rows?: number;
 }

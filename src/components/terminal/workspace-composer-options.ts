@@ -34,18 +34,6 @@ export const CODEX_REASONING_OPTIONS: ComposerReasoningOption[] = [
   { value: 'xhigh', label: 'Extra High', hint: 'maximum reasoning' },
 ];
 
-export const KIMI_MODEL_OPTIONS: ComposerModelOption[] = [
-  { value: 'kimi-for-coding', label: 'Kimi for Coding' },
-  { value: 'kimi-k2.6', label: 'Kimi K2.6' },
-  { value: 'kimi-k2.5', label: 'Kimi K2.5' },
-];
-
-export const KIMI_THINKING_OPTIONS: ComposerReasoningOption[] = [
-  { value: 'default', label: 'Default', hint: 'session default' },
-  { value: 'on', label: 'On', hint: 'enable --thinking' },
-  { value: 'off', label: 'Off', hint: 'enable --no-thinking' },
-];
-
 export const OPENAI_MODEL_OPTIONS: ComposerModelOption[] = [
   { value: 'gpt-5.4', label: 'GPT-5.4 (Flagship)' },
   { value: 'gpt-5.4-mini', label: 'GPT-5.4 mini' },
@@ -62,17 +50,13 @@ export const OPENAI_REASONING_OPTIONS: ComposerReasoningOption[] = [
 
 export function providerModelOptions(provider: string): ComposerModelOption[] {
   if (provider === 'codex') return CODEX_MODEL_OPTIONS;
-  if (provider === 'kimi_code') return KIMI_MODEL_OPTIONS;
   if (provider === 'openai') return OPENAI_MODEL_OPTIONS;
-  if (provider === 'local_llm') return [];
   return CLAUDE_MODEL_OPTIONS;
 }
 
 export function providerReasoningOptions(provider: string): ComposerReasoningOption[] {
   if (provider === 'codex') return CODEX_REASONING_OPTIONS;
-  if (provider === 'kimi_code') return KIMI_THINKING_OPTIONS;
   if (provider === 'openai') return OPENAI_REASONING_OPTIONS;
-  if (provider === 'local_llm') return [];
   return CLAUDE_THINKING_OPTIONS;
 }
 
@@ -80,15 +64,12 @@ export function isKnownComposerModel(model: string): boolean {
   return [
     ...CLAUDE_MODEL_OPTIONS,
     ...CODEX_MODEL_OPTIONS,
-    ...KIMI_MODEL_OPTIONS,
     ...OPENAI_MODEL_OPTIONS,
   ].some((option) => option.value === model);
 }
 
 export function directProviderLabel(provider: string): string {
   if (provider === 'codex') return 'Codex';
-  if (provider === 'kimi_code') return 'Kimi';
   if (provider === 'openai') return 'OpenAI';
-  if (provider === 'local_llm') return 'Local';
   return 'Claude';
 }

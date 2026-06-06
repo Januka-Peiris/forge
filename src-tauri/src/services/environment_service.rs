@@ -19,12 +19,6 @@ const DEPENDENCIES: &[Dependency] = &[
         optional: false,
     },
     Dependency {
-        name: "tmux",
-        binary: "tmux",
-        fix: "brew install tmux",
-        optional: false,
-    },
-    Dependency {
         name: "codex CLI",
         binary: "codex",
         fix: "brew install codex",
@@ -34,12 +28,6 @@ const DEPENDENCIES: &[Dependency] = &[
         name: "claude CLI",
         binary: "claude",
         fix: "brew install claude",
-        optional: false,
-    },
-    Dependency {
-        name: "Kimi CLI",
-        binary: "kimi",
-        fix: "uv tool install kimi-cli",
         optional: false,
     },
     Dependency {
@@ -203,9 +191,8 @@ mod tests {
     #[test]
     fn environment_check_shape_is_stable() {
         let items = check_environment();
-        assert_eq!(items.len(), 7);
+        assert_eq!(items.len(), 5);
         assert!(items.iter().any(|item| item.binary == "git"));
-        assert!(items.iter().any(|item| item.binary == "kimi"));
         assert!(items
             .iter()
             .any(|item| item.binary == "gh" && item.optional));

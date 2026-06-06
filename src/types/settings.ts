@@ -13,7 +13,7 @@ export interface SaveRepoRootsInput {
 export interface AiModelSettings {
   claudeAgentModel: string;
   codexAgentModel: string;
-  kimiAgentModel: string;
+  kimiAgentModel: string; // kept for API compat, always empty
   agentModel: string;
   orchestratorModel: string;
 }
@@ -21,7 +21,7 @@ export interface AiModelSettings {
 export interface SaveAiModelSettingsInput {
   claudeAgentModel: string;
   codexAgentModel: string;
-  kimiAgentModel: string;
+  kimiAgentModel: string; // kept for API compat, always empty
   agentModel: string;
   orchestratorModel: string;
 }

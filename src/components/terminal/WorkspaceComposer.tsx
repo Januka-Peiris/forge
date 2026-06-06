@@ -20,7 +20,6 @@ import { WorkspaceComposerSettingsPopover } from './WorkspaceComposerSettingsPop
 import {
   CLAUDE_MODEL_OPTIONS,
   CODEX_MODEL_OPTIONS,
-  KIMI_MODEL_OPTIONS,
   directProviderLabel,
   providerModelOptions,
   providerReasoningOptions,
@@ -40,8 +39,6 @@ const COORDINATOR_PROVIDER_OPTIONS = [
   { value: 'claude_code', label: 'Claude' },
   { value: 'openai', label: 'OpenAI' },
   { value: 'codex', label: 'Codex' },
-  { value: 'kimi_code', label: 'Kimi' },
-  { value: 'local_llm', label: 'Local' },
 ];
 
 function coordinatorProviderLabel(provider: string): string {
@@ -51,9 +48,6 @@ function coordinatorProviderLabel(provider: string): string {
 function compactLabel(model: string, provider?: string) {
   if (provider === 'codex') {
     return CODEX_MODEL_OPTIONS.find((o) => o.value === model)?.label ?? model;
-  }
-  if (provider === 'kimi_code') {
-    return KIMI_MODEL_OPTIONS.find((o) => o.value === model)?.label ?? model;
   }
   return CLAUDE_MODEL_OPTIONS.find((o) => o.value === model)?.label
     ?? model.replace(/^claude-/, '').replace(/-/g, ' ').replace(/\b(opus|sonnet|haiku)\b/i, (m) => m[0].toUpperCase() + m.slice(1));
@@ -703,7 +697,7 @@ export function WorkspaceComposer({
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5 rounded border border-mn-border bg-mn-bg px-2 py-1 text-xs text-mn-muted">
-              {(provider === 'claude_code' || provider === 'codex' || provider === 'kimi_code') && (
+              {(provider === 'claude_code' || provider === 'codex') && (
                 <>
                   <button
                     onClick={onTogglePlanMode}

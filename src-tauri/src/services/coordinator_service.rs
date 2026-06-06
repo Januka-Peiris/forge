@@ -97,9 +97,7 @@ fn normalize_coordinator_provider(input: Option<&str>) -> Option<String> {
     match value.as_str() {
         "claude" | "claude_code" | "claude-code" => Some("claude_code".to_string()),
         "codex" => Some("codex".to_string()),
-        "kimi" | "kimi_code" | "kimi-code" => Some("kimi_code".to_string()),
         "openai" | "openai_api" | "openai-api" => Some("openai".to_string()),
-        "local" | "local_llm" | "local-llm" | "ollama" => Some("local_llm".to_string()),
         _ => None,
     }
 }
@@ -108,9 +106,7 @@ fn provider_label(provider: &str) -> &'static str {
     match provider {
         "claude_code" => "Claude",
         "codex" => "Codex",
-        "kimi_code" => "Kimi",
         "openai" => "OpenAI",
-        "local_llm" => "Local",
         _ => "Provider",
     }
 }
@@ -273,20 +269,12 @@ fn synthesize_coordinator_profile(
     let (agent, command, provider_name, endpoint, local) = match provider {
         "claude_code" => ("claude_code", "claude", Some("claude"), None, false),
         "codex" => ("codex", "codex", Some("openai"), None, false),
-        "kimi_code" => ("kimi_code", "kimi", Some("kimi"), None, false),
         "openai" => (
             "openai",
             "openai",
             Some("openai"),
             Some("https://api.openai.com/v1"),
             false,
-        ),
-        "local_llm" => (
-            "local_llm",
-            "ollama",
-            Some("ollama"),
-            Some("http://localhost:11434"),
-            true,
         ),
         other => return Err(format!("Unsupported coordinator provider: {other}")),
     };
@@ -1161,8 +1149,6 @@ fn plan_actions(
     let provider_result = match brain_profile.agent.as_str() {
         "claude_code" => call_claude_brain(state, brain_profile, workspace_cwd.as_deref(), &prompt),
         "codex" => call_codex_brain(state, brain_profile, workspace_cwd.as_deref(), &prompt),
-        "kimi_code" => call_kimi_brain(state, brain_profile, workspace_cwd.as_deref(), &prompt),
-        "local_llm" => call_local_brain(state, brain_profile, workspace_cwd.as_deref(), &prompt),
         "openai" => call_openai_brain(state, brain_profile, &prompt),
         _ => Err(format!(
             "No direct coordinator adapter for brain profile provider: {}",
@@ -1290,75 +1276,6 @@ fn call_codex_brain(
     Ok(extract_text_from_jsonl_stdout(&stdout).unwrap_or(stdout))
 }
 
-fn call_kimi_brain(
-    state: &AppState,
-    profile: &crate::models::AgentProfile,
-    cwd: Option<&str>,
-    prompt: &str,
-) -> Result<String, String> {
-    let command_path = resolve_profile_command(&profile.command)?;
-    let mut command = std::process::Command::new(command_path);
-    if let Some(cwd) = cwd {
-        command.current_dir(cwd);
-    }
-    command.args(["--print", "--output-format=stream-json"]);
-    if let Some(cwd) = cwd {
-        command.args(["--work-dir", cwd]);
-    }
-    if let Some(model) = profile_default_model(state, profile) {
-        command.args(["--model", model.as_str()]);
-    }
-    if let Some(flag) = profile
-        .reasoning
-        .as_deref()
-        .and_then(normalize_kimi_thinking_flag)
-    {
-        command.arg(flag);
-    }
-    let output = command
-        .args(["--prompt", prompt])
-        .output()
-        .map_err(|err| format!("Failed to run kimi CLI for coordinator: {err}"))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("kimi CLI failed for coordinator: {stderr}"));
-    }
-    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-    Ok(extract_text_from_jsonl_stdout(&stdout).unwrap_or(stdout))
-}
-
-fn call_local_brain(
-    state: &AppState,
-    profile: &crate::models::AgentProfile,
-    cwd: Option<&str>,
-    prompt: &str,
-) -> Result<String, String> {
-    let command_path = resolve_profile_command(&profile.command)?;
-    let mut command = std::process::Command::new(command_path);
-    if let Some(cwd) = cwd {
-        command.current_dir(cwd);
-    }
-    if profile.command == "ollama" {
-        let model = profile_default_model(state, profile).unwrap_or_else(|| "llama3.2".to_string());
-        command.args(["run", model.as_str(), prompt]);
-    } else {
-        if !profile.args.is_empty() {
-            command.args(&profile.args);
-        }
-        command.arg(prompt);
-    }
-    let output = command
-        .output()
-        .map_err(|err| format!("Failed to run local brain command for coordinator: {err}"))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!(
-            "Local brain command failed for coordinator: {stderr}"
-        ));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
-}
-
 fn resolve_workspace_cwd(state: &AppState, workspace_id: &str) -> Option<String> {
     workspace_repository::get_detail(&state.db, workspace_id)
         .ok()
@@ -1451,9 +1368,6 @@ fn profile_default_model(
         "codex" => settings_repository::get_value(&state.db, "codex_agent_default_model")
             .ok()
             .flatten(),
-        "kimi_code" => settings_repository::get_value(&state.db, "kimi_agent_default_model")
-            .ok()
-            .flatten(),
         "openai" => settings_repository::get_value(&state.db, "openai_agent_default_model")
             .ok()
             .flatten(),
@@ -1467,14 +1381,6 @@ fn normalize_codex_reasoning(input: &str) -> Option<&'static str> {
         "medium" | "default" => Some("medium"),
         "high" => Some("high"),
         "xhigh" | "extra high" | "extra_high" | "max" => Some("xhigh"),
-        _ => None,
-    }
-}
-
-fn normalize_kimi_thinking_flag(input: &str) -> Option<&'static str> {
-    match input.trim().to_ascii_lowercase().as_str() {
-        "on" | "true" | "thinking" => Some("--thinking"),
-        "off" | "false" | "no-thinking" | "no_thinking" => Some("--no-thinking"),
         _ => None,
     }
 }

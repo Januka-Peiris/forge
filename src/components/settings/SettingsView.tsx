@@ -31,12 +31,6 @@ const CODEX_AGENT_MODELS = [
   { value: 'o4-mini', label: 'o4-mini' },
 ];
 
-const KIMI_AGENT_MODELS = [
-  { value: 'kimi-for-coding', label: 'Kimi for Coding' },
-  { value: 'kimi-k2.6', label: 'Kimi K2.6' },
-  { value: 'kimi-k2.5', label: 'Kimi K2.5' },
-];
-
 const ORCHESTRATOR_MODELS = [
   { value: 'claude-opus-4-7', label: 'Claude Opus 4.7 (1M context)' },
   { value: 'claude-opus-4-6', label: 'Claude Opus 4.6 (1M context)' },
@@ -267,29 +261,9 @@ function AiModelsCard({ activeProviderIds }: { activeProviderIds: ReadonlySet<Ag
           </Select>
         </div>
         )}
-        {activeProviderIds.has('kimi_code') && (
-        <div>
-          <label className="text-[12px] font-semibold text-mn-text block mb-1">Kimi default model</label>
-          <p className="text-[11px] text-mn-muted mb-2">Used when starting or focusing Kimi chats.</p>
-          <Select
-            value={modelSettings.kimiAgentModel}
-            onValueChange={(v) => setModelSettings({ ...modelSettings, kimiAgentModel: v })}
-          >
-            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {KIMI_AGENT_MODELS.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
-              {!KIMI_AGENT_MODELS.some((m) => m.value === modelSettings.kimiAgentModel) && (
-                <SelectItem value={modelSettings.kimiAgentModel}>
-                  {modelSettings.kimiAgentModel}
-                </SelectItem>
-              )}
-            </SelectContent>
-          </Select>
-        </div>
-        )}
-        {!activeProviderIds.has('claude_code') && !activeProviderIds.has('codex') && !activeProviderIds.has('kimi_code') && (
+        {!activeProviderIds.has('claude_code') && !activeProviderIds.has('codex') && (
           <p className="rounded-lg border border-mn-border/70 bg-black/10 p-3 text-[12px] text-mn-muted">
-            No CLI agent providers are active. Enable Claude, Codex, or Kimi in Agent Setup to edit their model defaults.
+            No CLI agent providers are active. Enable Claude or Codex in Agent Setup to edit their model defaults.
           </p>
         )}
         <div>

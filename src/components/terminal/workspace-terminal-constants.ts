@@ -6,8 +6,6 @@ export const PROFILE_LABELS: Record<TerminalProfile, string> = {
   shell: 'Shell',
   codex: 'Codex',
   claude_code: 'Claude',
-  kimi_code: 'Kimi',
-  local_llm: 'Local LLM',
 };
 
 export const OUTPUT_RETENTION_CHUNKS = 5000;

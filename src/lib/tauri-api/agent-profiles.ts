@@ -13,13 +13,13 @@ export function saveAppAgentProfiles(profiles: AgentProfile[]): Promise<AgentPro
   return invokeCommand<AgentProfile[]>('save_app_agent_profiles', { profiles });
 }
 
-/** Non-shell profiles for pickers: Claude first, then Codex, then Kimi, then others. */
+/** Non-shell profiles for pickers: Claude first, then Codex, then others. */
 export function agentProfilesForPromptPicker(profiles: AgentProfile[]): AgentProfile[] {
   return profiles
     .filter((p) => p.agent !== 'shell' && p.agent !== 'openai')
     .sort((a, b) => {
       const rank = (p: AgentProfile) => (
-        p.agent === 'claude_code' ? 0 : p.agent === 'codex' ? 1 : p.agent === 'kimi_code' ? 2 : 3
+        p.agent === 'claude_code' ? 0 : p.agent === 'codex' ? 1 : 2
       );
       const d = rank(a) - rank(b);
       return d !== 0 ? d : a.label.localeCompare(b.label);

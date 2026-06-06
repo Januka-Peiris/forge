@@ -112,7 +112,6 @@ pub fn raw_to_profile(raw: RawAgentProfile) -> Option<AgentProfile> {
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
     let local = raw.local.unwrap_or(false)
-        || agent == "local_llm"
         || provider.as_deref().map(is_local_provider).unwrap_or(false)
         || endpoint.as_deref().map(is_local_endpoint).unwrap_or(false);
     let command = raw
@@ -184,7 +183,6 @@ fn normalize_saved_profile(mut profile: AgentProfile) -> Option<AgentProfile> {
     profile.description = trim_optional(profile.description);
     profile.role_preference = trim_optional(profile.role_preference);
     profile.local = profile.local
-        || profile.agent == "local_llm"
         || profile
             .provider
             .as_deref()
@@ -322,35 +320,6 @@ pub fn prompt_metadata_preamble(
     lines.join("\n")
 }
 
-pub fn local_llm_prompt_envelope(
-    profile: &AgentProfile,
-    task_mode: Option<&str>,
-    prompt: &str,
-) -> String {
-    let mode = task_mode.or(profile.mode.as_deref()).unwrap_or("act");
-    let model = profile.model.as_deref().unwrap_or("local model");
-    let provider = profile.provider.as_deref().unwrap_or("local");
-    let instruction = match mode.to_ascii_lowercase().as_str() {
-        "plan" => "Plan first. Be explicit about assumptions and ask before suggesting risky changes.",
-        "review" => "Review for correctness, risks, tests, and actionable issues. Do not invent repository facts.",
-        "fix" => "Suggest the smallest safe fix and include validation steps.",
-        _ => "Help with the user's software-development task. Be concise, practical, and honest about uncertainty.",
-    };
-    format!(
-        "You are a local Mnemonic coding assistant running via {provider} using model {model}.
-
-Important:
-- Treat the text after `User request:` as the task.
-- Do not explain this profile/configuration unless the user asks.
-- You do not have automatic file or shell tool access in this terminal; when code changes are needed, provide exact commands or patches the user can run.
-- {instruction}
-
-User request:
-{}",
-        prompt.trim()
-    )
-}
-
 pub fn prompt_metadata_preamble_for_workspace(
     state: &AppState,
     workspace_id: Option<&str>,
@@ -438,42 +407,6 @@ pub fn default_profiles() -> Vec<AgentProfile> {
             coordinator_eligible: Some(true),
         },
         AgentProfile {
-            id: "kimi-code".to_string(),
-            label: "Kimi Code".to_string(),
-            agent: "kimi_code".to_string(),
-            command: "kimi".to_string(),
-            args: vec![],
-            model: None,
-            reasoning: None,
-            mode: Some("act".to_string()),
-            provider: Some("kimi".to_string()),
-            endpoint: None,
-            local: false,
-            description: Some("Kimi Code CLI agent".to_string()),
-            skills: vec![],
-            templates: vec![],
-            role_preference: None,
-            coordinator_eligible: Some(true),
-        },
-        AgentProfile {
-            id: "local-llm".to_string(),
-            label: "Local LLM".to_string(),
-            agent: "local_llm".to_string(),
-            command: "ollama".to_string(),
-            args: vec!["run".to_string(), "llama3.2".to_string()],
-            model: Some("llama3.2".to_string()),
-            reasoning: None,
-            mode: Some("act".to_string()),
-            provider: Some("ollama".to_string()),
-            endpoint: Some("http://localhost:11434".to_string()),
-            local: true,
-            description: Some("Default Ollama local agent".to_string()),
-            skills: vec![],
-            templates: vec![],
-            role_preference: Some("coder".to_string()),
-            coordinator_eligible: Some(true),
-        },
-        AgentProfile {
             id: "shell".to_string(),
             label: "Shell".to_string(),
             agent: "shell".to_string(),
@@ -498,13 +431,8 @@ fn normalize_agent(value: &str) -> String {
     match value.trim() {
         "claude" | "claude-code" | "claude_code" => "claude_code".to_string(),
         "codex" => "codex".to_string(),
-        "kimi" | "kimi-code" | "kimi_code" => "kimi_code".to_string(),
         "openai" | "openai-api" | "openai_api" => "openai".to_string(),
         "shell" => "shell".to_string(),
-        "local" | "local-llm" | "local_llm" | "ollama" | "llama.cpp" | "llama-cpp"
-        | "llama_cpp" | "lmstudio" | "lm-studio" | "openai-compatible" | "openai_compatible" => {
-            "local_llm".to_string()
-        }
         other => other.to_string(),
     }
 }
@@ -513,9 +441,7 @@ fn default_command_for_agent(agent: &str) -> String {
     match agent {
         "claude_code" => "claude".to_string(),
         "codex" => "codex".to_string(),
-        "kimi_code" => "kimi".to_string(),
         "openai" => "openai".to_string(),
-        "local_llm" => "ollama".to_string(),
         "shell" => "/bin/zsh".to_string(),
         other => other.to_string(),
     }
@@ -551,11 +477,9 @@ mod tests {
             .into_iter()
             .map(|profile| profile.id)
             .collect::<Vec<_>>();
-        assert_eq!(ids.len(), 5);
+        assert_eq!(ids.len(), 3);
         assert!(ids.contains(&"claude-code".to_string()));
         assert!(ids.contains(&"codex".to_string()));
-        assert!(ids.contains(&"kimi-code".to_string()));
-        assert!(ids.contains(&"local-llm".to_string()));
         assert!(ids.contains(&"shell".to_string()));
     }
 
@@ -621,37 +545,7 @@ mod tests {
     }
 
     #[test]
-    fn local_llm_prompt_envelope_avoids_generic_profile_metadata() {
-        let profile = AgentProfile {
-            id: "qwen-local".to_string(),
-            label: "Qwen Local".to_string(),
-            agent: "local_llm".to_string(),
-            command: "ollama".to_string(),
-            args: vec!["run".to_string(), "qwen2.5-coder:7b".to_string()],
-            model: Some("qwen2.5-coder:7b".to_string()),
-            reasoning: None,
-            mode: Some("act".to_string()),
-            provider: Some("ollama".to_string()),
-            endpoint: Some("http://localhost:11434".to_string()),
-            local: true,
-            description: None,
-            skills: vec![],
-            templates: vec![],
-            role_preference: None,
-            coordinator_eligible: None,
-        };
-        let envelope = local_llm_prompt_envelope(&profile, Some("Act"), "fix the failing test");
-        assert!(envelope.contains(
-            "User request:
-fix the failing test"
-        ));
-        assert!(!envelope.contains("Mnemonic agent profile:"));
-        assert!(!envelope.contains("- Profile:"));
-        assert!(envelope.contains("Do not explain this profile/configuration"));
-    }
-
-    #[test]
-    fn raw_local_profile_normalizes_without_becoming_codex() {
+    fn raw_local_profile_normalizes_with_local_flag() {
         let profile = raw_to_profile(RawAgentProfile {
             id: Some("local-review".to_string()),
             label: None,
@@ -672,8 +566,7 @@ fix the failing test"
         })
         .expect("profile");
 
-        assert_eq!(profile.agent, "local_llm");
-        assert_eq!(profile.command, "ollama");
+        assert_eq!(profile.agent, "ollama");
         assert!(profile.local);
     }
 
@@ -684,8 +577,8 @@ fix the failing test"
         assert_eq!(profiles.len(), 1);
         assert_eq!(profiles[0].id, "local");
         assert_eq!(profiles[0].label, "local");
-        assert_eq!(profiles[0].agent, "local_llm");
-        assert_eq!(profiles[0].command, "ollama");
+        assert_eq!(profiles[0].agent, "lmstudio");
+        assert_eq!(profiles[0].command, "lmstudio");
         assert_eq!(profiles[0].args, vec!["--model"]);
         assert!(profiles[0].local);
     }

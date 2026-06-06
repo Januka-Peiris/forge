@@ -62,7 +62,7 @@ export function NewWorkspaceModal({ onClose, onCreate, onCreateMany, repositorie
   const activeAgentOptions = useMemo(() => (
     activeProviderIds
       .map(agentTypeForProvider)
-      .filter((value): value is AgentType => value === 'Claude Code' || value === 'Codex' || value === 'Kimi Code' || value === 'Local LLM')
+      .filter((value): value is AgentType => value === 'Claude Code' || value === 'Codex')
   ), [activeProviderIds]);
 
   useEffect(() => {

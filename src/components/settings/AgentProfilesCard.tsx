@@ -83,12 +83,12 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
     setSaving(true);
     setMessage(null);
     try {
-      const id = editingProfileId ?? uniqueProfileId(slug(label || model || provider || 'local-llm'), appProfiles);
+      const id = editingProfileId ?? uniqueProfileId(slug(label || model || provider || 'local'), appProfiles);
       const isOpenAi = provider === 'openai';
       const nextProfile: AgentProfile = {
         id,
         label: label.trim() || id,
-        agent: isOpenAi ? 'openai' : 'local_llm',
+        agent: isOpenAi ? 'openai' : (provider.trim() || 'local'),
         command: command.trim() || (provider === 'ollama' ? 'ollama' : isOpenAi ? 'openai' : ''),
         args: isOpenAi ? [] : parseCommandArgs(argsText),
         model: model.trim() || (isOpenAi ? 'gpt-5.4' : null),
@@ -178,7 +178,7 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
   const loadProfileIntoForm = (profile: AgentProfile, mode: 'edit' | 'template') => {
     setEditingProfileId(mode === 'edit' ? profile.id : null);
     setLabel(mode === 'edit' ? profile.label : `${profile.label} Copy`);
-    setProvider(profile.provider ?? (profile.agent === 'local_llm' ? 'custom' : profile.agent));
+    setProvider(profile.provider ?? profile.agent);
     setModel(profile.model ?? '');
     setCommand(profile.command);
     setArgsText(formatCommandPreview('', profile.args));
@@ -474,7 +474,7 @@ function LabeledInput({ label, value, onChange, placeholder }: { label: string; 
 }
 
 function slug(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'local-llm';
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'local';
 }
 
 function uniqueProfileId(base: string, profiles: AgentProfile[]): string {

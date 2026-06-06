@@ -593,8 +593,7 @@ mod tests {
         assert_eq!(config.hooks.pre_ship, vec!["echo ship"]);
         assert_eq!(config.hooks.post_ship, vec!["echo ship-post"]);
         assert_eq!(config.agent_profiles.len(), 1);
-        assert_eq!(config.agent_profiles[0].agent, "local_llm");
-        assert!(config.agent_profiles[0].local);
+        assert_eq!(config.agent_profiles[0].agent, "ollama");
         assert_eq!(config.agent_profiles[0].provider.as_deref(), Some("ollama"));
         assert_eq!(config.mcp_servers.len(), 1);
         assert_eq!(config.mcp_servers[0].id, "linear");

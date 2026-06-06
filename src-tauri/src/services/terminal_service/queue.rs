@@ -1,5 +1,4 @@
 use std::io::Write;
-use std::sync::atomic::AtomicU64;
 
 use crate::models::{AgentPromptEntry, QueueAgentPromptInput};
 use crate::repositories::{agent_memory_repository, terminal_repository};
@@ -9,7 +8,7 @@ use crate::services::{
 };
 use crate::state::AppState;
 
-use super::output::{append_output, unique_suffix};
+use super::output::unique_suffix;
 use super::prompts::terminal_prompt_payload_for_session;
 use super::runtime::{active_for_workspace, ensure_agent_session_for_prompt};
 
@@ -28,9 +27,6 @@ pub(super) fn queue_workspace_agent_prompt(
         input.profile_id.as_deref(),
         input.profile.as_deref(),
     )?;
-
-    let supports_system_prompt_file =
-        resolved_profile.agent == "claude_code" && !resolved_profile.local;
 
     let is_first_prompt = {
         let active_session = terminal_repository::get_active_session_id_for_workspace(
@@ -95,157 +91,55 @@ pub(super) fn queue_workspace_agent_prompt(
         .as_deref()
         .is_some_and(|mode| mode.eq_ignore_ascii_case("plan"));
 
-    // -- Build the final prompt and optional system prompt file --
-    let (prompt, system_prompt_file) = if supports_system_prompt_file && is_first_prompt {
-        // Claude Code, first prompt: write ALL context to a temp file,
-        // send only user text to stdin.
-        let mut system_parts: Vec<String> = Vec::new();
-
-        // Agent profile metadata
-        let metadata = agent_profile_service::prompt_metadata_preamble_for_workspace(
-            state,
-            Some(&input.workspace_id),
-            &resolved_profile,
-            input.task_mode.as_deref(),
-            input.reasoning.as_deref(),
-        );
-        system_parts.push(metadata);
-
-        // Linked repository context
-        if let Ok(context) =
-            agent_context_service::get_workspace_agent_context(state, &input.workspace_id)
-        {
-            if !context.prompt_preamble.trim().is_empty() {
-                system_parts.push(context.prompt_preamble.trim().to_string());
-            }
-        }
-
-        // Session context ([MNEMONIC CONTEXT] block)
-        let context_enabled =
-            crate::repositories::settings_repository::get_value(&state.db, "context_enabled")
-                .unwrap_or_default()
-                .map(|value| value != "false")
-                .unwrap_or(true);
-        if context_enabled {
-            if let Some(context_block) =
-                agent_context_service::build_session_open_context(state, &input.workspace_id)
-            {
-                system_parts.push(context_block);
-            }
-        }
-
-        // Memory recall
-        if let Some(ref block) = memory_block {
-            system_parts.push(block.clone());
-        }
-
-        // Plan mode instructions
-        if is_plan_mode {
-            system_parts.push(PLAN_MODE_RESPONSE_INSTRUCTIONS.to_string());
-        }
-
-        let system_context = system_parts.join("\n\n");
-        let file_path = write_system_prompt_file(&system_context)?;
-        (user_prompt, Some(file_path))
-    } else if supports_system_prompt_file {
-        // Claude Code, subsequent prompt: session already has profile/context from launch.
-        // Only include per-prompt dynamic data (memory recall, plan instructions) as a
-        // small stdin prefix — much smaller than the full preamble.
-        let mut prompt = user_prompt;
+    // -- Build the final prompt with context prepended --
+    let prompt = {
         let mut prefix_parts: Vec<String> = Vec::new();
+
+        if is_first_prompt {
+            let metadata = agent_profile_service::prompt_metadata_preamble_for_workspace(
+                state,
+                Some(&input.workspace_id),
+                &resolved_profile,
+                input.task_mode.as_deref(),
+                input.reasoning.as_deref(),
+            );
+            prefix_parts.push(metadata);
+
+            if let Ok(context) =
+                agent_context_service::get_workspace_agent_context(state, &input.workspace_id)
+            {
+                if !context.prompt_preamble.trim().is_empty() {
+                    prefix_parts.push(context.prompt_preamble.trim().to_string());
+                }
+            }
+
+            let context_enabled =
+                crate::repositories::settings_repository::get_value(&state.db, "context_enabled")
+                    .unwrap_or_default()
+                    .map(|value| value != "false")
+                    .unwrap_or(true);
+            if context_enabled {
+                if let Some(context_block) =
+                    agent_context_service::build_session_open_context(state, &input.workspace_id)
+                {
+                    prefix_parts.push(context_block);
+                }
+            }
+        }
+
         if let Some(block) = memory_block {
             prefix_parts.push(block);
         }
         if is_plan_mode {
             prefix_parts.push(PLAN_MODE_RESPONSE_INSTRUCTIONS.to_string());
         }
-        if !prefix_parts.is_empty() {
+
+        if prefix_parts.is_empty() {
+            user_prompt
+        } else {
             let prefix = prefix_parts.join("\n\n");
-            prompt = format!("{prefix}\n\n{prompt}");
+            format!("{prefix}\n\n{user_prompt}")
         }
-        (prompt, None)
-    } else if resolved_profile.agent == "local_llm" || resolved_profile.local {
-        // Local LLM: wrap in envelope for the first prompt
-        let mut system_parts: Vec<String> = Vec::new();
-        if let Ok(context) =
-            agent_context_service::get_workspace_agent_context(state, &input.workspace_id)
-        {
-            if !context.prompt_preamble.trim().is_empty() {
-                system_parts.push(context.prompt_preamble.trim().to_string());
-            }
-        }
-        let context_enabled =
-            crate::repositories::settings_repository::get_value(&state.db, "context_enabled")
-                .unwrap_or_default()
-                .map(|value| value != "false")
-                .unwrap_or(true);
-        if context_enabled && is_first_prompt {
-            if let Some(context_block) =
-                agent_context_service::build_session_open_context(state, &input.workspace_id)
-            {
-                system_parts.push(context_block);
-            }
-        }
-        if let Some(block) = memory_block {
-            system_parts.push(block);
-        }
-        if is_plan_mode {
-            system_parts.push(PLAN_MODE_RESPONSE_INSTRUCTIONS.to_string());
-        }
-        let mut prompt = user_prompt;
-        for part in system_parts.iter().rev() {
-            prompt = format!("{part}\n\n{prompt}");
-        }
-        if is_first_prompt {
-            prompt = agent_profile_service::local_llm_prompt_envelope(
-                &resolved_profile,
-                input.task_mode.as_deref(),
-                &prompt,
-            );
-        }
-        (prompt, None)
-    } else {
-        // Non-Claude remote agents (Codex, Kimi, OpenAI): prepend everything to stdin
-        let mut system_parts: Vec<String> = Vec::new();
-        let metadata = agent_profile_service::prompt_metadata_preamble_for_workspace(
-            state,
-            Some(&input.workspace_id),
-            &resolved_profile,
-            input.task_mode.as_deref(),
-            input.reasoning.as_deref(),
-        );
-        system_parts.push(metadata);
-        if let Ok(context) =
-            agent_context_service::get_workspace_agent_context(state, &input.workspace_id)
-        {
-            if !context.prompt_preamble.trim().is_empty() {
-                system_parts.push(context.prompt_preamble.trim().to_string());
-            }
-        }
-        let context_enabled =
-            crate::repositories::settings_repository::get_value(&state.db, "context_enabled")
-                .unwrap_or_default()
-                .map(|value| value != "false")
-                .unwrap_or(true);
-        if context_enabled && is_first_prompt {
-            if let Some(context_block) =
-                agent_context_service::build_session_open_context(state, &input.workspace_id)
-            {
-                system_parts.push(context_block);
-            }
-        }
-        if let Some(block) = memory_block {
-            system_parts.push(block);
-        }
-        if is_plan_mode {
-            system_parts.push(PLAN_MODE_RESPONSE_INSTRUCTIONS.to_string());
-        }
-        let mut prompt = user_prompt;
-        if !system_parts.is_empty() {
-            let preamble = system_parts.join("\n\n");
-            prompt = format!("{preamble}\n\nUser request:\n{prompt}");
-        }
-        (prompt, None)
     };
 
     let profile = resolved_profile.id.clone();
@@ -262,7 +156,6 @@ pub(super) fn queue_workspace_agent_prompt(
     };
     terminal_repository::insert_prompt_entry(&state.db, &entry)?;
 
-    let requested_model = input.model.clone();
     let mode = input.mode.unwrap_or_else(|| "send_now".to_string());
     if mode == "send_now" {
         let hook_context = serde_json::json!({
@@ -278,7 +171,7 @@ pub(super) fn queue_workspace_agent_prompt(
             hook_service::HookPhase::Pre,
             &hook_context,
         )?;
-        dispatch_prompt_entry(state, &mut entry, system_prompt_file, requested_model.as_deref())?;
+        dispatch_prompt_entry(state, &mut entry)?;
         let _ = hook_service::run_workspace_hooks(
             state,
             &entry.workspace_id,
@@ -291,31 +184,6 @@ pub(super) fn queue_workspace_agent_prompt(
 }
 
 const PLAN_MODE_RESPONSE_INSTRUCTIONS: &str = "Mnemonic Plan mode instructions:\n- Stay in planning mode: do not make file edits or run mutating commands.\n- Explore only as needed to make the plan decision-complete.\n- When you are ready to present the final implementation plan, wrap only the plan Markdown in <proposed_plan> and </proposed_plan> tags so Mnemonic can render it as an actionable plan card.";
-
-fn write_system_prompt_file(content: &str) -> Result<String, String> {
-    let dir = std::env::temp_dir().join("mn-system-prompts");
-    std::fs::create_dir_all(&dir)
-        .map_err(|err| format!("Failed to create temp dir for system prompt: {err}"))?;
-    let file_path = dir.join(format!("mn-ctx-{}.md", unique_suffix()));
-    std::fs::write(&file_path, content)
-        .map_err(|err| format!("Failed to write system prompt file: {err}"))?;
-    cleanup_stale_system_prompt_files(&dir);
-    Ok(file_path.display().to_string())
-}
-
-fn cleanup_stale_system_prompt_files(dir: &std::path::Path) {
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
-    let cutoff = std::time::SystemTime::now() - std::time::Duration::from_secs(24 * 60 * 60);
-    for entry in entries.flatten() {
-        if let Ok(meta) = entry.metadata() {
-            if let Ok(modified) = meta.modified() {
-                if modified < cutoff {
-                    let _ = std::fs::remove_file(entry.path());
-                }
-            }
-        }
-    }
-}
 
 pub(super) fn batch_dispatch_workspace_agent_prompt(
     state: &AppState,
@@ -359,8 +227,7 @@ pub(super) fn run_next_workspace_agent_prompt(
             Some(entry) => entry,
             None => return Ok(None),
         };
-    let model = entry.model.clone();
-    dispatch_prompt_entry(state, &mut entry, None, model.as_deref())?;
+    dispatch_prompt_entry(state, &mut entry)?;
     Ok(Some(entry))
 }
 
@@ -375,8 +242,6 @@ pub(super) fn list_workspace_agent_prompts(
 fn dispatch_prompt_entry(
     state: &AppState,
     entry: &mut AgentPromptEntry,
-    system_prompt_file: Option<String>,
-    requested_model: Option<&str>,
 ) -> Result<(), String> {
     checkpoint_service::create_checkpoint_if_dirty_in_background(
         state.clone(),
@@ -384,23 +249,8 @@ fn dispatch_prompt_entry(
         "before agent prompt".to_string(),
     );
 
-    let mut extra_args: Vec<String> = Vec::new();
-    if let Some(path) = system_prompt_file {
-        extra_args.push("--append-system-prompt-file".to_string());
-        extra_args.push(path);
-    }
-    if let Some(model) = requested_model {
-        extra_args.push("--model".to_string());
-        extra_args.push(model.to_string());
-    }
-    let extra_args = if extra_args.is_empty() {
-        None
-    } else {
-        Some(extra_args)
-    };
-
     let (session, _is_new_session) =
-        ensure_agent_session_for_prompt(state, &entry.workspace_id, &entry.profile, extra_args)?;
+        ensure_agent_session_for_prompt(state, &entry.workspace_id, &entry.profile, None)?;
 
     let active = active_for_workspace(state, &entry.workspace_id, "agent")?
         .ok_or_else(|| "No active agent session found to send prompt".to_string())?;
@@ -420,16 +270,6 @@ fn dispatch_prompt_entry(
     terminal_repository::mark_prompt_sent(&state.db, &entry.id, &session.id, &sent_at)?;
     entry.session_id = Some(session.id.clone());
     entry.status = "sent".to_string();
-    entry.sent_at = Some(sent_at.clone());
-
-    append_output(
-        Some(&state.app_handle),
-        &state.db,
-        &entry.workspace_id,
-        &session.id,
-        &AtomicU64::new(terminal_repository::next_seq(&state.db, &session.id).unwrap_or(0)),
-        "system",
-        &format!("\r\n[mnemonic] queued prompt sent at {sent_at}\r\n"),
-    );
+    entry.sent_at = Some(sent_at);
     Ok(())
 }

@@ -24,22 +24,8 @@ pub(super) fn parse_adapter_line(provider: &str, line: &str) -> Vec<ParsedAgentE
     match provider {
         "claude_code" => parse_claude_json_line(&value),
         "codex" => parse_codex_json_line(&value),
-        "kimi_code" => parse_kimi_json_line(&value),
-        "local_llm" => parse_local_llm_line(line),
         _ => Vec::new(),
     }
-}
-
-fn parse_local_llm_line(line: &str) -> Vec<ParsedAgentEvent> {
-    let text = strip_ansi(line).trim().to_string();
-    if text.is_empty() {
-        return Vec::new();
-    }
-
-    // Basic heuristic for local LLMs: if it looks like a tool call in markdown or specific text
-    // we can try to promote it, but for now we just treat it as assistant text.
-    // The UI handles markdown rendering of the 'body' automatically.
-    assistant_text_events(&text)
 }
 
 fn parse_claude_json_line(value: &Value) -> Vec<ParsedAgentEvent> {
@@ -174,83 +160,6 @@ fn parse_codex_json_line(value: &Value) -> Vec<ParsedAgentEvent> {
                 typ.to_string()
             }),
             body: summarize_json(Some(value)).unwrap_or_else(|| "Codex event.".to_string()),
-            status: None,
-            metadata: Some(value.clone()),
-        });
-    }
-    out
-}
-
-fn parse_kimi_json_line(value: &Value) -> Vec<ParsedAgentEvent> {
-    let mut out = Vec::new();
-    let role = value.get("role").and_then(Value::as_str).unwrap_or("");
-
-    if role == "assistant" {
-        if let Some(text) = value
-            .get("content")
-            .and_then(Value::as_str)
-            .filter(|s| !s.trim().is_empty())
-        {
-            out.extend(assistant_text_events(text));
-        }
-        if let Some(tool_calls) = value.get("tool_calls").and_then(Value::as_array) {
-            for call in tool_calls {
-                let name = call
-                    .get("function")
-                    .and_then(|v| v.get("name"))
-                    .and_then(Value::as_str)
-                    .or_else(|| call.get("name").and_then(Value::as_str))
-                    .unwrap_or("Tool");
-                out.push(ParsedAgentEvent {
-                    event_type: tool_event_type(name),
-                    role: None,
-                    title: Some(name.to_string()),
-                    body: call
-                        .get("function")
-                        .and_then(|v| v.get("arguments"))
-                        .and_then(Value::as_str)
-                        .unwrap_or("Tool started.")
-                        .to_string(),
-                    status: Some("running".to_string()),
-                    metadata: Some(call.clone()),
-                });
-            }
-        }
-        return out;
-    }
-
-    if role == "tool" {
-        out.push(ParsedAgentEvent {
-            event_type: "tool_result".to_string(),
-            role: None,
-            title: Some("Tool result".to_string()),
-            body: value
-                .get("content")
-                .and_then(Value::as_str)
-                .unwrap_or("Tool completed.")
-                .to_string(),
-            status: Some("done".to_string()),
-            metadata: Some(value.clone()),
-        });
-        return out;
-    }
-
-    if let Some(text) = value
-        .get("message")
-        .or_else(|| value.get("content"))
-        .and_then(Value::as_str)
-        .filter(|s| !s.trim().is_empty())
-    {
-        out.extend(assistant_text_events(text));
-        return out;
-    }
-
-    if !value.is_null() {
-        out.push(ParsedAgentEvent {
-            event_type: "diagnostic".to_string(),
-            role: None,
-            title: Some("Kimi event".to_string()),
-            body: summarize_json(Some(value)).unwrap_or_else(|| "Kimi event.".to_string()),
             status: None,
             metadata: Some(value.clone()),
         });
