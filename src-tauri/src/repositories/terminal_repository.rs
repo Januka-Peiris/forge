@@ -260,6 +260,18 @@ pub fn mark_closed(db: &Database, session_id: &str, closed_at: &str) -> Result<(
     })
 }
 
+pub fn update_session_args(db: &Database, session_id: &str, args: &[String]) -> Result<(), String> {
+    let args_json = serde_json::to_string(args)
+        .map_err(|err| format!("Failed to serialize session args: {err}"))?;
+    db.with_connection(|connection| {
+        connection.execute(
+            "UPDATE terminal_sessions SET args = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",
+            params![args_json, session_id],
+        )?;
+        Ok(())
+    })
+}
+
 pub fn update_recovery_state(
     db: &Database,
     session_id: &str,

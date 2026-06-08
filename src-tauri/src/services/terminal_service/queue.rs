@@ -86,11 +86,6 @@ pub(super) fn queue_workspace_agent_prompt(
         None
     };
 
-    let is_cli_agent = matches!(
-        resolved_profile.agent.as_str(),
-        "claude_code" | "codex"
-    );
-
     let is_plan_mode = input
         .task_mode
         .as_deref()
@@ -101,7 +96,14 @@ pub(super) fn queue_workspace_agent_prompt(
         let mut prefix_parts: Vec<String> = Vec::new();
 
         if is_first_prompt {
-            if !is_cli_agent {
+            // Only prepend the profile metadata preamble for orchestrated sessions
+            // (orchestrator, coordinator-worker, coordinator-replay, etc.).
+            // Normal user-facing terminals don't need this injected context.
+            let is_orchestrated = input
+                .reasoning
+                .as_deref()
+                .is_some_and(|r| !r.eq_ignore_ascii_case("default"));
+            if is_orchestrated {
                 let metadata = agent_profile_service::prompt_metadata_preamble_for_workspace(
                     state,
                     Some(&input.workspace_id),
