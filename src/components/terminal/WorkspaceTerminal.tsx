@@ -158,7 +158,6 @@ export function WorkspaceTerminal({
   const [, setWorkspaceReadiness] = useState<WorkspaceReadiness | null>(null);
   const [changedFiles, setChangedFiles] = useState<WorkspaceChangedFile[]>([]);
   const [, setReviewCockpit] = useState<WorkspaceReviewCockpit | null>(null);
-  const [workflowHint, setWorkflowHint] = useState<string | null>(null);
   const [agentProfiles, setAgentProfiles] = useState<AgentProfile[]>([]);
   const activeProviders = useActiveAgentProviders(agentProfiles);
   const [selectedProfileId, setSelectedProfileId] = useAgentProfile();
@@ -741,7 +740,6 @@ export function WorkspaceTerminal({
   const {
     togglePlanMode,
     handleWorkbenchAction,
-    applyWorkflowPreset,
     sendPrompt,
   } = useWorkspaceTerminalComposerActions({
     workspaceId,
@@ -763,12 +761,6 @@ export function WorkspaceTerminal({
     promptSendChainRef,
   });
 
-
-  useEffect(() => {
-    if (!workflowHint) return;
-    const timeout = window.setTimeout(() => setWorkflowHint((current) => (current === workflowHint ? null : current)), 4200);
-    return () => window.clearTimeout(timeout);
-  }, [workflowHint]);
 
   const handleCoordinatorReviewDiff = useCallback(() => {
     void refreshWorkbenchState();
@@ -1043,7 +1035,6 @@ export function WorkspaceTerminal({
           canInterrupt={focusedSession?.status === 'running' || false}
           queuedCount={0}
           promptTemplateWarning={promptTemplateWarning}
-          workflowHint={workflowHint}
           promptTemplates={promptTemplates}
           agentContext={agentContext}
           agentProfiles={agentProfiles}
@@ -1054,7 +1045,6 @@ export function WorkspaceTerminal({
           onSettingsChange={(patch) => setComposerSettings((current) => ({ ...current, ...patch }))}
           onSend={sendPrompt}
           onTogglePlanMode={togglePlanMode}
-          onApplyWorkflowPreset={applyWorkflowPreset}
           onInterrupt={() => void interruptFocusedAgent()}
           onStopCoordinator={() => {
             void stopWorkspaceCoordinator(workspace.id)

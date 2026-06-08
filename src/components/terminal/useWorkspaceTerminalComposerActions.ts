@@ -93,15 +93,6 @@ export function useWorkspaceTerminalComposerActions({
     }
   };
 
-  const applyWorkflowPreset = (_preset: 'plan-act' | 'plan-codex-review' | 'implement-review-pr', defaultPrompt: string) => {
-    void defaultPrompt;
-    if (_preset === 'plan-act' || _preset === 'plan-codex-review') {
-      setComposerSettings((current) => ({ ...current, selectedTaskMode: 'Plan' }));
-    } else {
-      setComposerSettings((current) => ({ ...current, selectedTaskMode: 'Act' }));
-    }
-  };
-
   const sendPrompt = (text: string, opts?: { forceImmediate?: boolean }) => {
     if (!workspaceId || !text.trim()) return;
     const { sendBehavior, selectedTaskMode, selectedReasoning } = composerSettings;
@@ -165,7 +156,6 @@ export function useWorkspaceTerminalComposerActions({
   return {
     togglePlanMode,
     handleWorkbenchAction,
-    applyWorkflowPreset,
     sendPrompt,
   };
 }

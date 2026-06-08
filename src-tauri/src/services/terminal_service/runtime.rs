@@ -334,20 +334,6 @@ pub(super) fn spawn_terminal_monitor(
     });
 }
 
-fn replace_model_in_args(args: &[String], new_model: &str) -> Vec<String> {
-    let mut updated = args.to_vec();
-    if let Some(pos) = updated
-        .windows(2)
-        .position(|w| w[0] == "--model" || w[0] == "-m")
-    {
-        updated[pos + 1] = new_model.to_string();
-    } else {
-        updated.insert(0, new_model.to_string());
-        updated.insert(0, "--model".to_string());
-    }
-    updated
-}
-
 pub(super) fn ensure_agent_session_for_prompt(
     state: &AppState,
     workspace_id: &str,
@@ -368,30 +354,50 @@ pub(super) fn ensure_agent_session_for_prompt(
             if current_model != Some(model) {
                 log::info!(
                     target: "mnemonic_lib",
-                    "ensure_agent_session_for_prompt: switching model {:?} -> {model} in-place for session {}",
+                    "ensure_agent_session_for_prompt: model changed {:?} -> {model}, ending session {} and starting new one",
                     current_model,
                     session.id,
                 );
-                if let Ok(Some(active)) = active_for_session(state, &session.id) {
-                    if let Ok(mut writer) = active.writer.lock() {
-                        let _ = writer.write_all(format!("/model {model}\r\n").as_bytes());
-                        let _ = writer.flush();
+                append_output(
+                    Some(&state.app_handle),
+                    &state.db,
+                    workspace_id,
+                    &session.id,
+                    &active.seq_counter,
+                    "system",
+                    &format!("[mnemonic] model changed to {model}, starting new session\r\n"),
+                );
+                let ended_at = terminal_service::timestamp();
+                let _ = terminal_repository::mark_finished(
+                    &state.db,
+                    &session.id,
+                    "stopped",
+                    &ended_at,
+                    false,
+                );
+                detach_active_terminal(state, &session.id);
+
+                let model_args = vec!["--model".to_string(), model.to_string()];
+                let combined_args = match extra_args {
+                    Some(mut args) => {
+                        args.extend(model_args);
+                        Some(args)
                     }
-                    append_output(
-                        Some(&state.app_handle),
-                        &state.db,
-                        workspace_id,
-                        &session.id,
-                        &active.seq_counter,
-                        "system",
-                        &format!("[mnemonic] model: {model}\r\n"),
-                    );
-                }
-                let new_args = replace_model_in_args(&session.args, model);
-                let _ = terminal_repository::update_session_args(&state.db, &session.id, &new_args);
-                let mut updated_session = session;
-                updated_session.args = new_args;
-                return Ok((updated_session, false));
+                    None => Some(model_args),
+                };
+                return terminal_service::start_workspace_terminal_session(
+                    state,
+                    StartTerminalSessionInput {
+                        workspace_id: workspace_id.to_string(),
+                        profile: profile.to_string(),
+                        session_role: Some("agent".to_string()),
+                        cols: None,
+                        rows: None,
+                        replace_existing: Some(false),
+                        extra_args: combined_args,
+                    },
+                )
+                .map(|s| (s, true));
             }
         }
 

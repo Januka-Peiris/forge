@@ -9,7 +9,7 @@ mod prompts;
 
 pub use output::{insert_output_chunk, list_output_chunks, next_seq, prune_output_chunks};
 pub use prompts::{
-    count_sent_prompts_for_session, insert_prompt_entry, latest_queued_prompt_for_workspace,
+    insert_prompt_entry, latest_queued_prompt_for_workspace,
     list_prompts_for_workspace, mark_prompt_sent, mark_prompt_status_by_session,
 };
 

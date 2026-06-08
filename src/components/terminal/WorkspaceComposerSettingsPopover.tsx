@@ -15,7 +15,6 @@ interface WorkspaceComposerSettingsPopoverProps {
   providerLabel: string;
   settings: ComposerSettings;
   onSettingsChange: (patch: Partial<ComposerSettings>) => void;
-  onApplyPreset: (preset: 'plan-act' | 'plan-codex-review' | 'implement-review-pr', defaultPrompt: string) => void;
   onAddRepoContext: () => void;
   onRefreshRepoPathMap: () => void;
   contextBusy: boolean;
@@ -29,7 +28,6 @@ export function WorkspaceComposerSettingsPopover({
   providerLabel,
   settings,
   onSettingsChange,
-  onApplyPreset,
   onAddRepoContext,
   onRefreshRepoPathMap,
   contextBusy,
@@ -100,14 +98,6 @@ export function WorkspaceComposerSettingsPopover({
             <p className="mt-1.5 text-xs leading-snug text-mn-muted">
               Stop the focused tab any time: header <span className="font-mono text-mn-text/70">⋯</span> menu → Interrupt terminal.
             </p>
-          </div>
-          <div className="border-t border-mn-border/60 pt-2">
-            <p className="mb-1.5 text-xs font-bold uppercase tracking-widest text-mn-muted">Workflow presets</p>
-            <div className="flex flex-col gap-1">
-              <button type="button" onClick={() => onApplyPreset('plan-act', 'Create a concise implementation plan for this workspace. Do not edit files yet.')} className="rounded-md border border-mn-border bg-white/5 px-2 py-1.5 text-left text-xs font-semibold text-mn-text hover:bg-white/10">Plan → Act</button>
-              <button type="button" onClick={() => onApplyPreset('plan-codex-review', 'Plan the implementation. After the plan is accepted, Mnemonic will route implementation/review follow-up.')} className="rounded-md border border-mn-border bg-white/5 px-2 py-1.5 text-left text-xs font-semibold text-mn-text hover:bg-white/10">Plan → Codex → Review</button>
-              <button type="button" onClick={() => onApplyPreset('implement-review-pr', 'Implement the requested change, then summarize changed files, tests, and PR readiness.')} className="rounded-md border border-mn-border bg-white/5 px-2 py-1.5 text-left text-xs font-semibold text-mn-text hover:bg-white/10">Implement → Review → PR</button>
-            </div>
           </div>
           <div className="border-t border-mn-border/60 pt-2">
             <p className="mb-1.5 text-xs font-bold uppercase tracking-widest text-mn-muted">Repo context</p>
