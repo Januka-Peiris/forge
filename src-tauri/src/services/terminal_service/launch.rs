@@ -41,11 +41,39 @@ impl TerminalProfile {
     pub fn from_agent_profile(profile: &AgentProfile, effective_model: Option<&str>) -> Self {
         let args = if profile.command.contains("claude") {
             let mut args = profile.args.clone();
+
+            let mode = profile.mode.as_deref().unwrap_or("act");
+            let permission_mode = match mode.to_ascii_lowercase().as_str() {
+                "plan" => "plan",
+                _ => "bypassPermissions",
+            };
+            if !args.iter().any(|arg| arg == "--permission-mode" || arg == "--dangerously-skip-permissions") {
+                args.push("--permission-mode".to_string());
+                args.push(permission_mode.to_string());
+            }
+
+            if let Some(reasoning) = profile.reasoning.as_deref().filter(|r| !r.is_empty() && *r != "default") {
+                if !args.iter().any(|arg| arg == "--effort") {
+                    let effort = match reasoning.to_ascii_lowercase().as_str() {
+                        "low" | "min" => "low",
+                        "medium" | "mid" => "medium",
+                        "high" => "high",
+                        "xhigh" | "very_high" => "xhigh",
+                        "max" => "max",
+                        _ => reasoning,
+                    };
+                    args.push("--effort".to_string());
+                    args.push(effort.to_string());
+                }
+            }
+
+            args.push("--continue".to_string());
+
             if let Some(model) = effective_model.filter(|model| !model.is_empty()) {
                 let has_model_arg = args.iter().any(|arg| arg == "--model" || arg == "-m");
                 if !has_model_arg {
-                    args.insert(0, model.to_string());
-                    args.insert(0, "--model".to_string());
+                    args.push("--model".to_string());
+                    args.push(model.to_string());
                 }
             }
             args

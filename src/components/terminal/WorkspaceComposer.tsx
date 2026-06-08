@@ -122,7 +122,6 @@ interface WorkspaceComposerProps {
   canInterrupt: boolean;
   queuedCount: number;
   promptTemplateWarning: string | null;
-  workflowHint: string | null;
   promptTemplates: PromptTemplate[];
   agentContext: WorkspaceAgentContext | null;
   agentProfiles: AgentProfile[];
@@ -133,7 +132,6 @@ interface WorkspaceComposerProps {
   onSettingsChange: (patch: Partial<ComposerSettings>) => void;
   onSend: (text: string) => void;
   onTogglePlanMode: () => void;
-  onApplyWorkflowPreset: (preset: 'plan-act' | 'plan-codex-review' | 'implement-review-pr', defaultPrompt: string) => void;
   onInterrupt: () => void;
   onStopCoordinator: () => void;
 }
@@ -144,7 +142,6 @@ export function WorkspaceComposer({
   canInterrupt,
   queuedCount,
   promptTemplateWarning,
-  workflowHint,
   promptTemplates,
   agentContext,
   agentProfiles,
@@ -155,7 +152,6 @@ export function WorkspaceComposer({
   onSettingsChange,
   onSend,
   onTogglePlanMode,
-  onApplyWorkflowPreset,
   onInterrupt,
   onStopCoordinator,
 }: WorkspaceComposerProps) {
@@ -211,48 +207,21 @@ export function WorkspaceComposer({
     return { sessionEstTokens: roughTokenEstimateFromChars(promptInput.length) };
   }, [promptInput]);
 
-  const workflowOptions = useMemo(() => {
-    const builtIns = [
-      {
-        id: 'preset-plan-act',
-        title: 'Plan → Act',
-        source: 'Mnemonic workflow',
-        body: 'Create a concise implementation plan for this workspace. Do not edit files yet.',
-        preset: 'plan-act' as const,
-      },
-      {
-        id: 'preset-plan-codex-review',
-        title: 'Plan → Codex → Review',
-        source: 'Mnemonic workflow',
-        body: 'Plan the implementation. After the plan is accepted, Mnemonic will route implementation/review follow-up.',
-        preset: 'plan-codex-review' as const,
-      },
-      {
-        id: 'preset-implement-review-pr',
-        title: 'Implement → Review → PR',
-        source: 'Mnemonic workflow',
-        body: 'Implement the requested change, then summarize changed files, tests, and PR readiness.',
-        preset: 'implement-review-pr' as const,
-      },
-    ];
-    return [
-      ...builtIns,
-      ...promptTemplates.map((template) => ({
-        id: `template-${template.id}`,
-        title: template.title,
-        source: template.source,
-        body: template.body,
-        preset: null,
-      })),
-    ];
-  }, [promptTemplates]);
+  const templateOptions = useMemo(() =>
+    promptTemplates.map((template) => ({
+      id: `template-${template.id}`,
+      title: template.title,
+      source: template.source,
+      body: template.body,
+    })),
+  [promptTemplates]);
 
   const slashQuery = promptInput.trimStart().startsWith('/')
     ? promptInput.trimStart().slice(1).toLowerCase()
     : null;
   const slashMatches = slashQuery === null
     ? []
-    : workflowOptions
+    : templateOptions
       .filter((option) => option.title.toLowerCase().includes(slashQuery))
       .slice(0, 7);
 
@@ -321,16 +290,7 @@ export function WorkspaceComposer({
     onSend(text);
   };
 
-  const applyPreset = (preset: 'plan-act' | 'plan-codex-review' | 'implement-review-pr', defaultPrompt: string) => {
-    updatePromptInput((current) => current.trimStart().startsWith('/') || !current ? defaultPrompt : current);
-    onApplyWorkflowPreset(preset, defaultPrompt);
-  };
-
-  const applyWorkflowOption = (option: (typeof workflowOptions)[number]) => {
-    if (option.preset) {
-      applyPreset(option.preset, option.body);
-      return;
-    }
+  const applyTemplateOption = (option: (typeof templateOptions)[number]) => {
     updatePromptInput(option.body);
   };
 
@@ -759,7 +719,6 @@ export function WorkspaceComposer({
             providerLabel={providerLabel}
             settings={settings}
             onSettingsChange={onSettingsChange}
-            onApplyPreset={applyPreset}
             onAddRepoContext={() => void addRepoContextToPrompt()}
             onRefreshRepoPathMap={() => void refreshRepoPathMap()}
             contextBusy={contextBusy}
@@ -817,23 +776,22 @@ export function WorkspaceComposer({
           {promptTemplateWarning && (
             <span className="text-xs text-mn-yellow">{promptTemplateWarning}</span>
           )}
-          {workflowHint && (
-            <span className="text-xs text-mn-blue">{workflowHint}</span>
+          {templateOptions.length > 0 && (
+            <span className="text-xs text-mn-muted">Type <span className="font-mono text-mn-text/80">/</span> for prompt templates</span>
           )}
-          <span className="text-xs text-mn-muted">Type <span className="font-mono text-mn-text/80">/</span> for workflows (e.g. <span className="font-mono text-mn-text/80">/plan-act</span>)</span>
         </div>
 
         {slashMatches.length > 0 && (
           <div className="shrink-0 rounded-lg border border-mn-border bg-mn-card/95 p-1 shadow-xl">
             <div className="mb-1 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-mn-muted">
-              Workflows & prompt templates
+              Prompt templates
             </div>
             <div className="grid gap-1">
               {slashMatches.map((option) => (
                 <button
                   key={option.id}
                   type="button"
-                  onClick={() => applyWorkflowOption(option)}
+                  onClick={() => applyTemplateOption(option)}
                   className="flex min-w-0 items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left hover:bg-white/10"
                 >
                   <span className="min-w-0">
