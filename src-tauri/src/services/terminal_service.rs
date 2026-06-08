@@ -270,7 +270,9 @@ pub fn create_workspace_terminal(
         &launch_args,
     );
 
-    let next_seq = Arc::new(AtomicU64::new(0));
+    let seq_counter = Arc::new(AtomicU64::new(
+        terminal_repository::next_seq(&state.db, &session.id).unwrap_or(0),
+    ));
     let last_output_at_secs = Arc::new(AtomicU64::new(0));
     let active = Arc::new(ActiveTerminal {
         session_id: session.id.clone(),
@@ -279,6 +281,7 @@ pub fn create_workspace_terminal(
         killer: Mutex::new(killer),
         master: Mutex::new(pair.master),
         last_output_at_secs: last_output_at_secs.clone(),
+        seq_counter: seq_counter.clone(),
     });
     state
         .terminals
@@ -291,7 +294,7 @@ pub fn create_workspace_terminal(
         state.db.clone(),
         input.workspace_id.clone(),
         session_id.clone(),
-        next_seq,
+        seq_counter,
         last_output_at_secs,
         reader,
     );

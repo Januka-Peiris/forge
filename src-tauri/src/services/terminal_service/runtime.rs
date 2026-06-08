@@ -11,7 +11,7 @@ use crate::repositories::{terminal_repository, workspace_repository};
 use crate::services::{cost_parser, terminal_service};
 use crate::state::{ActiveTerminal, AppState};
 
-use super::output::{append_log_line, append_output};
+use super::output::append_output;
 
 const RETAINED_OUTPUT_CHUNKS_ON_EXIT: u32 = 5000;
 
@@ -245,17 +245,24 @@ pub(super) fn spawn_terminal_monitor(
         let wait_result = child.wait();
         let ended_at = terminal_service::timestamp();
 
-        let was_active = match state.terminals.lock() {
+        let (was_active, seq_counter) = match state.terminals.lock() {
             Ok(mut registry) => {
-                let active = registry.contains_key(&session_id);
+                let active = registry.get(&session_id).cloned();
                 registry.remove(&session_id);
-                active
+                (active.is_some(), active.map(|a| a.seq_counter.clone()))
             }
             Err(err) => {
                 log::error!("Terminal registry lock poisoned in monitor for {session_id}: {err}");
-                false
+                (false, None)
             }
         };
+        // Use the captured counter so exit log messages sequence after all
+        // buffered reader output. Fall back to DB if counter wasn't captured.
+        let seq_counter = seq_counter.unwrap_or_else(|| {
+            Arc::new(AtomicU64::new(
+                terminal_repository::next_seq(&state.db, &session_id).unwrap_or(0),
+            ))
+        });
         let _ = state.pending_commands.lock().map(|mut m| m.remove(&session_id));
 
         match wait_result {
@@ -274,10 +281,12 @@ pub(super) fn spawn_terminal_monitor(
                     &ended_at,
                     false,
                 );
-                append_log_line(
-                    &state,
+                append_output(
+                    Some(&state.app_handle),
+                    &state.db,
                     &workspace_id,
                     &session_id,
+                    &seq_counter,
                     "system",
                     &format!("\r\n[mnemonic] terminal exited: {exit_status:?}\r\n"),
                 );
@@ -301,10 +310,12 @@ pub(super) fn spawn_terminal_monitor(
                     &ended_at,
                     false,
                 );
-                append_log_line(
-                    &state,
+                append_output(
+                    Some(&state.app_handle),
+                    &state.db,
                     &workspace_id,
                     &session_id,
+                    &seq_counter,
                     "system",
                     &format!("\r\n[mnemonic] terminal wait failed: {err}\r\n"),
                 );
@@ -321,6 +332,20 @@ pub(super) fn spawn_terminal_monitor(
             }
         }
     });
+}
+
+fn replace_model_in_args(args: &[String], new_model: &str) -> Vec<String> {
+    let mut updated = args.to_vec();
+    if let Some(pos) = updated
+        .windows(2)
+        .position(|w| w[0] == "--model" || w[0] == "-m")
+    {
+        updated[pos + 1] = new_model.to_string();
+    } else {
+        updated.insert(0, new_model.to_string());
+        updated.insert(0, "--model".to_string());
+    }
+    updated
 }
 
 pub(super) fn ensure_agent_session_for_prompt(
@@ -343,24 +368,30 @@ pub(super) fn ensure_agent_session_for_prompt(
             if current_model != Some(model) {
                 log::info!(
                     target: "mnemonic_lib",
-                    "ensure_agent_session_for_prompt: model mismatch (current={:?}, requested={model}), restarting session {}",
+                    "ensure_agent_session_for_prompt: switching model {:?} -> {model} in-place for session {}",
                     current_model,
                     session.id,
                 );
-                let _ = terminal_service::stop_workspace_terminal_session_by_id(state, &session.id);
-                return terminal_service::start_workspace_terminal_session(
-                    state,
-                    StartTerminalSessionInput {
-                        workspace_id: workspace_id.to_string(),
-                        profile: profile.to_string(),
-                        session_role: Some("agent".to_string()),
-                        cols: None,
-                        rows: None,
-                        replace_existing: Some(false),
-                        extra_args: Some(vec!["--model".to_string(), model.to_string()]),
-                    },
-                )
-                .map(|s| (s, true));
+                if let Ok(Some(active)) = active_for_session(state, &session.id) {
+                    if let Ok(mut writer) = active.writer.lock() {
+                        let _ = writer.write_all(format!("/model {model}\r\n").as_bytes());
+                        let _ = writer.flush();
+                    }
+                    append_output(
+                        Some(&state.app_handle),
+                        &state.db,
+                        workspace_id,
+                        &session.id,
+                        &active.seq_counter,
+                        "system",
+                        &format!("[mnemonic] model: {model}\r\n"),
+                    );
+                }
+                let new_args = replace_model_in_args(&session.args, model);
+                let _ = terminal_repository::update_session_args(&state.db, &session.id, &new_args);
+                let mut updated_session = session;
+                updated_session.args = new_args;
+                return Ok((updated_session, false));
             }
         }
 

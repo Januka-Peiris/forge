@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use tauri::Emitter;
@@ -51,14 +52,25 @@ pub(super) fn append_log_line(
     stream_type: &str,
     data: &str,
 ) {
-    let next_seq =
-        AtomicU64::new(terminal_repository::next_seq(&state.db, session_id).unwrap_or(0));
+    // Prefer the live counter from the active terminal so system messages
+    // never collide with in-flight reader output. Fall back to DB when the
+    // session has already been removed from the registry.
+    let seq_counter = state
+        .terminals
+        .lock()
+        .ok()
+        .and_then(|registry| registry.get(session_id).map(|a| a.seq_counter.clone()))
+        .unwrap_or_else(|| {
+            Arc::new(AtomicU64::new(
+                terminal_repository::next_seq(&state.db, session_id).unwrap_or(0),
+            ))
+        });
     append_output(
         Some(&state.app_handle),
         &state.db,
         workspace_id,
         session_id,
-        &next_seq,
+        &seq_counter,
         stream_type,
         data,
     );
