@@ -1,5 +1,6 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import {
+  attachWorkspaceTerminalSession,
   closeWorkspaceTerminalSessionById,
   createWorkspaceTerminal,
   getWorkspaceTerminalOutputForSession,
@@ -218,6 +219,9 @@ export function useWorkspaceTerminalSessionActions({
       setFocusedId(session.id);
       if (session.terminalKind === 'agent') setSelectedProfileId(session.profile);
       setNextSeq(session.id, 0);
+      if (session.status === 'running') {
+        await attachWorkspaceTerminalSession({ workspaceId, sessionId: session.id });
+      }
       const output = await getWorkspaceTerminalOutputForSession(workspaceId, session.id, 0);
       setNextSeq(session.id, output.nextSeq);
       appendOutput(session.id, output.chunks, true);

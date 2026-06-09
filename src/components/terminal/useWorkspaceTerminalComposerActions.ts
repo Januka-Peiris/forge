@@ -147,6 +147,7 @@ export function useWorkspaceTerminalComposerActions({
         const terminalProfileId = targetSession?.terminalKind === 'agent' ? targetSession.profile : selectedProfileId;
         await queueWorkspaceAgentPrompt({
           workspaceId,
+          sessionId: targetSession?.status === 'running' ? targetSession.id : undefined,
           prompt: effectivePrompt,
           profileId: terminalProfileId,
         });

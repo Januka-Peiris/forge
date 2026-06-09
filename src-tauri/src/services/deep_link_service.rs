@@ -143,6 +143,7 @@ fn send_prompt_if_present(
     terminal_service::queue_workspace_agent_prompt(
         state,
         QueueAgentPromptInput {
+            session_id: None,
             workspace_id: workspace_id.to_string(),
             prompt: prompt.to_string(),
             profile: Some(agent_profile(agent)),

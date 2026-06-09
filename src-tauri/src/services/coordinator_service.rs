@@ -555,6 +555,7 @@ pub fn replay_workspace_coordinator_action(
                 state,
                 QueueAgentPromptInput {
                     workspace_id: workspace_id.to_string(),
+                    session_id: None,
                     prompt: prompt.clone(),
                     profile: None,
                     profile_id: Some(profile_id.clone()),
@@ -762,6 +763,7 @@ pub fn step_workspace_coordinator(
                     state,
                     QueueAgentPromptInput {
                         workspace_id: input.workspace_id.clone(),
+                        session_id: None,
                         prompt: prompt.clone(),
                         profile: None,
                         profile_id: Some(coder.id.clone()),
@@ -807,6 +809,7 @@ pub fn step_workspace_coordinator(
                     state,
                     QueueAgentPromptInput {
                         workspace_id: input.workspace_id.clone(),
+                        session_id: None,
                         prompt: prompt.clone(),
                         profile: None,
                         profile_id: Some(chosen.profile_id.clone()),

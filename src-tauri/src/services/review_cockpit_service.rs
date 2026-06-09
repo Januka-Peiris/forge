@@ -124,6 +124,7 @@ pub fn queue_review_agent_prompt(
     terminal_service::queue_workspace_agent_prompt(
         state,
         QueueAgentPromptInput {
+            session_id: None,
             workspace_id: input.workspace_id,
             prompt,
             profile: None,

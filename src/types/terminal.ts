@@ -96,6 +96,7 @@ export interface AgentPromptEntry {
 
 export interface QueueAgentPromptInput {
   workspaceId: string;
+  sessionId?: string;
   prompt: string;
   profile?: TerminalProfile;
   profileId?: string;

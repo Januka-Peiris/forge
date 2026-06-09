@@ -7,7 +7,7 @@ use crate::state::AppState;
 
 use super::output::unique_suffix;
 use super::prompts::terminal_prompt_payload_for_session;
-use super::runtime::{active_for_workspace, ensure_agent_session_for_prompt};
+use super::runtime::{active_for_session, active_for_workspace, ensure_agent_session_for_prompt};
 
 pub(super) fn queue_workspace_agent_prompt(
     state: &AppState,
@@ -31,7 +31,7 @@ pub(super) fn queue_workspace_agent_prompt(
     let mut entry = AgentPromptEntry {
         id: format!("prompt-{}", unique_suffix()),
         workspace_id: input.workspace_id.clone(),
-        session_id: None,
+        session_id: input.session_id.clone(),
         profile,
         prompt,
         status: "queued".to_string(),
@@ -79,6 +79,7 @@ pub(super) fn batch_dispatch_workspace_agent_prompt(
             state,
             QueueAgentPromptInput {
                 workspace_id: workspace_id.clone(),
+                session_id: None,
                 prompt: input.prompt.clone(),
                 profile: None,
                 profile_id: input.profile_id.clone(),
@@ -124,11 +125,47 @@ fn dispatch_prompt_entry(state: &AppState, entry: &mut AgentPromptEntry) -> Resu
         "before agent prompt".to_string(),
     );
 
-    let (session, _is_new_session) =
-        ensure_agent_session_for_prompt(state, &entry.workspace_id, &entry.profile)?;
+    let session = if let Some(session_id) = entry.session_id.as_deref() {
+        let session = terminal_repository::get_session(&state.db, session_id)?
+            .ok_or_else(|| format!("Terminal session {session_id} was not found"))?;
+        if session.workspace_id != entry.workspace_id {
+            return Err(format!(
+                "Terminal session {session_id} does not belong to workspace {}",
+                entry.workspace_id
+            ));
+        }
+        if session.status != "running" {
+            return Err(format!(
+                "Terminal session {session_id} has already ended ({})",
+                session.status
+            ));
+        }
+        if active_for_session(state, &session.id)?.is_none() && session.backend == "tmux" {
+            terminal_service::attach_workspace_terminal_session(
+                state,
+                crate::models::AttachWorkspaceTerminalInput {
+                    workspace_id: entry.workspace_id.clone(),
+                    session_id: session.id.clone(),
+                    cols: None,
+                    rows: None,
+                },
+            )?;
+        }
+        session
+    } else {
+        let (session, _is_new_session) =
+            ensure_agent_session_for_prompt(state, &entry.workspace_id, &entry.profile)?;
+        session
+    };
 
-    let active = active_for_workspace(state, &entry.workspace_id, "agent")?
-        .ok_or_else(|| "No active agent session found to send prompt".to_string())?;
+    let active = active_for_session(state, &session.id)?
+        .or_else(|| {
+            active_for_workspace(state, &entry.workspace_id, "agent")
+                .ok()
+                .flatten()
+                .filter(|active| active.session_id == session.id)
+        })
+        .ok_or_else(|| format!("Terminal session {} is not attached", session.id))?;
     let mut writer = active
         .writer
         .lock()

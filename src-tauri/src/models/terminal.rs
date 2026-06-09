@@ -113,6 +113,7 @@ pub struct AttachWorkspaceTerminalInput {
 #[serde(rename_all = "camelCase")]
 pub struct QueueAgentPromptInput {
     pub workspace_id: String,
+    pub session_id: Option<String>,
     pub prompt: String,
     pub profile: Option<String>,
     pub profile_id: Option<String>,

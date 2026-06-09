@@ -370,6 +370,7 @@ Rules:
                     (action.workspace_id.as_deref(), action.prompt.as_deref())
                 {
                     let input = QueueAgentPromptInput {
+                        session_id: None,
                         workspace_id: ws_id.to_string(),
                         prompt: prompt_text.to_string(),
                         profile: None,
