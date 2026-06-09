@@ -265,109 +265,6 @@ fn trim_optional(value: Option<String>) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-pub fn prompt_metadata_preamble(
-    profile: &AgentProfile,
-    task_mode: Option<&str>,
-    reasoning: Option<&str>,
-) -> String {
-    let mut lines = vec![
-        "Mnemonic agent profile:".to_string(),
-        format!("- Profile: {}", profile.label),
-    ];
-    if let Some(model) = profile.model.as_deref().filter(|value| !value.is_empty()) {
-        lines.push(format!("- Model: {model}"));
-    }
-    if profile.local {
-        lines.push("- Runtime: local".to_string());
-    }
-    if let Some(provider) = profile
-        .provider
-        .as_deref()
-        .filter(|value| !value.is_empty())
-    {
-        lines.push(format!("- Provider: {provider}"));
-    }
-    if let Some(endpoint) = profile
-        .endpoint
-        .as_deref()
-        .filter(|value| !value.is_empty())
-    {
-        lines.push(format!("- Endpoint: {endpoint}"));
-    }
-    let mode = task_mode.or(profile.mode.as_deref()).unwrap_or("act");
-    if !mode.eq_ignore_ascii_case("default") {
-        lines.push(format!("- Mode: {mode}"));
-    }
-    let reasoning = reasoning
-        .or(profile.reasoning.as_deref())
-        .unwrap_or("default");
-    if !reasoning.eq_ignore_ascii_case("default") {
-        lines.push(format!("- Reasoning: {reasoning}"));
-    }
-    if !profile.skills.is_empty() {
-        lines.push(format!("- Skills/templates: {}", profile.skills.join(", ")));
-    }
-    lines.push(match mode.to_ascii_lowercase().as_str() {
-        "plan" => {
-            "Instruction: plan first, be explicit about assumptions, and wait before risky changes."
-                .to_string()
-        }
-        "review" => "Instruction: focus on review quality, risks, tests, and actionable findings."
-            .to_string(),
-        "fix" => "Instruction: make the smallest safe fix, then summarize validation.".to_string(),
-        _ => "Instruction: act directly and keep the response focused on the task.".to_string(),
-    });
-    lines.join("\n")
-}
-
-pub fn prompt_metadata_preamble_for_workspace(
-    state: &AppState,
-    workspace_id: Option<&str>,
-    profile: &AgentProfile,
-    task_mode: Option<&str>,
-    reasoning: Option<&str>,
-) -> String {
-    let mut preamble = prompt_metadata_preamble(profile, task_mode, reasoning);
-    if let Some(workspace_id) = workspace_id {
-        if let Ok(config) =
-            workspace_script_service::get_workspace_mnemonic_config(state, workspace_id)
-        {
-            let enabled_mcp = config
-                .mcp_servers
-                .iter()
-                .filter(|server| server.enabled)
-                .map(|server| {
-                    let endpoint = server
-                        .url
-                        .as_deref()
-                        .or(server.command.as_deref())
-                        .unwrap_or("configured");
-                    format!("{} ({}, {})", server.id, server.transport, endpoint)
-                })
-                .collect::<Vec<_>>();
-            let disabled_mcp = config
-                .mcp_servers
-                .iter()
-                .filter(|server| !server.enabled)
-                .map(|server| format!("{} ({})", server.id, server.transport))
-                .collect::<Vec<_>>();
-            if !enabled_mcp.is_empty() || !disabled_mcp.is_empty() {
-                preamble.push_str("\nMnemonic workspace MCP config:");
-                if !enabled_mcp.is_empty() {
-                    preamble.push_str("\n- Enabled MCP servers: ");
-                    preamble.push_str(&enabled_mcp.join(", "));
-                }
-                if !disabled_mcp.is_empty() {
-                    preamble.push_str("\n- Disabled MCP servers: ");
-                    preamble.push_str(&disabled_mcp.join(", "));
-                }
-                preamble.push_str("\n- Instruction: use MCP servers only when the active agent runtime has them configured; otherwise treat this as local config metadata.");
-            }
-        }
-    }
-    preamble
-}
-
 pub fn default_profiles() -> Vec<AgentProfile> {
     vec![
         AgentProfile {
@@ -484,64 +381,10 @@ mod tests {
     }
 
     #[test]
-    fn builds_prompt_metadata() {
-        let profile = AgentProfile {
-            id: "openai-brain".to_string(),
-            label: "OpenAI Brain".to_string(),
-            agent: "openai".to_string(),
-            command: "openai".to_string(),
-            args: vec![],
-            model: Some("gpt-5.4".to_string()),
-            reasoning: None,
-            mode: Some("act".to_string()),
-            provider: Some("openai".to_string()),
-            endpoint: Some("https://api.openai.com/v1".to_string()),
-            local: false,
-            description: None,
-            skills: vec![],
-            templates: vec![],
-            role_preference: Some("brain".to_string()),
-            coordinator_eligible: Some(true),
-        };
-        let preamble = prompt_metadata_preamble(&profile, Some("Review"), Some("High"));
-        assert!(preamble.contains("OpenAI Brain"));
-        assert!(preamble.contains("Mode: Review"));
-        assert!(preamble.contains("Reasoning: High"));
-    }
-
-    #[test]
     fn normalizes_openai_aliases() {
         assert_eq!(normalize_agent("openai"), "openai");
         assert_eq!(normalize_agent("openai-api"), "openai");
         assert_eq!(normalize_agent("openai_api"), "openai");
-    }
-
-    #[test]
-    fn local_profile_metadata_is_preserved_in_prompt_metadata() {
-        let profile = AgentProfile {
-            id: "qwen-local".to_string(),
-            label: "Qwen Local".to_string(),
-            agent: "local_llm".to_string(),
-            command: "ollama".to_string(),
-            args: vec!["run".to_string(), "qwen2.5-coder:14b".to_string()],
-            model: Some("qwen2.5-coder:14b".to_string()),
-            reasoning: None,
-            mode: Some("act".to_string()),
-            provider: Some("ollama".to_string()),
-            endpoint: Some("http://localhost:11434".to_string()),
-            local: true,
-            description: None,
-            skills: vec![],
-            templates: vec![],
-            role_preference: None,
-            coordinator_eligible: None,
-        };
-        let preamble = prompt_metadata_preamble(&profile, None, None);
-        assert!(profile.local);
-        assert_eq!(profile.agent, "local_llm");
-        assert!(preamble.contains("Runtime: local"));
-        assert!(preamble.contains("Provider: ollama"));
-        assert!(preamble.contains("Endpoint: http://localhost:11434"));
     }
 
     #[test]

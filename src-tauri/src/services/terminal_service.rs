@@ -30,7 +30,7 @@ use activity::{
 };
 use launch::{
     default_terminal_title, normalize_terminal_kind, resolve_session_role, workspace_root_path,
-    TerminalCommandSpec, TerminalProfile,
+    SessionResume, TerminalCommandSpec, TerminalProfile,
 };
 use output::{
     append_log_line, append_output, enriched_path as enriched_path_impl,
@@ -85,10 +85,7 @@ pub fn start_workspace_terminal_session(
         Some(&input.profile),
         Some(&input.profile),
     )?;
-    let effective_model = agent_effective_model(state, &resolved_profile);
-    let profile =
-        TerminalProfile::from_agent_profile(&resolved_profile, effective_model.as_deref());
-    let session_role = resolve_session_role(input.session_role.as_deref(), &profile.name);
+    let session_role = resolve_session_role(input.session_role.as_deref(), &resolved_profile.agent);
     if input.replace_existing.unwrap_or(false) {
         if let Some(existing) = terminal_repository::latest_for_workspace_role(
             &state.db,
@@ -127,15 +124,45 @@ pub fn create_workspace_terminal(
         Some(&input.profile),
     )?;
     let effective_model = agent_effective_model(state, &resolved_profile);
-    let profile =
-        TerminalProfile::from_agent_profile(&resolved_profile, effective_model.as_deref());
-    let kind = normalize_terminal_kind(&input.kind, &profile.name);
+    let kind = normalize_terminal_kind(&input.kind, &resolved_profile.agent);
     let session_role = if kind == "shell" || kind == "utility" || kind == "run" {
         "utility"
     } else {
         "agent"
     }
     .to_string();
+    let is_claude_agent = resolved_profile.command.contains("claude") && session_role == "agent";
+    let (session_resume, claude_session_id) = if is_claude_agent {
+        let has_active_agent = runtime::active_for_workspace(state, &input.workspace_id, "agent")
+            .ok()
+            .flatten()
+            .is_some();
+        if has_active_agent {
+            let new_id = uuid::Uuid::new_v4().to_string();
+            (Some(SessionResume::New(new_id.clone())), Some(new_id))
+        } else {
+            let prior = terminal_repository::latest_for_workspace_role(
+                &state.db,
+                &input.workspace_id,
+                "agent",
+            )
+            .ok()
+            .flatten();
+            let resumable_id = prior
+                .filter(|s| s.status != "failed")
+                .and_then(|s| s.claude_session_id);
+            if let Some(prior_id) = resumable_id {
+                (Some(SessionResume::Resume(prior_id.clone())), Some(prior_id))
+            } else {
+                let new_id = uuid::Uuid::new_v4().to_string();
+                (Some(SessionResume::New(new_id.clone())), Some(new_id))
+            }
+        }
+    } else {
+        (None, None)
+    };
+    let profile =
+        TerminalProfile::from_agent_profile(&resolved_profile, effective_model.as_deref(), session_resume.as_ref());
     let display_order = terminal_repository::next_display_order(&state.db, &input.workspace_id)?;
     let session_id = format!("term-{}", unique_suffix());
     let title = input
@@ -220,6 +247,7 @@ pub fn create_workspace_terminal(
         is_visible: true,
         last_attached_at: None,
         last_captured_seq: 0,
+        claude_session_id,
     };
     terminal_repository::insert_session(&state.db, &session)?;
     if let Ok(task_run_id) = task_lifecycle_service::start_task_run(
@@ -948,6 +976,7 @@ mod tests {
             is_visible: true,
             last_attached_at: None,
             last_captured_seq: 0,
+            claude_session_id: None,
         });
 
         assert!(details.contains("term-123"));
@@ -980,6 +1009,7 @@ mod tests {
             is_visible: true,
             last_attached_at: None,
             last_captured_seq: 0,
+            claude_session_id: None,
         };
         let payload = prompts::terminal_prompt_payload_for_session(&session, "line one\nline two");
         assert_eq!(payload, "\"\"\"\nline one\nline two\n\"\"\"\r\n");
@@ -1008,6 +1038,7 @@ mod tests {
             is_visible: true,
             last_attached_at: None,
             last_captured_seq: 0,
+            claude_session_id: None,
         };
         let profile = AgentProfile {
             id: "ollama-local".to_string(),

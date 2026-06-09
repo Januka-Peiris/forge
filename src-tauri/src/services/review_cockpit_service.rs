@@ -128,10 +128,7 @@ pub fn queue_review_agent_prompt(
             prompt,
             profile: None,
             profile_id: input.profile_id,
-            task_mode: input.task_mode,
-            reasoning: input.reasoning,
             mode: input.mode,
-            model: None,
         },
     )
 }

@@ -95,20 +95,24 @@ export function useWorkspaceTerminalComposerActions({
 
   const sendPrompt = (text: string, opts?: { forceImmediate?: boolean }) => {
     if (!workspaceId || !text.trim()) return;
-    const { sendBehavior, selectedTaskMode, selectedReasoning } = composerSettings;
+    const { sendBehavior, selectedTaskMode } = composerSettings;
     const effectiveBehavior = opts?.forceImmediate ? 'send_now' : sendBehavior;
+
+    const effectivePrompt = selectedTaskMode === 'Plan'
+      ? `Use plan mode.\n\n${text}`
+      : text;
 
     const work = async () => {
       setBusy(true);
       setError(null);
       try {
-        // Coordinator path — intentionally kept (uses SDK credits)
+        // Coordinator path - intentionally kept (uses SDK credits)
         if (composerSettings.promptMode === 'coordinator') {
           const brainProfileId = composerSettings.coordinatorBrainProfileId.trim();
           const coderProfileId = composerSettings.coordinatorCoderProfileId.trim();
           await stepWorkspaceCoordinator({
             workspaceId,
-            instruction: text,
+            instruction: effectivePrompt,
             brainProvider: composerSettings.coordinatorBrainProvider || null,
             coderProvider: composerSettings.coordinatorCoderProvider || null,
             brainProfileId: brainProfileId.length > 0 ? brainProfileId : null,
@@ -118,35 +122,33 @@ export function useWorkspaceTerminalComposerActions({
             brainReasoning: composerSettings.coordinatorBrainReasoning || null,
             coderReasoning: composerSettings.coordinatorCoderReasoning || null,
           });
-          await refreshCoordinatorStatus();
+          refreshCoordinatorStatus().catch(() => undefined);
           return;
         }
-        // Terminal path — interactive claude, subscription-safe
+        // Terminal path - interactive claude, subscription-safe
         if (effectiveBehavior === 'interrupt_send' && focusedSession) {
           await interruptWorkspaceTerminalSessionById(focusedSession.id).catch(() => undefined);
         }
         const terminalProfileId = focusedSession?.terminalKind === 'agent' ? focusedSession.profile : selectedProfileId;
         await queueWorkspaceAgentPrompt({
           workspaceId,
-          prompt: text,
+          prompt: effectivePrompt,
           profileId: terminalProfileId,
-          taskMode: selectedTaskMode,
-          reasoning: selectedReasoning,
-          model: composerSettings.selectedModel,
         });
-        await refreshSessions(true).catch(() => undefined);
-        await refreshCoordinatorStatus().catch(() => undefined);
       } catch (err) {
         const message = formatSessionError(err);
         if (message.startsWith('COORDINATOR_STEP_IN_PROGRESS:')) {
-          onCoordinatorInfo?.('Coordinator is already stepping. Waiting for current step to finish…');
-          await refreshCoordinatorStatus().catch(() => undefined);
+          onCoordinatorInfo?.('Coordinator is already stepping. Waiting for current step to finish.');
+          refreshCoordinatorStatus().catch(() => undefined);
           return;
         }
         setActionError(err);
       } finally {
         setBusy(false);
       }
+      // Post-send refreshes run in background, don't block next send
+      refreshSessions(true).catch(() => undefined);
+      refreshCoordinatorStatus().catch(() => undefined);
     };
 
     promptSendChainRef.current = promptSendChainRef.current.catch(() => undefined).then(work);

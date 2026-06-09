@@ -147,10 +147,7 @@ fn send_prompt_if_present(
             prompt: prompt.to_string(),
             profile: Some(agent_profile(agent)),
             profile_id: None,
-            task_mode: None,
-            reasoning: None,
             mode: Some("send_now".to_string()),
-            model: None,
         },
     )?;
     Ok(true)

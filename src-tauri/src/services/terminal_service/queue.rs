@@ -40,7 +40,6 @@ pub(super) fn queue_workspace_agent_prompt(
         status: "queued".to_string(),
         created_at: terminal_service::timestamp(),
         sent_at: None,
-        model: input.model.clone(),
     };
     terminal_repository::insert_prompt_entry(&state.db, &entry)?;
 
@@ -50,7 +49,6 @@ pub(super) fn queue_workspace_agent_prompt(
             "workspaceId": input.workspace_id,
             "actionKind": "queue_agent_prompt",
             "profileId": entry.profile,
-            "taskMode": input.task_mode,
         });
         hook_service::run_workspace_hooks(
             state,
@@ -87,10 +85,7 @@ pub(super) fn batch_dispatch_workspace_agent_prompt(
                 prompt: input.prompt.clone(),
                 profile: None,
                 profile_id: input.profile_id.clone(),
-                task_mode: input.task_mode.clone(),
-                reasoning: input.reasoning.clone(),
                 mode: Some("send_now".to_string()),
-                model: None,
             },
         );
         match result {
@@ -136,7 +131,7 @@ fn dispatch_prompt_entry(
     );
 
     let (session, _is_new_session) =
-        ensure_agent_session_for_prompt(state, &entry.workspace_id, &entry.profile, None, entry.model.as_deref())?;
+        ensure_agent_session_for_prompt(state, &entry.workspace_id, &entry.profile)?;
 
     let active = active_for_workspace(state, &entry.workspace_id, "agent")?
         .ok_or_else(|| "No active agent session found to send prompt".to_string())?;

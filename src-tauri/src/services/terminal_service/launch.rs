@@ -37,37 +37,38 @@ impl TerminalCommandSpec {
     }
 }
 
+pub(super) enum SessionResume {
+    New(String),
+    Resume(String),
+}
+
 impl TerminalProfile {
-    pub fn from_agent_profile(profile: &AgentProfile, effective_model: Option<&str>) -> Self {
+    pub fn from_agent_profile(
+        profile: &AgentProfile,
+        effective_model: Option<&str>,
+        session_resume: Option<&SessionResume>,
+    ) -> Self {
         let args = if profile.command.contains("claude") {
             let mut args = profile.args.clone();
 
-            let mode = profile.mode.as_deref().unwrap_or("act");
-            let permission_mode = match mode.to_ascii_lowercase().as_str() {
-                "plan" => "plan",
-                _ => "bypassPermissions",
-            };
             if !args.iter().any(|arg| arg == "--permission-mode" || arg == "--dangerously-skip-permissions") {
                 args.push("--permission-mode".to_string());
-                args.push(permission_mode.to_string());
+                args.push("bypassPermissions".to_string());
             }
 
-            if let Some(reasoning) = profile.reasoning.as_deref().filter(|r| !r.is_empty() && *r != "default") {
-                if !args.iter().any(|arg| arg == "--effort") {
-                    let effort = match reasoning.to_ascii_lowercase().as_str() {
-                        "low" | "min" => "low",
-                        "medium" | "mid" => "medium",
-                        "high" => "high",
-                        "xhigh" | "very_high" => "xhigh",
-                        "max" => "max",
-                        _ => reasoning,
-                    };
-                    args.push("--effort".to_string());
-                    args.push(effort.to_string());
+            match session_resume {
+                Some(SessionResume::Resume(id)) => {
+                    args.push("--resume".to_string());
+                    args.push(id.clone());
+                }
+                Some(SessionResume::New(id)) => {
+                    args.push("--session-id".to_string());
+                    args.push(id.clone());
+                }
+                None => {
+                    args.push("--continue".to_string());
                 }
             }
-
-            args.push("--continue".to_string());
 
             if let Some(model) = effective_model.filter(|model| !model.is_empty()) {
                 let has_model_arg = args.iter().any(|arg| arg == "--model" || arg == "-m");

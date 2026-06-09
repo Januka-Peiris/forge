@@ -179,8 +179,6 @@ export function ReviewCockpit({
         commentId: comment?.commentId ?? null,
         action,
         profileId: selectedProfileId,
-        taskMode: selectedTaskMode,
-        reasoning: selectedReasoning,
         mode: 'send_now',
       });
     } catch (err) {

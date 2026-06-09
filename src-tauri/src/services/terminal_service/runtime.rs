@@ -338,69 +338,10 @@ pub(super) fn ensure_agent_session_for_prompt(
     state: &AppState,
     workspace_id: &str,
     profile: &str,
-    extra_args: Option<Vec<String>>,
-    requested_model: Option<&str>,
 ) -> Result<(TerminalSession, bool), String> {
     if let Some(active) = active_for_workspace(state, workspace_id, "agent")? {
         let session = terminal_repository::get_session(&state.db, &active.session_id)?
             .ok_or_else(|| "Active agent session record was not found".to_string())?;
-
-        if let Some(model) = requested_model.filter(|m| !m.is_empty()) {
-            let current_model = session
-                .args
-                .windows(2)
-                .find(|w| w[0] == "--model" || w[0] == "-m")
-                .map(|w| w[1].as_str());
-            if current_model != Some(model) {
-                log::info!(
-                    target: "mnemonic_lib",
-                    "ensure_agent_session_for_prompt: model changed {:?} -> {model}, ending session {} and starting new one",
-                    current_model,
-                    session.id,
-                );
-                append_output(
-                    Some(&state.app_handle),
-                    &state.db,
-                    workspace_id,
-                    &session.id,
-                    &active.seq_counter,
-                    "system",
-                    &format!("[mnemonic] model changed to {model}, starting new session\r\n"),
-                );
-                let ended_at = terminal_service::timestamp();
-                let _ = terminal_repository::mark_finished(
-                    &state.db,
-                    &session.id,
-                    "stopped",
-                    &ended_at,
-                    false,
-                );
-                detach_active_terminal(state, &session.id);
-
-                let model_args = vec!["--model".to_string(), model.to_string()];
-                let combined_args = match extra_args {
-                    Some(mut args) => {
-                        args.extend(model_args);
-                        Some(args)
-                    }
-                    None => Some(model_args),
-                };
-                return terminal_service::start_workspace_terminal_session(
-                    state,
-                    StartTerminalSessionInput {
-                        workspace_id: workspace_id.to_string(),
-                        profile: profile.to_string(),
-                        session_role: Some("agent".to_string()),
-                        cols: None,
-                        rows: None,
-                        replace_existing: Some(false),
-                        extra_args: combined_args,
-                    },
-                )
-                .map(|s| (s, true));
-            }
-        }
-
         return Ok((session, false));
     }
 
@@ -413,7 +354,7 @@ pub(super) fn ensure_agent_session_for_prompt(
             cols: None,
             rows: None,
             replace_existing: Some(false),
-            extra_args,
+            extra_args: None,
         },
     )
     .map(|s| (s, true))

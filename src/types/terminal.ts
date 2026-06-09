@@ -22,6 +22,7 @@ export interface TerminalSession {
   isVisible: boolean;
   lastAttachedAt?: string;
   lastCapturedSeq: number;
+  claudeSessionId?: string;
 }
 
 export interface TerminalOutputChunk {
@@ -96,10 +97,6 @@ export interface QueueAgentPromptInput {
   prompt: string;
   profile?: TerminalProfile;
   profileId?: string;
-  taskMode?: string;
-  reasoning?: string;
-  model?: string;
-  /** Optional; server always dispatches to the agent terminal after recording the prompt. */
   mode?: 'send_now' | 'interrupt_send';
 }
 

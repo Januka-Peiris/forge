@@ -93,8 +93,9 @@ pub fn insert_session(db: &Database, session: &TerminalSession) -> Result<(), St
             INSERT INTO terminal_sessions (
                 id, workspace_id, session_role, profile, cwd, status, started_at, ended_at,
                 command, args, pid, stale, closed_at, backend, tmux_session_name, title,
-                terminal_kind, display_order, is_visible, last_attached_at, last_captured_seq, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, CURRENT_TIMESTAMP)
+                terminal_kind, display_order, is_visible, last_attached_at, last_captured_seq,
+                claude_session_id, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, CURRENT_TIMESTAMP)
             "#,
             params![
                 session.id,
@@ -118,6 +119,7 @@ pub fn insert_session(db: &Database, session: &TerminalSession) -> Result<(), St
                 session.is_visible as i64,
                 session.last_attached_at,
                 session.last_captured_seq,
+                session.claude_session_id,
             ],
         )?;
         Ok(())
@@ -131,7 +133,7 @@ pub fn get_session(db: &Database, session_id: &str) -> Result<Option<TerminalSes
                 r#"
                 SELECT id, workspace_id, session_role, profile, cwd, status, started_at, ended_at,
                        command, args, pid, stale, closed_at, backend, tmux_session_name, title, terminal_kind,
-                       display_order, is_visible, last_attached_at, last_captured_seq
+                       display_order, is_visible, last_attached_at, last_captured_seq, claude_session_id
                 FROM terminal_sessions
                 WHERE id = ?1
                 "#,
@@ -153,7 +155,7 @@ pub fn latest_for_workspace_role(
                 r#"
                 SELECT id, workspace_id, session_role, profile, cwd, status, started_at, ended_at,
                        command, args, pid, stale, closed_at, backend, tmux_session_name, title, terminal_kind,
-                       display_order, is_visible, last_attached_at, last_captured_seq
+                       display_order, is_visible, last_attached_at, last_captured_seq, claude_session_id
                 FROM terminal_sessions
                 WHERE workspace_id = ?1 AND session_role = ?2 AND closed_at IS NULL
                 ORDER BY created_at DESC, rowid DESC
@@ -379,6 +381,7 @@ fn session_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<TerminalSession
         is_visible: row.get::<_, Option<i64>>("is_visible")?.unwrap_or(1) != 0,
         last_attached_at: row.get("last_attached_at")?,
         last_captured_seq: row.get::<_, Option<i64>>("last_captured_seq")?.unwrap_or(0),
+        claude_session_id: row.get("claude_session_id").unwrap_or(None),
     })
 }
 
@@ -448,6 +451,7 @@ mod tests {
             is_visible: true,
             last_attached_at: None,
             last_captured_seq: 0,
+            claude_session_id: None,
         }
     }
 
