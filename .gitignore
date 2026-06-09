@@ -36,6 +36,7 @@ src-tauri/gen/
 
 # Forge-managed local workspaces
 forge/
+mnemonic/
 
 # Research files
 .research/

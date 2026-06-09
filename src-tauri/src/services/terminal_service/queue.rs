@@ -2,10 +2,7 @@ use std::io::Write;
 
 use crate::models::{AgentPromptEntry, QueueAgentPromptInput};
 use crate::repositories::terminal_repository;
-use crate::services::{
-    agent_profile_service, checkpoint_service, hook_service,
-    terminal_service,
-};
+use crate::services::{agent_profile_service, checkpoint_service, hook_service, terminal_service};
 use crate::state::AppState;
 
 use super::output::unique_suffix;
@@ -120,10 +117,7 @@ pub(super) fn list_workspace_agent_prompts(
     terminal_repository::list_prompts_for_workspace(&state.db, workspace_id, limit)
 }
 
-fn dispatch_prompt_entry(
-    state: &AppState,
-    entry: &mut AgentPromptEntry,
-) -> Result<(), String> {
+fn dispatch_prompt_entry(state: &AppState, entry: &mut AgentPromptEntry) -> Result<(), String> {
     checkpoint_service::create_checkpoint_if_dirty_in_background(
         state.clone(),
         entry.workspace_id.clone(),

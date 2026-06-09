@@ -697,7 +697,9 @@ fn call_openai_api(model: &str, prompt: &str) -> Result<String, String> {
 
     if !resp.status().is_success() {
         let status = resp.status();
-        let text = resp.text().unwrap_or_else(|e| format!("(failed to read body: {e})"));
+        let text = resp
+            .text()
+            .unwrap_or_else(|e| format!("(failed to read body: {e})"));
         return Err(format!("OpenAI API error {status}: {text}"));
     }
 

@@ -51,7 +51,10 @@ impl TerminalProfile {
         let args = if profile.command.contains("claude") {
             let mut args = profile.args.clone();
 
-            if !args.iter().any(|arg| arg == "--permission-mode" || arg == "--dangerously-skip-permissions") {
+            if !args
+                .iter()
+                .any(|arg| arg == "--permission-mode" || arg == "--dangerously-skip-permissions")
+            {
                 args.push("--permission-mode".to_string());
                 args.push("bypassPermissions".to_string());
             }

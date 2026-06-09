@@ -66,7 +66,7 @@ import { FederatedTaskCockpit } from '../federation/FederatedTaskCockpit';
 import { readWorkspaceFile, writeWorkspaceFile } from '../../lib/tauri-api/workspace-file-tree';
 import type { TileLeaf } from '../../types/tile-layout';
 
-const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-6';
+const DEFAULT_CLAUDE_MODEL = 'claude-opus-4-6[1m]';
 const DEFAULT_CODEX_MODEL = 'gpt-5.4';
 
 const FILE_PREVIEW_WIDTH_KEY = 'mn:file-preview-width';
@@ -710,6 +710,7 @@ export function WorkspaceTerminal({
 
   const {
     createTerminal,
+    resumeClaudeSession,
     startRunCommand,
     interruptFocusedAgent,
     attachTerminal,
@@ -752,6 +753,7 @@ export function WorkspaceTerminal({
     refreshReadiness,
     refreshCoordinatorStatus,
     startRunCommand,
+    resumeClaudeSession,
     setReviewCockpit,
     setComposerSettings,
     setBusy,
@@ -895,8 +897,15 @@ export function WorkspaceTerminal({
             onFocus={() => undefined}
             onStop={() => void stopTerminal(session.id)}
             onClose={() => void closeTerminal(session.id)}
-            onData={(data) => void writeWorkspaceTerminalSessionInput(session.id, data).catch(setActionError)}
-            onResize={(cols, rows) => void resizeWorkspaceTerminalSession(session.id, cols, rows).catch(() => undefined)}
+            onResumeClaude={() => void resumeClaudeSession(session)}
+            onData={(data) => {
+              if (session.status !== 'running') return;
+              void writeWorkspaceTerminalSessionInput(session.id, data).catch(setActionError);
+            }}
+            onResize={(cols, rows) => {
+              if (session.status !== 'running') return;
+              void resizeWorkspaceTerminalSession(session.id, cols, rows).catch(() => undefined);
+            }}
           />
         </div>
       </TerminalContextMenu>

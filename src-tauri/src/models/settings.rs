@@ -8,6 +8,7 @@ pub struct AppSettings {
     pub repo_roots: Vec<String>,
     pub discovered_repositories: Vec<DiscoveredRepository>,
     pub has_completed_env_check: bool,
+    pub managed_workspaces_root: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,7 +20,7 @@ pub struct SaveRepoRootsInput {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiModelSettings {
-    /// Model used by Claude Code coding agents (e.g. "claude-sonnet-4-6").
+    /// Model used by Claude Code coding agents (e.g. "claude-opus-4-6[1m]").
     pub agent_model: String,
     /// Alias for `agent_model`, exposed for explicit provider-aware clients.
     pub claude_agent_model: String,

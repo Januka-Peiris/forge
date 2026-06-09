@@ -26,23 +26,6 @@ pub fn get_workspace_agent_context(
     })
 }
 
-pub fn build_session_open_context(state: &AppState, workspace_id: &str) -> Option<String> {
-    if repo_intelligence_service::repo_intelligence_enabled(state) {
-        let cfg = crate::context::schema::SelectConfig::default();
-        if let Ok(preview) = repo_intelligence_service::build_workspace_context_preview(
-            state,
-            workspace_id,
-            None,
-            &cfg,
-        ) {
-            return build_session_context_string_from_preview(state, workspace_id, &preview);
-        }
-        crate::context::preview::build_session_context_string(state, workspace_id)
-    } else {
-        crate::context::preview::build_session_context_string(state, workspace_id)
-    }
-}
-
 pub fn get_workspace_context_preview(
     state: &AppState,
     workspace_id: &str,
@@ -235,73 +218,6 @@ fn linked_worktrees(
             })
             .collect::<Vec<_>>(),
     )
-}
-
-fn build_session_context_string_from_preview(
-    state: &AppState,
-    workspace_id: &str,
-    preview: &crate::context::schema::ContextPreview,
-) -> Option<String> {
-    if preview.included.is_empty() {
-        return None;
-    }
-
-    let branch_info = {
-        let root = workspace_root(state, workspace_id)?;
-        crate::context::discovery::resolve_default_ref(&root)
-            .map(|r| {
-                format!(
-                    "{}@{}",
-                    r.branch,
-                    &r.commit_hash[..8.min(r.commit_hash.len())]
-                )
-            })
-            .unwrap_or_else(|_| "unknown".to_string())
-    };
-
-    let mut parts: Vec<String> = vec![format!("[MNEMONIC CONTEXT — {}]", branch_info)];
-
-    if let Some(warn) = &preview.warning {
-        parts.push(format!("⚠ {}", warn));
-    }
-
-    let mandatory: Vec<&crate::context::schema::ContextSegment> = preview
-        .included
-        .iter()
-        .filter(|s| s.tier == "mandatory")
-        .collect();
-    if !mandatory.is_empty() {
-        parts.push("Mandatory context:".to_string());
-        for seg in &mandatory {
-            parts.push(seg.content.clone());
-        }
-    }
-
-    let related: Vec<&crate::context::schema::ContextSegment> = preview
-        .included
-        .iter()
-        .filter(|s| s.tier == "related")
-        .collect();
-    if !related.is_empty() {
-        parts.push("Related files:".to_string());
-        for seg in &related {
-            parts.push(seg.content.clone());
-        }
-    }
-
-    parts.push("[END MNEMONIC CONTEXT]".to_string());
-
-    Some(parts.join("\n\n"))
-}
-
-fn workspace_root(state: &AppState, workspace_id: &str) -> Option<std::path::PathBuf> {
-    let workspace = workspace_repository::get_detail(&state.db, workspace_id).ok()??;
-    let path = workspace
-        .summary
-        .workspace_root_path
-        .clone()
-        .unwrap_or_else(|| workspace.worktree_path.clone());
-    Some(std::path::PathBuf::from(path))
 }
 
 #[cfg(test)]

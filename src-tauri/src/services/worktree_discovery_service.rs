@@ -6,6 +6,7 @@ use crate::models::DiscoveredWorktree;
 pub fn discover_worktrees(
     repo_id: &str,
     repo_path: &Path,
+    managed_workspaces_root: Option<&Path>,
 ) -> (Vec<DiscoveredWorktree>, Vec<String>) {
     let mut warnings = Vec::new();
     let output = match git(repo_path, &["worktree", "list", "--porcelain"]) {
@@ -40,7 +41,7 @@ pub fn discover_worktrees(
                 let is_dirty = is_dirty(path_ref);
                 let is_detached = current_detached || branch.is_none();
 
-                if !should_skip_discovered_worktree(repo_path, path_ref) {
+                if !should_skip_discovered_worktree(repo_path, path_ref, managed_workspaces_root) {
                     worktrees.push(DiscoveredWorktree {
                         id: stable_id(&format!("{repo_id}:{path}")),
                         repo_id: repo_id.to_string(),
@@ -92,7 +93,11 @@ pub fn is_dirty(path: &Path) -> bool {
 }
 
 /// Hides tool-managed checkouts from "discovered worktrees" so the UI only shows human branches.
-fn should_skip_discovered_worktree(repo_root: &Path, worktree_path: &Path) -> bool {
+fn should_skip_discovered_worktree(
+    repo_root: &Path,
+    worktree_path: &Path,
+    managed_workspaces_root: Option<&Path>,
+) -> bool {
     let wt = worktree_path.to_string_lossy().replace('\\', "/");
     if wt.contains("/.forge-worktrees/")
         || wt.ends_with("/.forge-worktrees")
@@ -102,13 +107,26 @@ fn should_skip_discovered_worktree(repo_root: &Path, worktree_path: &Path) -> bo
     {
         return true;
     }
-    if is_mnemonic_workspace_folder_under_repo(repo_root, worktree_path) {
+    if managed_workspaces_root.is_some_and(|root| path_is_under(worktree_path, root))
+        || is_mnemonic_workspace_folder_under_repo(repo_root, worktree_path)
+    {
         return true;
     }
     false
 }
 
-/// `<repo>/mnemonic/ws-NNN` checkouts created by Mnemonic (see `git_worktree_service`).
+fn path_is_under(path: &Path, root: &Path) -> bool {
+    if path.starts_with(root) {
+        return true;
+    }
+    let Ok(path_canon) = std::fs::canonicalize(path) else {
+        return false;
+    };
+    let root_canon = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    path_canon.starts_with(root_canon)
+}
+
+/// Legacy `<repo>/mnemonic/ws-NNN` checkouts created by Mnemonic before managed roots were configurable.
 fn is_mnemonic_workspace_folder_under_repo(repo_root: &Path, worktree_path: &Path) -> bool {
     if let Ok(rel) = worktree_path.strip_prefix(repo_root) {
         return path_starts_with_mnemonic_ws(rel);
@@ -175,11 +193,29 @@ mod tests {
         let repo = Path::new("/proj/repo");
         assert!(should_skip_discovered_worktree(
             repo,
-            Path::new("/proj/repo/mnemonic/ws-001")
+            Path::new("/proj/repo/mnemonic/ws-001"),
+            None
         ));
         assert!(!should_skip_discovered_worktree(
             repo,
-            Path::new("/proj/repo/mnemonic/not-ws")
+            Path::new("/proj/repo/mnemonic/not-ws"),
+            None
+        ));
+    }
+
+    #[test]
+    fn skips_configured_managed_workspace_root() {
+        let repo = Path::new("/proj/repo");
+        let managed_root = Path::new("/Users/me/Mnemonic/workspaces");
+        assert!(should_skip_discovered_worktree(
+            repo,
+            Path::new("/Users/me/Mnemonic/workspaces/repo/ws-001"),
+            Some(managed_root)
+        ));
+        assert!(!should_skip_discovered_worktree(
+            repo,
+            Path::new("/Users/me/other/repo/ws-001"),
+            Some(managed_root)
         ));
     }
 
@@ -188,19 +224,23 @@ mod tests {
         let repo = Path::new("/r");
         assert!(should_skip_discovered_worktree(
             repo,
-            Path::new("/tmp/foo/.codex/session")
+            Path::new("/tmp/foo/.codex/session"),
+            None
         ));
         assert!(should_skip_discovered_worktree(
             repo,
-            Path::new("/home/u/.codex-app/worktrees/a923/proj")
+            Path::new("/home/u/.codex-app/worktrees/a923/proj"),
+            None
         ));
         assert!(should_skip_discovered_worktree(
             repo,
-            Path::new("/tmp/foo/.cursor/worktrees/bar/abc")
+            Path::new("/tmp/foo/.cursor/worktrees/bar/abc"),
+            None
         ));
         assert!(should_skip_discovered_worktree(
             repo,
-            Path::new("/legacy/.forge-worktrees/x/y")
+            Path::new("/legacy/.forge-worktrees/x/y"),
+            None
         ));
     }
 }

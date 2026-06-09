@@ -21,6 +21,7 @@ interface UseWorkspaceTerminalComposerActionsParams {
   refreshReadiness: () => Promise<void>;
   refreshCoordinatorStatus: () => Promise<void>;
   startRunCommand: (index: number, restart?: boolean) => Promise<void>;
+  resumeClaudeSession: (session: TerminalSession) => Promise<TerminalSession | null>;
   setReviewCockpit: (cockpit: WorkspaceReviewCockpit | null) => void;
   setComposerSettings: Dispatch<SetStateAction<ComposerSettings>>;
   setBusy: (busy: boolean) => void;
@@ -41,6 +42,7 @@ export function useWorkspaceTerminalComposerActions({
   refreshReadiness,
   refreshCoordinatorStatus,
   startRunCommand,
+  resumeClaudeSession,
   setReviewCockpit,
   setComposerSettings,
   setBusy,
@@ -98,9 +100,11 @@ export function useWorkspaceTerminalComposerActions({
     const { sendBehavior, selectedTaskMode } = composerSettings;
     const effectiveBehavior = opts?.forceImmediate ? 'send_now' : sendBehavior;
 
-    const effectivePrompt = selectedTaskMode === 'Plan'
-      ? `Use plan mode.\n\n${text}`
-      : text;
+    const trimmedText = text.trim();
+    const alreadyRequestsPlanMode = /^use\s+plan\s+mode\.?/i.test(trimmedText);
+    const effectivePrompt = selectedTaskMode === 'Plan' && !alreadyRequestsPlanMode
+      ? `Use plan mode.\n\n${trimmedText}`
+      : trimmedText;
 
     const work = async () => {
       setBusy(true);
@@ -126,10 +130,21 @@ export function useWorkspaceTerminalComposerActions({
           return;
         }
         // Terminal path - interactive claude, subscription-safe
-        if (effectiveBehavior === 'interrupt_send' && focusedSession) {
-          await interruptWorkspaceTerminalSessionById(focusedSession.id).catch(() => undefined);
+        let targetSession = focusedSession;
+        const shouldAutoResumeClaude = Boolean(
+          focusedSession
+            && focusedSession.status !== 'running'
+            && focusedSession.claudeSessionId
+            && focusedSession.terminalKind === 'agent'
+            && (focusedSession.profile === 'claude_code' || focusedSession.command.includes('claude')),
+        );
+        if (shouldAutoResumeClaude && focusedSession) {
+          targetSession = await resumeClaudeSession(focusedSession);
         }
-        const terminalProfileId = focusedSession?.terminalKind === 'agent' ? focusedSession.profile : selectedProfileId;
+        if (effectiveBehavior === 'interrupt_send' && targetSession?.status === 'running') {
+          await interruptWorkspaceTerminalSessionById(targetSession.id).catch(() => undefined);
+        }
+        const terminalProfileId = targetSession?.terminalKind === 'agent' ? targetSession.profile : selectedProfileId;
         await queueWorkspaceAgentPrompt({
           workspaceId,
           prompt: effectivePrompt,

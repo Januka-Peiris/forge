@@ -1,7 +1,7 @@
 use tauri::State;
 
 use crate::models::{DiscoveredRepository, ScanRepositoriesResult};
-use crate::repositories::repository_repository;
+use crate::repositories::{repository_repository, settings_repository};
 use crate::services::{repo_scanner_service, worktree_discovery_service};
 use crate::state::AppState;
 
@@ -35,8 +35,15 @@ pub fn add_repository(
         .as_secs()
         .to_string();
 
+    let managed_workspaces_root = settings_repository::get_managed_workspaces_root(&state.db)
+        .ok()
+        .map(std::path::PathBuf::from);
     let mut repo = repo_scanner_service::build_repository(Path::new(&path), &now)?;
-    let (worktrees, _) = worktree_discovery_service::discover_worktrees(&repo.id, Path::new(&path));
+    let (worktrees, _) = worktree_discovery_service::discover_worktrees(
+        &repo.id,
+        Path::new(&path),
+        managed_workspaces_root.as_deref(),
+    );
     repo.worktrees = worktrees;
 
     repository_repository::upsert(&state.db, &repo)?;

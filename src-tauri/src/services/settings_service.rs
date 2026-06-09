@@ -7,6 +7,7 @@ pub fn get_settings(state: &AppState) -> Result<AppSettings, String> {
         repo_roots: settings_repository::get_repo_roots(&state.db)?,
         discovered_repositories: repository_repository::list(&state.db)?,
         has_completed_env_check: settings_repository::get_has_completed_env_check(&state.db)?,
+        managed_workspaces_root: settings_repository::get_managed_workspaces_root(&state.db)?,
     })
 }
 

@@ -110,7 +110,8 @@ Workspace task: {}",
         Some("running") => testing_notes.push("A Mnemonic agent run is still running.".to_string()),
         Some(status) => testing_notes.push(format!("Latest Mnemonic agent run status: {status}.")),
         None => testing_notes.push(
-            "No Mnemonic agent run recorded. Add manual testing notes before opening PR.".to_string(),
+            "No Mnemonic agent run recorded. Add manual testing notes before opening PR."
+                .to_string(),
         ),
     }
     testing_notes

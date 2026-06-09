@@ -132,13 +132,3 @@ pub fn latest_queued_prompt_for_workspace(
             .optional()
     })
 }
-
-pub fn count_sent_prompts_for_session(db: &Database, session_id: &str) -> Result<u32, String> {
-    db.with_connection(|conn| {
-        conn.query_row(
-            "SELECT COUNT(*) FROM terminal_prompt_entries WHERE session_id = ?1 AND status = 'sent'",
-            params![session_id],
-            |row| row.get(0),
-        )
-    })
-}

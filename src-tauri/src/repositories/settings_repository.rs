@@ -4,6 +4,7 @@ use crate::db::Database;
 
 const REPO_ROOTS_KEY: &str = "repo_roots";
 const ENV_CHECK_KEY: &str = "has_completed_env_check";
+const MANAGED_WORKSPACES_ROOT_KEY: &str = "managed_workspaces_root";
 
 pub fn get_value(db: &Database, key: &str) -> Result<Option<String>, String> {
     use rusqlite::OptionalExtension;
@@ -39,6 +40,38 @@ pub fn ensure_default_value(db: &Database, key: &str, value: &str) -> Result<(),
         )?;
         Ok(())
     })
+}
+
+pub fn get_managed_workspaces_root(db: &Database) -> Result<String, String> {
+    let saved = get_value(db, MANAGED_WORKSPACES_ROOT_KEY)?;
+    Ok(saved
+        .map(|value| normalize_path(&value))
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(default_managed_workspaces_root))
+}
+
+pub fn save_managed_workspaces_root(db: &Database, path: &str) -> Result<String, String> {
+    let normalized = normalize_path(path);
+    if normalized.trim().is_empty() {
+        return Err("Managed workspace location is required".to_string());
+    }
+    set_value(db, MANAGED_WORKSPACES_ROOT_KEY, &normalized)?;
+    Ok(normalized)
+}
+
+fn default_managed_workspaces_root() -> String {
+    if let Some(home) = std::env::var_os("HOME") {
+        return format!("{}/Mnemonic/workspaces", home.to_string_lossy());
+    }
+    "Mnemonic/workspaces".to_string()
+}
+
+fn normalize_path(path: &str) -> String {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    expand_home(trimmed)
 }
 
 pub fn get_repo_roots(db: &Database) -> Result<Vec<String>, String> {
@@ -85,7 +118,7 @@ fn normalize_repo_roots(repo_roots: &[String]) -> Vec<String> {
         .iter()
         .map(|root| root.trim())
         .filter(|root| !root.is_empty())
-        .map(expand_home)
+        .map(normalize_path)
         .collect::<Vec<_>>();
 
     roots.sort();

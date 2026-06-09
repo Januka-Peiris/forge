@@ -72,8 +72,10 @@ pub(super) fn create_workspace(
         worktree_managed_by_forge = false;
         workspace_source = "external_worktree".to_string();
     } else if let Some(repo) = &selected_repo {
+        let managed_workspaces_root = settings_repository::get_managed_workspaces_root(&state.db)?;
         let created = git_worktree_service::create_mnemonic_worktree(
             &repo.path,
+            &managed_workspaces_root,
             &next_id,
             &branch,
             &input.base_branch,
@@ -162,8 +164,10 @@ pub(super) fn create_workspace(
     if let Err(err) = workspace_repository::insert(&state.db, &detail) {
         if detail.summary.worktree_managed_by_forge {
             if let Some(repo_path) = detail.summary.repository_path.as_deref() {
-                let _ =
-                    git_worktree_service::remove_mnemonic_worktree(repo_path, &detail.worktree_path);
+                let _ = git_worktree_service::remove_mnemonic_worktree(
+                    repo_path,
+                    &detail.worktree_path,
+                );
             }
         }
         return Err(err);
@@ -291,7 +295,9 @@ pub(super) fn delete_workspace(state: &AppState, workspace_id: &str) -> Result<(
     }
     match terminal_service::stop_workspace_utility_terminal_session(state, workspace_id) {
         Ok(_) => log::info!(target: "mnemonic_lib", "stop utility terminal: ok id={workspace_id}"),
-        Err(e) => log::warn!(target: "mnemonic_lib", "stop utility terminal: {e} id={workspace_id}"),
+        Err(e) => {
+            log::warn!(target: "mnemonic_lib", "stop utility terminal: {e} id={workspace_id}")
+        }
     }
     match workspace_script_service::stop_workspace_run_commands(state, workspace_id) {
         Ok(stopped) => log::info!(

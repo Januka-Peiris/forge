@@ -414,6 +414,7 @@ mod tests {
             stale,
             closed_at: None,
             backend: "pty".to_string(),
+            tmux_session_name: None,
             title: "Codex".to_string(),
             terminal_kind: "agent".to_string(),
             display_order: 0,

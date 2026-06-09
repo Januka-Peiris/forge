@@ -238,6 +238,7 @@ pub fn start_command_terminal(
             command: Some(command.to_string()),
             args: None,
             extra_args: None,
+            resume_claude_session_id: None,
             profile_id: Some("shell".to_string()),
             cols: None,
             rows: None,

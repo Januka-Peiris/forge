@@ -87,6 +87,15 @@ pub(super) fn reconcile_orphan_running_session(
     if latest.status != "running" {
         return Ok(());
     }
+    if latest.backend == "tmux"
+        && latest
+            .tmux_session_name
+            .as_deref()
+            .map(super::tmux::session_exists)
+            .unwrap_or(false)
+    {
+        return Ok(());
+    }
     let ended_at = terminal_service::timestamp();
     log::info!(
         target: "mnemonic_lib",
@@ -134,7 +143,9 @@ pub(super) fn spawn_terminal_reader(
                     }
                 }
                 Err(err) => {
-                    let _ = tx.send(Err(format!("\r\n[mnemonic] terminal read failed: {err}\r\n")));
+                    let _ = tx.send(Err(format!(
+                        "\r\n[mnemonic] terminal read failed: {err}\r\n"
+                    )));
                     break;
                 }
             }
@@ -239,6 +250,8 @@ pub(super) fn spawn_terminal_monitor(
     workspace_id: String,
     _session_role: String,
     session_id: String,
+    backend: String,
+    tmux_session_name: Option<String>,
     mut child: Box<dyn portable_pty::Child + Send>,
 ) {
     thread::spawn(move || {
@@ -263,7 +276,37 @@ pub(super) fn spawn_terminal_monitor(
                 terminal_repository::next_seq(&state.db, &session_id).unwrap_or(0),
             ))
         });
-        let _ = state.pending_commands.lock().map(|mut m| m.remove(&session_id));
+        let _ = state
+            .pending_commands
+            .lock()
+            .map(|mut m| m.remove(&session_id));
+
+        if terminal_repository::get_session(&state.db, &session_id)
+            .ok()
+            .flatten()
+            .map(|session| session.status != "running")
+            .unwrap_or(false)
+        {
+            return;
+        }
+
+        if backend == "tmux"
+            && tmux_session_name
+                .as_deref()
+                .map(super::tmux::session_exists)
+                .unwrap_or(false)
+        {
+            append_output(
+                Some(&state.app_handle),
+                &state.db,
+                &workspace_id,
+                &session_id,
+                &seq_counter,
+                "system",
+                "\r\n[mnemonic] detached from persistent tmux session; it is still running\r\n",
+            );
+            return;
+        }
 
         match wait_result {
             Ok(exit_status) => {
@@ -343,6 +386,23 @@ pub(super) fn ensure_agent_session_for_prompt(
         let session = terminal_repository::get_session(&state.db, &active.session_id)?
             .ok_or_else(|| "Active agent session record was not found".to_string())?;
         return Ok((session, false));
+    }
+
+    if let Some(session) =
+        terminal_repository::latest_for_workspace_role(&state.db, workspace_id, "agent")?
+    {
+        if session.backend == "tmux" && session.status == "running" {
+            let attached = terminal_service::attach_workspace_terminal_session(
+                state,
+                crate::models::AttachWorkspaceTerminalInput {
+                    workspace_id: workspace_id.to_string(),
+                    session_id: session.id.clone(),
+                    cols: None,
+                    rows: None,
+                },
+            )?;
+            return Ok((attached, false));
+        }
     }
 
     terminal_service::start_workspace_terminal_session(

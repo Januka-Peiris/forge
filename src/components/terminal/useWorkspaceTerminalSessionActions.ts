@@ -80,6 +80,35 @@ export function useWorkspaceTerminalSessionActions({
     }
   };
 
+  const resumeClaudeSession = async (session: TerminalSession): Promise<TerminalSession | null> => {
+    if (!workspaceId || !session.claudeSessionId) return null;
+    setBusy(true);
+    setError(null);
+    try {
+      const resumed = await createWorkspaceTerminal({
+        workspaceId,
+        kind: 'agent',
+        profile: 'claude_code',
+        profileId: session.profile,
+        title: 'Claude',
+        resumeClaudeSessionId: session.claudeSessionId,
+      });
+      if (resumed.terminalKind === 'agent') setSelectedProfileId(resumed.profile);
+      setNextSeq(resumed.id, 0);
+      focusedIdRef.current = resumed.id;
+      setFocusedId(resumed.id);
+      await refreshSessions(true, resumed.id);
+      await refreshHealth();
+      await refreshReadiness();
+      return resumed;
+    } catch (err) {
+      setActionError(err);
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const runSetup = async () => {
     if (!workspaceId) return;
     setCommandBusy('setup');
@@ -245,6 +274,7 @@ export function useWorkspaceTerminalSessionActions({
 
   return {
     createTerminal,
+    resumeClaudeSession,
     runSetup,
     startRunCommand,
     stopRunCommands,

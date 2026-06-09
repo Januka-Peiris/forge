@@ -17,6 +17,7 @@ pub struct TerminalSession {
     pub stale: bool,
     pub closed_at: Option<String>,
     pub backend: String,
+    pub tmux_session_name: Option<String>,
     pub title: String,
     pub terminal_kind: String,
     pub display_order: i64,
@@ -93,6 +94,8 @@ pub struct CreateWorkspaceTerminalInput {
     pub args: Option<Vec<String>>,
     #[serde(default)]
     pub extra_args: Option<Vec<String>>,
+    #[serde(default)]
+    pub resume_claude_session_id: Option<String>,
     pub cols: Option<u16>,
     pub rows: Option<u16>,
 }

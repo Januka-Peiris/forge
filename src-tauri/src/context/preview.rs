@@ -105,65 +105,6 @@ pub fn build_context_preview(
     })
 }
 
-/// Builds a formatted session context string for injection into the first prompt.
-pub fn build_session_context_string(state: &AppState, workspace_id: &str) -> Option<String> {
-    let cfg = SelectConfig::default();
-    let preview = build_context_preview(state, workspace_id, None, &cfg).ok()?;
-
-    if preview.included.is_empty() {
-        return None;
-    }
-
-    let branch_info = {
-        let root = workspace_root(state, workspace_id)?;
-        discovery::resolve_default_ref(&root)
-            .map(|r| {
-                format!(
-                    "{}@{}",
-                    r.branch,
-                    &r.commit_hash[..8.min(r.commit_hash.len())]
-                )
-            })
-            .unwrap_or_else(|_| "unknown".to_string())
-    };
-
-    let mut parts: Vec<String> = vec![format!("[MNEMONIC CONTEXT — {}]", branch_info)];
-
-    if let Some(warn) = &preview.warning {
-        parts.push(format!("⚠ {}", warn));
-    }
-
-    // Mandatory section
-    let mandatory: Vec<&ContextSegment> = preview
-        .included
-        .iter()
-        .filter(|s| s.tier == "mandatory")
-        .collect();
-    if !mandatory.is_empty() {
-        parts.push("Mandatory context:".to_string());
-        for seg in &mandatory {
-            parts.push(seg.content.clone());
-        }
-    }
-
-    // Related section
-    let related: Vec<&ContextSegment> = preview
-        .included
-        .iter()
-        .filter(|s| s.tier == "related")
-        .collect();
-    if !related.is_empty() {
-        parts.push("Related files:".to_string());
-        for seg in &related {
-            parts.push(seg.content.clone());
-        }
-    }
-
-    parts.push("[END MNEMONIC CONTEXT]".to_string());
-
-    Some(parts.join("\n\n"))
-}
-
 fn overlay_only_segments(overlay: &WorkspaceOverlay) -> Vec<ContextSegment> {
     use crate::context::schema::estimate_tokens;
     let mut segs = Vec::new();
@@ -191,14 +132,4 @@ fn overlay_only_segments(overlay: &WorkspaceOverlay) -> Vec<ContextSegment> {
         });
     }
     segs
-}
-
-fn workspace_root(state: &AppState, workspace_id: &str) -> Option<std::path::PathBuf> {
-    let workspace = workspace_repository::get_detail(&state.db, workspace_id).ok()??;
-    let path = workspace
-        .summary
-        .workspace_root_path
-        .clone()
-        .unwrap_or_else(|| workspace.worktree_path.clone());
-    Some(std::path::PathBuf::from(path))
 }

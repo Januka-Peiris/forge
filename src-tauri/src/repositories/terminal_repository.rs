@@ -9,8 +9,8 @@ mod prompts;
 
 pub use output::{insert_output_chunk, list_output_chunks, next_seq, prune_output_chunks};
 pub use prompts::{
-    insert_prompt_entry, latest_queued_prompt_for_workspace,
-    list_prompts_for_workspace, mark_prompt_sent, mark_prompt_status_by_session,
+    insert_prompt_entry, latest_queued_prompt_for_workspace, list_prompts_for_workspace,
+    mark_prompt_sent, mark_prompt_status_by_session,
 };
 
 #[derive(Debug, Clone)]
@@ -112,7 +112,7 @@ pub fn insert_session(db: &Database, session: &TerminalSession) -> Result<(), St
                 session.stale as i64,
                 session.closed_at,
                 session.backend,
-                Option::<String>::None,
+                session.tmux_session_name.as_deref(),
                 session.title,
                 session.terminal_kind,
                 session.display_order,
@@ -177,7 +177,7 @@ pub fn list_for_workspace(
             r#"
             SELECT id, workspace_id, session_role, profile, cwd, status, started_at, ended_at,
                    command, args, pid, stale, closed_at, backend, tmux_session_name, title, terminal_kind,
-                   display_order, is_visible, last_attached_at, last_captured_seq
+                   display_order, is_visible, last_attached_at, last_captured_seq, claude_session_id
             FROM terminal_sessions
             WHERE workspace_id = ?1
             ORDER BY created_at DESC, rowid DESC
@@ -199,7 +199,7 @@ pub fn list_visible_for_workspace(
             r#"
             SELECT id, workspace_id, session_role, profile, cwd, status, started_at, ended_at,
                    command, args, pid, stale, closed_at, backend, tmux_session_name, title, terminal_kind,
-                   display_order, is_visible, last_attached_at, last_captured_seq
+                   display_order, is_visible, last_attached_at, last_captured_seq, claude_session_id
             FROM terminal_sessions
             WHERE workspace_id = ?1 AND closed_at IS NULL AND is_visible = 1
             ORDER BY display_order ASC, created_at ASC, rowid ASC
@@ -262,18 +262,6 @@ pub fn mark_closed(db: &Database, session_id: &str, closed_at: &str) -> Result<(
     })
 }
 
-pub fn update_session_args(db: &Database, session_id: &str, args: &[String]) -> Result<(), String> {
-    let args_json = serde_json::to_string(args)
-        .map_err(|err| format!("Failed to serialize session args: {err}"))?;
-    db.with_connection(|connection| {
-        connection.execute(
-            "UPDATE terminal_sessions SET args = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",
-            params![args_json, session_id],
-        )?;
-        Ok(())
-    })
-}
-
 pub fn update_recovery_state(
     db: &Database,
     session_id: &str,
@@ -304,7 +292,7 @@ pub fn mark_stale_running_sessions(db: &Database, timestamp: &str) -> Result<(),
                 ended_at = COALESCE(ended_at, ?1),
                 stale = 1,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE status = 'running'
+            WHERE status = 'running' AND COALESCE(backend, 'pty') != 'tmux'
             "#,
             params![timestamp],
         )?;
@@ -321,7 +309,7 @@ pub fn list_running_session_groups(
             SELECT ts.workspace_id, w.repo, w.branch, COUNT(*) as session_count
             FROM terminal_sessions ts
             JOIN workspaces w ON w.id = ts.workspace_id
-            WHERE ts.status = 'running'
+            WHERE ts.status = 'running' AND COALESCE(ts.backend, 'pty') != 'tmux'
             GROUP BY ts.workspace_id, w.repo, w.branch
             "#,
         )?;
@@ -373,6 +361,7 @@ fn session_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<TerminalSession
         backend: row
             .get::<_, Option<String>>("backend")?
             .unwrap_or_else(|| "pty".to_string()),
+        tmux_session_name: row.get("tmux_session_name")?,
         title: row.get::<_, Option<String>>("title")?.unwrap_or_default(),
         terminal_kind: row
             .get::<_, Option<String>>("terminal_kind")?
@@ -382,19 +371,6 @@ fn session_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<TerminalSession
         last_attached_at: row.get("last_attached_at")?,
         last_captured_seq: row.get::<_, Option<i64>>("last_captured_seq")?.unwrap_or(0),
         claude_session_id: row.get("claude_session_id").unwrap_or(None),
-    })
-}
-
-pub fn get_active_session_id_for_workspace(
-    db: &Database,
-    workspace_id: &str,
-) -> Result<Option<String>, String> {
-    db.with_connection(|conn| {
-        conn.query_row(
-            "SELECT id FROM terminal_sessions WHERE workspace_id = ?1 AND status = 'running' AND closed_at IS NULL ORDER BY started_at DESC LIMIT 1",
-            params![workspace_id],
-            |row| row.get::<_, String>(0),
-        ).optional()
     })
 }
 
@@ -445,6 +421,7 @@ mod tests {
             stale: false,
             closed_at: None,
             backend: "pty".to_string(),
+            tmux_session_name: None,
             title: "Codex".to_string(),
             terminal_kind: "agent".to_string(),
             display_order: 0,

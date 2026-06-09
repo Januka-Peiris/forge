@@ -16,6 +16,7 @@ export interface TerminalSession {
   stale: boolean;
   closedAt?: string;
   backend: string;
+  tmuxSessionName?: string;
   title: string;
   terminalKind: 'agent' | 'shell' | 'run' | 'utility' | string;
   displayOrder: number;
@@ -68,6 +69,7 @@ export interface CreateWorkspaceTerminalInput {
   command?: string;
   args?: string[];
   extraArgs?: string[];
+  resumeClaudeSessionId?: string;
   cols?: number;
   rows?: number;
 }

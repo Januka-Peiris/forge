@@ -39,6 +39,9 @@ pub fn resolve_git_repository_path(path: &str) -> Result<String, String> {
 pub fn scan_repositories(state: &AppState) -> Result<ScanRepositoriesResult, String> {
     let repo_roots = settings_repository::get_repo_roots(&state.db)?;
     let scanned_at = unix_timestamp_string();
+    let managed_workspaces_root = settings_repository::get_managed_workspaces_root(&state.db)
+        .ok()
+        .map(PathBuf::from);
     let mut warnings = Vec::new();
     let mut repo_paths = BTreeSet::new();
 
@@ -57,7 +60,11 @@ pub fn scan_repositories(state: &AppState) -> Result<ScanRepositoriesResult, Str
         match build_repository(&path, &scanned_at) {
             Ok(mut repo) => {
                 let (worktrees, mut worktree_warnings) =
-                    worktree_discovery_service::discover_worktrees(&repo.id, &path);
+                    worktree_discovery_service::discover_worktrees(
+                        &repo.id,
+                        &path,
+                        managed_workspaces_root.as_deref(),
+                    );
                 repo.worktrees = worktrees;
                 warnings.append(&mut worktree_warnings);
                 repositories.push(repo);
@@ -95,11 +102,17 @@ pub fn refresh_repository_by_id(state: &AppState, repository_id: &str) -> Result
     let existing = repository_repository::get(&state.db, repository_id)?
         .ok_or_else(|| format!("Repository {repository_id} was not found"))?;
     let scanned_at = unix_timestamp_string();
+    let managed_workspaces_root = settings_repository::get_managed_workspaces_root(&state.db)
+        .ok()
+        .map(PathBuf::from);
     let mut repository = build_repository(Path::new(&existing.path), &scanned_at)?;
     // Preserve the stable id from the persisted discovered repository.
     repository.id = existing.id;
-    let (worktrees, _warnings) =
-        worktree_discovery_service::discover_worktrees(&repository.id, Path::new(&repository.path));
+    let (worktrees, _warnings) = worktree_discovery_service::discover_worktrees(
+        &repository.id,
+        Path::new(&repository.path),
+        managed_workspaces_root.as_deref(),
+    );
     repository.worktrees = worktrees;
     repository_repository::upsert(&state.db, &repository)?;
     if repo_intelligence_service::repo_intelligence_enabled(state) {

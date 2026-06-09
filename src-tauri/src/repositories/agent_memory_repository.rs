@@ -150,6 +150,7 @@ pub fn upsert(db: &Database, input: AgentMemoryUpsert<'_>) -> Result<AgentMemory
     })
 }
 
+#[cfg(test)]
 pub fn list_relevant_for_prompt(
     db: &Database,
     workspace_id: &str,

@@ -47,7 +47,12 @@ export function RepositoriesCard({ settings, onSettingsChange, onRemoveRepositor
       const toplevel = await resolveGitRepositoryPath(picked);
       const repos = await addRepository(toplevel);
       setRepositories(repos);
-      onSettingsChange({ repoRoots: repos.map((r) => r.path), discoveredRepositories: repos, hasCompletedEnvCheck: settings?.hasCompletedEnvCheck ?? false });
+      onSettingsChange({
+        repoRoots: repos.map((r) => r.path),
+        discoveredRepositories: repos,
+        hasCompletedEnvCheck: settings?.hasCompletedEnvCheck ?? false,
+        managedWorkspacesRoot: settings?.managedWorkspacesRoot ?? '',
+      });
       setMessage(`Added — ${repos.length} repositor${repos.length === 1 ? 'y' : 'ies'} in Mnemonic.`);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : String(err));

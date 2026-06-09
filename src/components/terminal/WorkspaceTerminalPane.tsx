@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, Search, Square, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, RotateCcw, Search, Square, X } from 'lucide-react';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon, type ISearchOptions, type ISearchResultChangeEvent } from '@xterm/addon-search';
 import { Terminal } from '@xterm/xterm';
@@ -41,6 +41,7 @@ export function TerminalPane({
   onFocus,
   onStop,
   onClose,
+  onResumeClaude,
   onData,
   onResize,
 }: {
@@ -51,6 +52,7 @@ export function TerminalPane({
   onFocus: () => void;
   onStop: () => void;
   onClose: () => void;
+  onResumeClaude?: () => void;
   onData: (data: string) => void;
   onResize: (cols: number, rows: number) => void;
 }) {
@@ -74,6 +76,8 @@ export function TerminalPane({
     caseSensitive,
     decorations: SEARCH_DECORATIONS,
   }), [caseSensitive]);
+  const running = session.status === 'running';
+  const readOnly = !running;
 
   const focusSearchInput = useCallback(() => {
     window.setTimeout(() => {
@@ -141,7 +145,9 @@ export function TerminalPane({
     searchAddonRef.current = searchAddon;
     lastRenderedSeqRef.current = -1;
 
-    const disposable = terminal.onData((data) => onDataRef.current(data));
+    const disposable = readOnly
+      ? { dispose: () => undefined }
+      : terminal.onData((data) => onDataRef.current(data));
     const searchDisposable = searchAddon.onDidChangeResults((event) => {
       setSearchResults(event);
     });
@@ -157,12 +163,15 @@ export function TerminalPane({
       if (key === 'w' || key === '\\' || key === '-') {
         return false;
       }
+      if (readOnly) return false;
       return true;
     });
     const fit = () => {
       try {
         fitAddon.fit();
-        if (terminal.cols > 0 && terminal.rows > 0) onResizeRef.current(terminal.cols, terminal.rows);
+        if (!readOnly && terminal.cols > 0 && terminal.rows > 0) {
+          onResizeRef.current(terminal.cols, terminal.rows);
+        }
       } catch {
         // xterm can throw before layout settles.
       }
@@ -178,7 +187,7 @@ export function TerminalPane({
       fitAddonRef.current = null;
       searchAddonRef.current = null;
     };
-  }, [openSearch, session.id]);
+  }, [openSearch, readOnly, session.id]);
 
   useEffect(() => {
     if (!showSearch) return;
@@ -211,12 +220,15 @@ export function TerminalPane({
   }, [searchOptions, searchTerm, showSearch]);
 
   useEffect(() => {
-    if (focused) terminalRef.current?.focus();
-  }, [focused]);
+    if (focused && !readOnly) terminalRef.current?.focus();
+  }, [focused, readOnly]);
 
   const title = session.title || PROFILE_LABELS[session.profile as TerminalProfile] || session.profile;
-  const running = session.status === 'running';
-  const restored = !running && chunks.length > 0;
+  const restored = readOnly && chunks.length > 0;
+  const canResumeClaude = readOnly
+    && Boolean(session.claudeSessionId)
+    && session.terminalKind === 'agent'
+    && (session.profile === 'claude_code' || session.command.includes('claude'));
   const resultLabel = searchTerm.trim()
     ? searchResults.resultCount === 0
       ? 'No results'
@@ -255,6 +267,19 @@ export function TerminalPane({
               <Square className="h-3 w-3" /> Stop
             </Button>
           )}
+          {canResumeClaude && onResumeClaude && (
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={(event) => {
+                event.stopPropagation();
+                onResumeClaude();
+              }}
+              className="text-mn-cyan hover:bg-mn-cyan/10"
+            >
+              <RotateCcw className="h-3 w-3" /> Resume Claude
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="xs"
@@ -269,7 +294,7 @@ export function TerminalPane({
       </div>
       {restored && (
         <div className="shrink-0 border-b border-mn-border/70 bg-mn-blue/10 px-3 py-1 text-[11px] text-mn-blue">
-          Restored session history from {formatTerminalTimestamp(session.endedAt)}.
+          Restored read-only session history from {formatTerminalTimestamp(session.endedAt)}. Start a new session to continue.
         </div>
       )}
       {showSearch && (

@@ -1,4 +1,5 @@
 use std::io::Write;
+use std::path::Path;
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 
@@ -21,6 +22,7 @@ mod output;
 mod prompts;
 mod queue;
 mod runtime;
+mod tmux;
 
 const RETAINED_OUTPUT_CHUNKS_ON_CLOSE: u32 = 5000;
 
@@ -75,6 +77,151 @@ fn agent_effective_model(
         })
 }
 
+fn spawn_active_terminal(
+    state: &AppState,
+    session: &TerminalSession,
+    command: &str,
+    args: &[String],
+    cwd: &Path,
+    cols: u16,
+    rows: u16,
+) -> Result<(), String> {
+    let pty_system = native_pty_system();
+    let pair = pty_system
+        .openpty(PtySize {
+            rows,
+            cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|err| format!("Failed to open PTY: {err}"))?;
+
+    let mut command_builder = CommandBuilder::new(command);
+    command_builder.args(args);
+    command_builder.cwd(cwd);
+    command_builder.env("TERM", "xterm-256color");
+    command_builder.env("PATH", enriched_path());
+    if std::env::var("SHELL").is_err() {
+        command_builder.env("SHELL", "/bin/zsh");
+    }
+
+    let child = pair
+        .slave
+        .spawn_command(command_builder)
+        .map_err(|err| format!("Failed to start terminal: {err}"))?;
+    let reader = pair
+        .master
+        .try_clone_reader()
+        .map_err(|err| format!("Failed to get terminal reader: {err}"))?;
+    let writer = pair
+        .master
+        .take_writer()
+        .map_err(|err| format!("Failed to get terminal writer: {err}"))?;
+    let killer = child.clone_killer();
+
+    let seq_counter = Arc::new(AtomicU64::new(
+        terminal_repository::next_seq(&state.db, &session.id).unwrap_or(0),
+    ));
+    let last_output_at_secs = Arc::new(AtomicU64::new(0));
+    let active = Arc::new(ActiveTerminal {
+        session_id: session.id.clone(),
+        terminal_kind: session.terminal_kind.clone(),
+        writer: Mutex::new(writer),
+        killer: Mutex::new(killer),
+        master: Mutex::new(pair.master),
+        last_output_at_secs: last_output_at_secs.clone(),
+        seq_counter: seq_counter.clone(),
+    });
+    state
+        .terminals
+        .lock()
+        .map_err(|_| "Terminal registry lock poisoned".to_string())?
+        .insert(session.id.clone(), active);
+
+    spawn_terminal_reader(
+        state.app_handle.clone(),
+        state.db.clone(),
+        session.workspace_id.clone(),
+        session.id.clone(),
+        seq_counter,
+        last_output_at_secs,
+        reader,
+    );
+    spawn_terminal_monitor(
+        state.clone(),
+        session.workspace_id.clone(),
+        session.session_role.clone(),
+        session.id.clone(),
+        session.backend.clone(),
+        session.tmux_session_name.clone(),
+        child,
+    );
+    Ok(())
+}
+
+fn attach_tmux_terminal(
+    state: &AppState,
+    session: &TerminalSession,
+    cols: Option<u16>,
+    rows: Option<u16>,
+) -> Result<TerminalSession, String> {
+    if active_for_session(state, &session.id)?.is_some() {
+        return Ok(session.clone());
+    }
+    if session.backend != "tmux" {
+        return Err(format!(
+            "Terminal session {} is not tmux-backed",
+            session.id
+        ));
+    }
+    if session.status != "running" {
+        return Err(format!(
+            "Terminal session {} has already ended ({})",
+            session.id, session.status
+        ));
+    }
+    let tmux_name = session
+        .tmux_session_name
+        .as_deref()
+        .ok_or_else(|| format!("Terminal session {} has no tmux session name", session.id))?;
+    if !tmux::session_exists(tmux_name) {
+        let ended_at = timestamp();
+        terminal_repository::mark_finished(&state.db, &session.id, "interrupted", &ended_at, true)?;
+        append_log_line(
+            state,
+            &session.workspace_id,
+            &session.id,
+            "system",
+            "[mnemonic] Persistent tmux session was not found; start a new session\r\n",
+        );
+        return Err(format!(
+            "Terminal session {} is no longer running — start a new one",
+            session.id
+        ));
+    }
+
+    let cwd = Path::new(&session.cwd);
+    let (attach_command, attach_args) = tmux::attach_command(tmux_name);
+    spawn_active_terminal(
+        state,
+        session,
+        &attach_command,
+        &attach_args,
+        cwd,
+        cols.unwrap_or(100).max(20),
+        rows.unwrap_or(30).max(5),
+    )?;
+    append_log_line(
+        state,
+        &session.workspace_id,
+        &session.id,
+        "system",
+        "\r\n[mnemonic] attached to persistent tmux session\r\n",
+    );
+    terminal_repository::get_session(&state.db, &session.id)?
+        .ok_or_else(|| format!("Terminal session {} was not found", session.id))
+}
+
 pub fn start_workspace_terminal_session(
     state: &AppState,
     input: StartTerminalSessionInput,
@@ -106,6 +253,7 @@ pub fn start_workspace_terminal_session(
             profile_id: Some(resolved_profile.id.clone()),
             args: None,
             extra_args: input.extra_args,
+            resume_claude_session_id: None,
             cols: input.cols,
             rows: input.rows,
         },
@@ -132,37 +280,56 @@ pub fn create_workspace_terminal(
     }
     .to_string();
     let is_claude_agent = resolved_profile.command.contains("claude") && session_role == "agent";
+    let explicit_resume_id = input
+        .resume_claude_session_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty());
     let (session_resume, claude_session_id) = if is_claude_agent {
-        let has_active_agent = runtime::active_for_workspace(state, &input.workspace_id, "agent")
-            .ok()
-            .flatten()
-            .is_some();
-        if has_active_agent {
-            let new_id = uuid::Uuid::new_v4().to_string();
-            (Some(SessionResume::New(new_id.clone())), Some(new_id))
-        } else {
-            let prior = terminal_repository::latest_for_workspace_role(
-                &state.db,
-                &input.workspace_id,
-                "agent",
+        if let Some(resume_id) = explicit_resume_id {
+            (
+                Some(SessionResume::Resume(resume_id.to_string())),
+                Some(resume_id.to_string()),
             )
-            .ok()
-            .flatten();
-            let resumable_id = prior
-                .filter(|s| s.status != "failed")
-                .and_then(|s| s.claude_session_id);
-            if let Some(prior_id) = resumable_id {
-                (Some(SessionResume::Resume(prior_id.clone())), Some(prior_id))
-            } else {
+        } else {
+            let has_active_agent =
+                runtime::active_for_workspace(state, &input.workspace_id, "agent")
+                    .ok()
+                    .flatten()
+                    .is_some();
+            if has_active_agent {
                 let new_id = uuid::Uuid::new_v4().to_string();
                 (Some(SessionResume::New(new_id.clone())), Some(new_id))
+            } else {
+                let prior = terminal_repository::latest_for_workspace_role(
+                    &state.db,
+                    &input.workspace_id,
+                    "agent",
+                )
+                .ok()
+                .flatten();
+                let resumable_id = prior
+                    .filter(|s| s.status != "failed")
+                    .and_then(|s| s.claude_session_id);
+                if let Some(prior_id) = resumable_id {
+                    (
+                        Some(SessionResume::Resume(prior_id.clone())),
+                        Some(prior_id),
+                    )
+                } else {
+                    let new_id = uuid::Uuid::new_v4().to_string();
+                    (Some(SessionResume::New(new_id.clone())), Some(new_id))
+                }
             }
         }
     } else {
         (None, None)
     };
-    let profile =
-        TerminalProfile::from_agent_profile(&resolved_profile, effective_model.as_deref(), session_resume.as_ref());
+    let profile = TerminalProfile::from_agent_profile(
+        &resolved_profile,
+        effective_model.as_deref(),
+        session_resume.as_ref(),
+    );
     let display_order = terminal_repository::next_display_order(&state.db, &input.workspace_id)?;
     let session_id = format!("term-{}", unique_suffix());
     let title = input
@@ -192,40 +359,13 @@ pub fn create_workspace_terminal(
 
     let rows = input.rows.unwrap_or(30).max(5);
     let cols = input.cols.unwrap_or(100).max(20);
-    let pty_system = native_pty_system();
-    let pair = pty_system
-        .openpty(PtySize {
-            rows,
-            cols,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|err| format!("Failed to open PTY: {err}"))?;
-
-    let mut command = CommandBuilder::new(&command_spec.command);
-    command.args(&command_spec.args);
-    command.cwd(&cwd);
-    command.env("TERM", "xterm-256color");
-    command.env("PATH", enriched_path());
-    if std::env::var("SHELL").is_err() {
-        command.env("SHELL", "/bin/zsh");
-    }
-
-    let child = pair
-        .slave
-        .spawn_command(command)
-        .map_err(|err| format!("Failed to start terminal: {err}"))?;
-    let reader = pair
-        .master
-        .try_clone_reader()
-        .map_err(|err| format!("Failed to get terminal reader: {err}"))?;
-    let writer = pair
-        .master
-        .take_writer()
-        .map_err(|err| format!("Failed to get terminal writer: {err}"))?;
-    let killer = child.clone_killer();
-
     let started_at = timestamp();
+    let use_tmux_backend = session_role == "agent" && tmux::available();
+    let tmux_session_name =
+        use_tmux_backend.then(|| tmux::safe_session_name(&input.workspace_id, &session_id));
+    if let Some(tmux_name) = &tmux_session_name {
+        tmux::start_detached(tmux_name, &cwd, &command_spec)?;
+    }
     let session = TerminalSession {
         id: session_id.clone(),
         workspace_id: input.workspace_id.clone(),
@@ -240,7 +380,8 @@ pub fn create_workspace_terminal(
         pid: None,
         stale: false,
         closed_at: None,
-        backend: "pty".to_string(),
+        backend: if use_tmux_backend { "tmux" } else { "pty" }.to_string(),
+        tmux_session_name: tmux_session_name.clone(),
         title,
         terminal_kind: kind,
         display_order,
@@ -298,41 +439,28 @@ pub fn create_workspace_terminal(
         &launch_args,
     );
 
-    let seq_counter = Arc::new(AtomicU64::new(
-        terminal_repository::next_seq(&state.db, &session.id).unwrap_or(0),
-    ));
-    let last_output_at_secs = Arc::new(AtomicU64::new(0));
-    let active = Arc::new(ActiveTerminal {
-        session_id: session.id.clone(),
-        terminal_kind: session.terminal_kind.clone(),
-        writer: Mutex::new(writer),
-        killer: Mutex::new(killer),
-        master: Mutex::new(pair.master),
-        last_output_at_secs: last_output_at_secs.clone(),
-        seq_counter: seq_counter.clone(),
-    });
-    state
-        .terminals
-        .lock()
-        .map_err(|_| "Terminal registry lock poisoned".to_string())?
-        .insert(session.id.clone(), active);
-
-    spawn_terminal_reader(
-        state.app_handle.clone(),
-        state.db.clone(),
-        input.workspace_id.clone(),
-        session_id.clone(),
-        seq_counter,
-        last_output_at_secs,
-        reader,
-    );
-    spawn_terminal_monitor(
-        state.clone(),
-        input.workspace_id,
-        session.session_role.clone(),
-        session_id,
-        child,
-    );
+    if let Some(tmux_name) = &tmux_session_name {
+        let (attach_command, attach_args) = tmux::attach_command(tmux_name);
+        spawn_active_terminal(
+            state,
+            &session,
+            &attach_command,
+            &attach_args,
+            &cwd,
+            cols,
+            rows,
+        )?;
+    } else {
+        spawn_active_terminal(
+            state,
+            &session,
+            &launch_command,
+            &launch_args,
+            &cwd,
+            cols,
+            rows,
+        )?;
+    }
 
     terminal_repository::get_session(&state.db, &session.id)?
         .ok_or_else(|| format!("Terminal session {} was not found", session.id))
@@ -353,6 +481,9 @@ pub fn attach_workspace_terminal_session(
     // Already connected — nothing to do.
     if active_for_session(state, &session.id)?.is_some() {
         return Ok(session);
+    }
+    if session.backend == "tmux" {
+        return attach_tmux_terminal(state, &session, input.cols, input.rows);
     }
     // PTY sessions can't be reattached once the process exits.
     if session.status != "running" {
@@ -382,9 +513,18 @@ pub fn write_workspace_terminal_input(
     workspace_id: &str,
     data: &str,
 ) -> Result<(), String> {
-    let active = active_for_workspace(state, workspace_id, "agent")?
-        .ok_or_else(|| "No active terminal session for this workspace".to_string())?;
-    write_workspace_terminal_session_input(state, &active.session_id, data)
+    if let Some(active) = active_for_workspace(state, workspace_id, "agent")? {
+        return write_workspace_terminal_session_input(state, &active.session_id, data);
+    }
+    if let Some(session) =
+        terminal_repository::latest_for_workspace_role(&state.db, workspace_id, "agent")?
+    {
+        if session.backend == "tmux" && session.status == "running" {
+            attach_tmux_terminal(state, &session, None, None)?;
+            return write_workspace_terminal_session_input(state, &session.id, data);
+        }
+    }
+    Err("No active terminal session for this workspace".to_string())
 }
 
 pub fn write_workspace_terminal_session_input(
@@ -392,6 +532,13 @@ pub fn write_workspace_terminal_session_input(
     session_id: &str,
     data: &str,
 ) -> Result<(), String> {
+    if active_for_session(state, session_id)?.is_none() {
+        if let Some(session) = terminal_repository::get_session(&state.db, session_id)? {
+            if session.backend == "tmux" && session.status == "running" {
+                let _ = attach_tmux_terminal(state, &session, None, None)?;
+            }
+        }
+    }
     let is_shell_or_utility = active_for_session(state, session_id)?
         .map(|active| matches!(active.terminal_kind.as_str(), "shell" | "utility"))
         .unwrap_or(false);
@@ -482,6 +629,12 @@ pub fn interrupt_workspace_terminal_session_by_id(
 ) -> Result<TerminalSession, String> {
     let session = terminal_repository::get_session(&state.db, session_id)?
         .ok_or_else(|| format!("Terminal session {session_id} was not found"))?;
+    if active_for_session(state, session_id)?.is_none()
+        && session.backend == "tmux"
+        && session.status == "running"
+    {
+        let _ = attach_tmux_terminal(state, &session, None, None)?;
+    }
     send_interrupt_to_session(state, &session)?;
     append_log_line(
         state,
@@ -500,9 +653,18 @@ pub fn resize_workspace_terminal(
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
-    let active = active_for_workspace(state, workspace_id, "agent")?
-        .ok_or_else(|| "No active terminal session for this workspace".to_string())?;
-    resize_workspace_terminal_session(state, &active.session_id, cols, rows)
+    if let Some(active) = active_for_workspace(state, workspace_id, "agent")? {
+        return resize_workspace_terminal_session(state, &active.session_id, cols, rows);
+    }
+    if let Some(session) =
+        terminal_repository::latest_for_workspace_role(&state.db, workspace_id, "agent")?
+    {
+        if session.backend == "tmux" && session.status == "running" {
+            attach_tmux_terminal(state, &session, Some(cols), Some(rows))?;
+            return resize_workspace_terminal_session(state, &session.id, cols, rows);
+        }
+    }
+    Err("No active terminal session for this workspace".to_string())
 }
 
 pub fn resize_workspace_terminal_session(
@@ -511,6 +673,13 @@ pub fn resize_workspace_terminal_session(
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
+    if active_for_session(state, session_id)?.is_none() {
+        if let Some(session) = terminal_repository::get_session(&state.db, session_id)? {
+            if session.backend == "tmux" && session.status == "running" {
+                let _ = attach_tmux_terminal(state, &session, Some(cols), Some(rows))?;
+            }
+        }
+    }
     let active = active_for_session(state, session_id)?
         .ok_or_else(|| format!("Terminal session {session_id} is not attached"))?;
     let master = active
@@ -571,7 +740,25 @@ pub fn interrupt_workspace_terminal_session(
             );
         }
         None => {
-            reconcile_orphan_running_session(state, workspace_id, "agent", "interrupted")?;
+            if let Some(session) =
+                terminal_repository::latest_for_workspace_role(&state.db, workspace_id, "agent")?
+            {
+                if session.backend == "tmux" && session.status == "running" {
+                    let attached = attach_tmux_terminal(state, &session, None, None)?;
+                    send_interrupt_to_session(state, &attached)?;
+                    append_log_line(
+                        state,
+                        workspace_id,
+                        &attached.id,
+                        "system",
+                        "\r\n[mnemonic] interrupt sent (Ctrl-C)\r\n",
+                    );
+                } else {
+                    reconcile_orphan_running_session(state, workspace_id, "agent", "interrupted")?;
+                }
+            } else {
+                reconcile_orphan_running_session(state, workspace_id, "agent", "interrupted")?;
+            }
         }
     }
     get_workspace_terminal_session_state(state, workspace_id)
@@ -595,8 +782,16 @@ pub fn stop_workspace_terminal_session_by_id(
 ) -> Result<TerminalSession, String> {
     let session = terminal_repository::get_session(&state.db, session_id)?
         .ok_or_else(|| format!("Terminal session {session_id} was not found"))?;
+    if let Some(tmux_name) = session.tmux_session_name.as_deref() {
+        if session.backend == "tmux" && session.status == "running" {
+            let _ = tmux::kill_session(tmux_name);
+        }
+    }
     detach_active_terminal(state, session_id);
-    let _ = state.pending_commands.lock().map(|mut m| m.remove(session_id));
+    let _ = state
+        .pending_commands
+        .lock()
+        .map(|mut m| m.remove(session_id));
     let ended_at = timestamp();
     terminal_repository::mark_finished(&state.db, session_id, "stopped", &ended_at, false)?;
     let task_run_id = format!("task-{}-terminal-{}", session.workspace_id, session_id);
@@ -779,6 +974,18 @@ pub fn reconnect_workspace_terminal_session(
                     "Session {session_id} is not the latest known session for workspace {workspace_id}"
                 ));
             }
+            if latest.backend == "tmux" && latest.status == "running" {
+                let _ = attach_tmux_terminal(state, &latest, None, None)?;
+            }
+        }
+    } else if let Some(latest) =
+        terminal_repository::latest_for_workspace_role(&state.db, workspace_id, "agent")?
+    {
+        if active_for_session(state, &latest.id)?.is_none()
+            && latest.backend == "tmux"
+            && latest.status == "running"
+        {
+            let _ = attach_tmux_terminal(state, &latest, None, None)?;
         }
     }
     get_workspace_terminal_session_state(state, workspace_id)
@@ -970,6 +1177,7 @@ mod tests {
             stale: false,
             closed_at: None,
             backend: "pty".to_string(),
+            tmux_session_name: None,
             title: "Codex".to_string(),
             terminal_kind: "agent".to_string(),
             display_order: 0,
@@ -1003,6 +1211,7 @@ mod tests {
             stale: false,
             closed_at: None,
             backend: "pty".to_string(),
+            tmux_session_name: None,
             title: "Ollama qwen".to_string(),
             terminal_kind: "agent".to_string(),
             display_order: 0,
@@ -1032,6 +1241,7 @@ mod tests {
             stale: false,
             closed_at: None,
             backend: "pty".to_string(),
+            tmux_session_name: None,
             title: "Ollama Local".to_string(),
             terminal_kind: "agent".to_string(),
             display_order: 0,

@@ -105,6 +105,7 @@ pub fn run() {
             activity::list_workspace_activity,
             settings::get_settings,
             settings::save_repo_roots,
+            settings::save_managed_workspaces_root,
             settings::save_has_completed_env_check,
             settings::resolve_git_repository_path,
             settings::get_ai_model_settings,

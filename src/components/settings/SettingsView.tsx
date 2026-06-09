@@ -1,9 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { ChevronDown, PlugZap, Save } from 'lucide-react';
+import { ChevronDown, FolderOpen, PlugZap, Save } from 'lucide-react';
+import { open } from '@tauri-apps/plugin-dialog';
 import { Button } from '../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Switch } from '../ui/switch';
-import { getAiModelSettings, getSetting, saveAiModelSettings, setSetting } from '../../lib/tauri-api/settings';
+import { getAiModelSettings, getSetting, saveAiModelSettings, saveManagedWorkspacesRoot, setSetting } from '../../lib/tauri-api/settings';
 import type { AiModelSettings } from '../../types/settings';
 import type { AppSettings } from '../../types';
 import { AgentProfilesCard } from './AgentProfilesCard';
@@ -17,8 +18,12 @@ import {
 import { useActiveAgentProviders } from '../../lib/hooks/useActiveAgentProviders';
 
 const CLAUDE_AGENT_MODELS = [
-  { value: 'claude-opus-4-7', label: 'Claude Opus 4.7 (1M context)' },
-  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6 (1M context)' },
+  { value: 'claude-opus-4-8', label: 'Claude Opus 4.8' },
+  { value: 'claude-opus-4-8[1m]', label: 'Claude Opus 4.8 (1M context)' },
+  { value: 'claude-opus-4-7', label: 'Claude Opus 4.7' },
+  { value: 'claude-opus-4-7[1m]', label: 'Claude Opus 4.7 (1M context)' },
+  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
+  { value: 'claude-opus-4-6[1m]', label: 'Claude Opus 4.6 (1M context)' },
   { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (fast + capable)' },
   { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 (fast + cheap)' },
 ];
@@ -32,6 +37,8 @@ const CODEX_AGENT_MODELS = [
 ];
 
 const ORCHESTRATOR_MODELS = [
+  { value: 'claude-opus-4-8', label: 'Claude Opus 4.8' },
+  { value: 'claude-opus-4-8[1m]', label: 'Claude Opus 4.8 (1M context)' },
   { value: 'claude-opus-4-7', label: 'Claude Opus 4.7 (1M context)' },
   { value: 'claude-opus-4-6', label: 'Claude Opus 4.6 (1M context)' },
   { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (fast + capable)' },
@@ -282,6 +289,99 @@ function AiModelsCard({ activeProviderIds }: { activeProviderIds: ReadonlySet<Ag
         <Save className="w-3.5 h-3.5" />
         {saving ? 'Saving…' : 'Save model settings'}
       </Button>
+    </div>
+  );
+}
+
+
+function ManagedWorkspacesCard({
+  settings,
+  onSettingsChange,
+}: {
+  settings: AppSettings | null;
+  onSettingsChange: (settings: AppSettings) => void;
+}) {
+  const [path, setPath] = useState(settings?.managedWorkspacesRoot ?? '');
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPath(settings?.managedWorkspacesRoot ?? '');
+  }, [settings?.managedWorkspacesRoot]);
+
+  const isTauriShell = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+
+  const savePath = async (nextPath = path) => {
+    const trimmed = nextPath.trim();
+    if (!trimmed) {
+      setMessage('Choose a folder for managed workspaces.');
+      return;
+    }
+    setSaving(true);
+    setMessage(null);
+    try {
+      const saved = await saveManagedWorkspacesRoot(trimmed);
+      setPath(saved.managedWorkspacesRoot);
+      onSettingsChange(saved);
+      setMessage('Managed workspace location saved. New workspaces will be created there.');
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const chooseFolder = async () => {
+    setMessage(null);
+    if (!isTauriShell()) {
+      setMessage('Folder picker is only available in the Mnemonic desktop app.');
+      return;
+    }
+    try {
+      const picked = await open({ directory: true, multiple: false, title: 'Choose managed workspace folder' });
+      if (picked === null) return;
+      setPath(picked);
+      await savePath(picked);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-mn-border bg-mn-card p-4">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[14px] font-bold text-mn-text">Managed Workspace Location</h2>
+          <p className="text-[11px] text-mn-muted mt-0.5">
+            New Mnemonic-managed Git worktrees are created here, outside your main repo checkouts.
+          </p>
+        </div>
+        <span className="shrink-0 rounded-full border border-mn-border bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-mn-muted">
+          worktrees
+        </span>
+      </div>
+      <label className="text-[12px] font-semibold text-mn-text block mb-1">Folder</label>
+      <div className="flex items-center gap-2">
+        <input
+          value={path}
+          onChange={(event) => setPath(event.target.value)}
+          onBlur={() => void savePath()}
+          className="h-9 min-w-0 flex-1 rounded-md border border-mn-border bg-mn-bg px-2 font-mono text-[12px] text-mn-text focus:border-mn-blue/40 focus:outline-none"
+          placeholder="~/Mnemonic/workspaces"
+          aria-label="Managed workspace folder"
+        />
+        <Button type="button" variant="ghost" size="sm" onClick={() => void chooseFolder()} disabled={saving} className="text-mn-blue hover:bg-mn-blue/15 border border-mn-blue/30">
+          <FolderOpen className="w-3.5 h-3.5" />
+          Choose…
+        </Button>
+        <Button type="button" size="sm" onClick={() => void savePath()} disabled={saving}>
+          {saving ? 'Saving…' : 'Save'}
+        </Button>
+      </div>
+      <p className="mt-2 text-[11px] text-mn-muted">
+        Existing workspaces stay where they are; this affects newly created managed worktrees.
+      </p>
+      {message && <p className="mt-3 text-[12px] text-mn-muted">{message}</p>}
     </div>
   );
 }
@@ -546,6 +646,7 @@ export function SettingsView({
           description="Registered repos, worktrees, relationships, and scope previews."
           meta={`${settings?.discoveredRepositories.length ?? 0} repos`}
         >
+          <ManagedWorkspacesCard settings={settings} onSettingsChange={onSettingsChange} />
           <RepositoriesCard
             settings={settings}
             onSettingsChange={onSettingsChange}

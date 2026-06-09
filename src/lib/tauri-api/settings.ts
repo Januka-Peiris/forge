@@ -6,6 +6,10 @@ export function getSettings(): Promise<AppSettings> {
 }
 
 /** Resolves a directory to `git rev-parse --show-toplevel` (Rust). */
+export function saveManagedWorkspacesRoot(path: string): Promise<AppSettings> {
+  return invokeCommand<AppSettings>('save_managed_workspaces_root', { path });
+}
+
 export function resolveGitRepositoryPath(path: string): Promise<string> {
   return invokeCommand<string>('resolve_git_repository_path', { path });
 }

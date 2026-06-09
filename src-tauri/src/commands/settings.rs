@@ -21,6 +21,15 @@ pub fn save_repo_roots(
 }
 
 #[tauri::command]
+pub fn save_managed_workspaces_root(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<AppSettings, String> {
+    settings_repository::save_managed_workspaces_root(&state.db, &path)?;
+    settings_service::get_settings(&state)
+}
+
+#[tauri::command]
 pub fn resolve_git_repository_path(path: String) -> Result<String, String> {
     repo_scanner_service::resolve_git_repository_path(&path)
 }
@@ -32,7 +41,7 @@ pub fn get_ai_model_settings(state: State<'_, AppState>) -> Result<AiModelSettin
         let legacy = settings_repository::get_value(&state.db, "agent_default_model")?;
         explicit
             .or(legacy)
-            .unwrap_or_else(|| "claude-sonnet-4-6".to_string())
+            .unwrap_or_else(|| "claude-opus-4-6[1m]".to_string())
     };
     let codex_agent_model = settings_repository::get_value(&state.db, "codex_agent_default_model")?
         .unwrap_or_else(|| "gpt-5.4".to_string());

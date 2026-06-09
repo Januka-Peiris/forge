@@ -178,10 +178,14 @@ fn merge_draft(drafts: &mut BTreeMap<String, RelationshipDraft>, incoming: Relat
         if existing.app_relationship_id.is_none() {
             existing.app_relationship_id = incoming.app_relationship_id;
         }
-        if existing.label.is_none() || (incoming.sources.contains("app") && incoming.label.is_some()) {
+        if existing.label.is_none()
+            || (incoming.sources.contains("app") && incoming.label.is_some())
+        {
             existing.label = incoming.label;
         }
-        if existing.notes.is_none() || (incoming.sources.contains("app") && incoming.notes.is_some()) {
+        if existing.notes.is_none()
+            || (incoming.sources.contains("app") && incoming.notes.is_some())
+        {
             existing.notes = incoming.notes;
         }
         existing.sources.extend(incoming.sources);

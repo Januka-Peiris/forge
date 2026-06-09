@@ -11,6 +11,8 @@ export const CLAUDE_THINKING_OPTIONS: ComposerReasoningOption[] = [
 ];
 
 export const CLAUDE_MODEL_OPTIONS: ComposerModelOption[] = [
+  { value: 'claude-opus-4-8', label: 'Opus 4.8' },
+  { value: 'claude-opus-4-8[1m]', label: 'Opus 4.8 · 1M context' },
   { value: 'claude-opus-4-7', label: 'Opus 4.7' },
   { value: 'claude-opus-4-7[1m]', label: 'Opus 4.7 · 1M context' },
   { value: 'claude-opus-4-6', label: 'Opus 4.6' },

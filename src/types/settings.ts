@@ -4,6 +4,7 @@ export interface AppSettings {
   repoRoots: string[];
   discoveredRepositories: DiscoveredRepository[];
   hasCompletedEnvCheck: boolean;
+  managedWorkspacesRoot: string;
 }
 
 export interface SaveRepoRootsInput {

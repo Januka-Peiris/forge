@@ -10,6 +10,7 @@ pub struct CreatedWorktree {
 
 pub fn create_mnemonic_worktree(
     repo_path: &str,
+    managed_workspaces_root: &str,
     workspace_id: &str,
     branch: &str,
     base_branch: &str,
@@ -23,7 +24,9 @@ pub fn create_mnemonic_worktree(
     }
 
     let branch = sanitize_branch(branch)?;
-    let worktree_path = mnemonic_worktree_path(repo_path, workspace_id)?;
+    let managed_root = absolute_path(&expand_home(managed_workspaces_root))?;
+    ensure_managed_root_outside_repo(repo_path, &managed_root)?;
+    let worktree_path = mnemonic_worktree_path(repo_path, &managed_root, workspace_id)?;
     if worktree_path.exists() {
         return Err(format!(
             "Workspace path already exists: {}",
@@ -130,14 +133,59 @@ fn branch_exists(repo_path: &Path, branch: &str) -> Result<bool, String> {
     Ok(output.status.success())
 }
 
-/// Mnemonic-managed worktrees live under `<repo>/mnemonic/<workspace_id>/`.
+/// Mnemonic-managed worktrees live under the configured managed workspace root.
 ///
-/// Paths are anchored to the repository checkout the user registered (not a sibling
-/// tree under the parent directory). The leaf folder is the workspace id so shells
-/// stay compact; labels and branches live in the DB and Git.
-fn mnemonic_worktree_path(repo_path: &Path, workspace_id: &str) -> Result<PathBuf, String> {
+/// The repo folder groups worktrees by source checkout, and the leaf folder is the
+/// workspace id so labels and branches can continue to live in the DB and Git.
+fn mnemonic_worktree_path(
+    repo_path: &Path,
+    managed_root: &Path,
+    workspace_id: &str,
+) -> Result<PathBuf, String> {
+    let repo_name = repo_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(sanitize_path_part)
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| "repository".to_string());
     let leaf = sanitize_path_part(workspace_id);
-    Ok(repo_path.join("mnemonic").join(leaf))
+    Ok(managed_root.join(repo_name).join(leaf))
+}
+
+fn ensure_managed_root_outside_repo(repo_path: &Path, managed_root: &Path) -> Result<(), String> {
+    let repo_root = std::fs::canonicalize(repo_path).unwrap_or_else(|_| repo_path.to_path_buf());
+    if managed_root.starts_with(&repo_root) {
+        return Err(format!(
+            "Managed workspace location must be outside the repository checkout. Choose a folder outside {}.",
+            repo_root.display()
+        ));
+    }
+    Ok(())
+}
+
+fn expand_home(path: &str) -> String {
+    if path == "~" {
+        if let Some(home) = std::env::var_os("HOME") {
+            return home.to_string_lossy().to_string();
+        }
+    }
+    if let Some(rest) = path.strip_prefix("~/") {
+        if let Some(home) = std::env::var_os("HOME") {
+            return format!("{}/{}", home.to_string_lossy(), rest);
+        }
+    }
+    path.to_string()
+}
+
+fn absolute_path(path: &str) -> Result<PathBuf, String> {
+    let path = PathBuf::from(path);
+    if path.is_absolute() {
+        Ok(path)
+    } else {
+        std::env::current_dir()
+            .map(|cwd| cwd.join(path))
+            .map_err(|err| format!("Failed to resolve managed workspace location: {err}"))
+    }
 }
 
 fn sanitize_branch(branch: &str) -> Result<String, String> {

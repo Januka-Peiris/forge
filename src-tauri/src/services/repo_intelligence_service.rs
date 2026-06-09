@@ -936,7 +936,9 @@ mod tests {
         }
     }
 
-    fn projection(entries: &[RepoEntry]) -> Vec<(String, String, Vec<String>, Vec<String>, i64)> {
+    type RepoEntryProjection = (String, String, Vec<String>, Vec<String>, i64);
+
+    fn projection(entries: &[RepoEntry]) -> Vec<RepoEntryProjection> {
         let mut rows = entries
             .iter()
             .map(|entry| {
@@ -961,7 +963,10 @@ mod tests {
 
     fn init_git_repo(root: &Path) {
         git_run(root, &["init"]);
-        git_run(root, &["config", "user.email", "mnemonic-tests@example.com"]);
+        git_run(
+            root,
+            &["config", "user.email", "mnemonic-tests@example.com"],
+        );
         git_run(root, &["config", "user.name", "Mnemonic Tests"]);
     }
 
