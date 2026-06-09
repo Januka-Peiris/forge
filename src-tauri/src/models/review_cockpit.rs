@@ -73,7 +73,5 @@ pub struct QueueReviewAgentPromptInput {
     pub comment_id: Option<String>,
     pub action: String,
     pub profile_id: Option<String>,
-    pub task_mode: Option<String>,
-    pub reasoning: Option<String>,
     pub mode: Option<String>,
 }

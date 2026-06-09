@@ -30,8 +30,6 @@ export interface BatchDispatchPromptInput {
   workspaceIds: string[];
   prompt: string;
   profileId?: string;
-  taskMode?: string;
-  reasoning?: string;
 }
 
 export function batchDispatchWorkspaceAgentPrompt(input: BatchDispatchPromptInput): Promise<AgentPromptEntry[]> {

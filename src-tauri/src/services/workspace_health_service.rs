@@ -420,6 +420,7 @@ mod tests {
             is_visible: true,
             last_attached_at: None,
             last_captured_seq: 0,
+            claude_session_id: None,
         }
     }
 

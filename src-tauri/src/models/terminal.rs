@@ -23,6 +23,7 @@ pub struct TerminalSession {
     pub is_visible: bool,
     pub last_attached_at: Option<String>,
     pub last_captured_seq: i64,
+    pub claude_session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -112,10 +113,7 @@ pub struct QueueAgentPromptInput {
     pub prompt: String,
     pub profile: Option<String>,
     pub profile_id: Option<String>,
-    pub task_mode: Option<String>,
-    pub reasoning: Option<String>,
     pub mode: Option<String>,
-    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -124,8 +122,6 @@ pub struct BatchDispatchPromptInput {
     pub workspace_ids: Vec<String>,
     pub prompt: String,
     pub profile_id: Option<String>,
-    pub task_mode: Option<String>,
-    pub reasoning: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -139,5 +135,4 @@ pub struct AgentPromptEntry {
     pub status: String,
     pub created_at: String,
     pub sent_at: Option<String>,
-    pub model: Option<String>,
 }

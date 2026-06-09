@@ -706,6 +706,7 @@ pub fn run(connection: &Connection) -> Result<(), String> {
     add_column_if_missing(connection, "agent_memory", "source_detail", "TEXT")?;
     add_column_if_missing(connection, "agent_memory", "last_used_at", "TEXT")?;
     add_column_if_missing(connection, "terminal_prompt_entries", "model", "TEXT")?;
+    add_column_if_missing(connection, "terminal_sessions", "claude_session_id", "TEXT")?;
 
     // Workspace templates table
     connection
