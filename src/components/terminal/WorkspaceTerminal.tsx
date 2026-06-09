@@ -1040,7 +1040,6 @@ export function WorkspaceTerminal({
       {(focusedIsAgent || hasAnyAgentSession) && (
         <WorkspaceComposer
           workspaceId={workspace.id}
-          busy={busy}
           canInterrupt={focusedSession?.status === 'running' || false}
           queuedCount={0}
           promptTemplateWarning={promptTemplateWarning}

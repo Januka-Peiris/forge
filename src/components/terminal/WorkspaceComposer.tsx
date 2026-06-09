@@ -118,7 +118,6 @@ export interface ComposerSettings {
 
 interface WorkspaceComposerProps {
   workspaceId: string;
-  busy: boolean;
   canInterrupt: boolean;
   queuedCount: number;
   promptTemplateWarning: string | null;
@@ -138,7 +137,6 @@ interface WorkspaceComposerProps {
 
 export function WorkspaceComposer({
   workspaceId,
-  busy,
   canInterrupt,
   queuedCount,
   promptTemplateWarning,
@@ -283,7 +281,7 @@ export function WorkspaceComposer({
   };
 
   const handleSend = () => {
-    if (!promptInput.trim() || busy) return;
+    if (!promptInput.trim()) return;
     const text = promptInput.trim();
     updatePromptInput('');
     setAttachments([]);
@@ -863,7 +861,7 @@ export function WorkspaceComposer({
               </button>
             )}
             <button
-              disabled={busy || !promptInput.trim()}
+              disabled={!promptInput.trim()}
               onClick={handleSend}
               className="rounded-btn border border-mn-cyan/30 bg-mn-cyan/5 px-3 py-2 text-sm font-semibold text-mn-cyan/80 hover:bg-mn-cyan/10 disabled:opacity-50"
               title={settings.sendBehavior === 'interrupt_send' ? 'Interrupt then send (same as Enter)' : 'Send now (same as Enter)'}
