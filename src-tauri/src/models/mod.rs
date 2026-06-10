@@ -81,7 +81,8 @@ pub use scheduler::WorkspaceSchedulerJob;
 pub use settings::{AiModelSettings, AppSettings, SaveAiModelSettingsInput, SaveRepoRootsInput};
 pub use task_lifecycle::{TaskEvent, TaskRun, WorkspaceTaskSnapshot};
 pub use terminal::{
-    AgentPromptEntry, AttachWorkspaceTerminalInput, BatchDispatchPromptInput, CommandApprovalEvent,
+    AgentDecisionEvent, AgentDecisionOption, AgentDecisionResolvedEvent, AgentPromptEntry,
+    AttachWorkspaceTerminalInput, BatchDispatchPromptInput, CommandApprovalEvent,
     CreateWorkspaceTerminalInput, QueueAgentPromptInput, StartTerminalSessionInput,
     TerminalOutputChunk, TerminalOutputEvent, TerminalOutputResponse, TerminalSession,
     TerminalSessionState,

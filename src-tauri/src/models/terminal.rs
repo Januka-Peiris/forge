@@ -69,6 +69,32 @@ pub struct CommandApprovalEvent {
     pub command: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentDecisionOption {
+    /// The key to press in the terminal to pick this option (e.g. "1").
+    pub key: String,
+    pub label: String,
+}
+
+/// Emitted when an agent TUI is idle on a numbered decision dialog (plan
+/// approval, permission prompt, AskUserQuestion) so the chat UI can surface it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentDecisionEvent {
+    pub workspace_id: String,
+    pub session_id: String,
+    pub question: String,
+    pub options: Vec<AgentDecisionOption>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentDecisionResolvedEvent {
+    pub workspace_id: String,
+    pub session_id: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StartTerminalSessionInput {

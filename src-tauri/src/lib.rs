@@ -166,6 +166,7 @@ pub fn run() {
             terminal::check_shell_command_safety,
             terminal::attach_workspace_terminal_session,
             terminal::write_workspace_terminal_session_input,
+            terminal::answer_workspace_terminal_decision,
             terminal::approve_workspace_terminal_command,
             terminal::resize_workspace_terminal_session,
             terminal::interrupt_workspace_terminal_session_by_id,

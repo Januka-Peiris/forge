@@ -79,6 +79,9 @@ export type { MnemonicWorkspaceConfig, WorkspaceScriptTerminalSession } from './
 export type { WorkspaceHookCommand, WorkspaceHookEvent, WorkspaceHookInspector } from './workspace-hooks';
 export type { TaskEvent, TaskRun, WorkspaceSchedulerJob, WorkspaceTaskSnapshot } from './task-lifecycle';
 export type {
+  AgentDecisionOption,
+  AgentDecisionPrompt,
+  AgentDecisionResolvedEvent,
   AgentPromptEntry,
   AgentPromptStatus,
   QueueAgentPromptInput,
