@@ -412,22 +412,20 @@ export function WorkspaceComposer({
                 </SelectContent>
               </Select>
               <div className="h-3.5 w-px bg-mn-border/50" />
-              <div className="flex items-center gap-0.5">
-                {thinkingOptions.map((level) => (
-                  <button
-                    key={level.value}
-                    onClick={() => onSettingsChange({ selectedReasoning: level.value })}
-                    title={level.hint ?? level.label}
-                    className={`rounded px-1.5 py-0.5 text-[10px] transition-colors ${
-                      settings.selectedReasoning === level.value
-                        ? 'bg-mn-violet/20 text-mn-violet font-semibold'
-                        : 'text-mn-muted/50 hover:text-mn-muted hover:bg-white/5'
-                    }`}
-                  >
-                    {level.label}
-                  </button>
-                ))}
-              </div>
+              <Select value={settings.selectedReasoning} onValueChange={(v) => onSettingsChange({ selectedReasoning: v })}>
+                <SelectTrigger
+                  compact
+                  title="Thinking level (applies to new sessions)"
+                  className={settings.selectedReasoning !== 'Default' && settings.selectedReasoning !== 'medium' ? 'text-mn-teal font-semibold' : ''}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {thinkingOptions.map((level) => (
+                    <SelectItem key={level.value} value={level.value}>{level.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {promptMeter && (
                 <>
                   <span>·</span>

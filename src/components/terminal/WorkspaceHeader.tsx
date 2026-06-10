@@ -113,22 +113,19 @@ export function WorkspaceHeader({
               </Button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-[360px] max-w-[calc(100vw-24px)]">
-              <p className="text-xs font-bold uppercase tracking-widest text-mn-muted">How to use Mnemonic modes</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-mn-muted">How this workspace works</p>
               <div className="mt-2 space-y-2 text-xs leading-relaxed">
                 <div>
-                  <p className="font-semibold text-mn-text">Direct agent mode</p>
-                  <p className="text-mn-muted">Best for focused edits, debugging, and quick iterations in a single chat or terminal tab.</p>
+                  <p className="font-semibold text-mn-text">Composer → agent terminal</p>
+                  <p className="text-mn-muted">Enter sends your prompt straight into the focused agent session. If the agent is mid-turn, it queues your message itself and picks it up after.</p>
                 </div>
                 <div>
-                  <p className="font-semibold text-mn-text">Coordinator mode</p>
-                  <p className="text-mn-muted">Use when work needs planning + delegation. A brain profile decides next steps, coder workers execute, and timeline cards summarize review-ready outcomes.</p>
+                  <p className="font-semibold text-mn-text">Plan &amp; model</p>
+                  <p className="text-mn-muted">The Plan button (Shift+Tab) cycles the agent's permission mode — the terminal footer shows the current one. Changing model switches a live Claude session via /model.</p>
                 </div>
                 <div>
                   <p className="font-semibold text-mn-text">Orchestrator</p>
-                  <p className="text-mn-muted">Background app-level automation that watches workspace state and can trigger follow-up coordination/checks. Use for continuous flow across multiple workspaces.</p>
-                </div>
-                <div className="rounded border border-mn-border/60 bg-black/10 px-2 py-1 text-[11px] text-mn-dim">
-                  Tip: Start with Direct for small tasks, Coordinator for multi-step goals, and Orchestrator for ongoing automation.
+                  <p className="text-mn-muted">Optional background automation (sidebar toggle) that watches workspace state and can trigger follow-up checks across workspaces.</p>
                 </div>
               </div>
             </PopoverContent>

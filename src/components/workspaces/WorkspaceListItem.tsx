@@ -42,13 +42,13 @@ function WorkspaceListItemBase({
   const iconColorClass = useMemo(() => {
     if (workspace.status === 'Running') return 'text-mn-orange';
     if (workspace.status === 'Blocked') return 'text-mn-red';
-    if (workspace.status === 'Review Ready') return 'text-mn-violet';
-    if (workspace.status === 'Merged') return 'text-mn-violet opacity-60';
+    if (workspace.status === 'Review Ready') return 'text-mn-teal';
+    if (workspace.status === 'Merged') return 'text-mn-teal opacity-60';
     if (workspace.status === 'Waiting') return 'text-mn-blue opacity-80';
     
     if (workspace.prStatus === 'Open') return 'text-mn-cyan';
     if (workspace.prStatus === 'Draft') return 'text-mn-muted';
-    if (workspace.prStatus === 'Merged') return 'text-mn-violet opacity-60';
+    if (workspace.prStatus === 'Merged') return 'text-mn-teal opacity-60';
     if (workspace.prStatus === 'Closed') return 'text-mn-red opacity-60';
     
     return 'text-mn-muted';
@@ -117,7 +117,7 @@ function WorkspaceListItemBase({
               )}
               {workspace.parentWorkspaceId && (
                 <Tooltip content={`Federated task member · parent ${workspace.parentWorkspaceId}`} side="bottom">
-                  <span className="flex items-center gap-1 text-[10px] text-mn-violet cursor-help">
+                  <span className="flex items-center gap-1 text-[10px] text-mn-teal cursor-help">
                     <Network className="h-2.5 w-2.5" />
                     federated
                   </span>

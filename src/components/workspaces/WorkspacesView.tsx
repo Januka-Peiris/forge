@@ -100,7 +100,7 @@ export function WorkspacesView({
                 onClick={() => {}} 
               />
               <QuickStartCard 
-                icon={<Bot className="h-5 w-5 text-mn-violet" />}
+                icon={<Bot className="h-5 w-5 text-mn-teal" />}
                 title="Configure Agents"
                 description="Set up Claude, Codex, Kimi, or local LLMs in Settings."
                 onClick={() => {}} 
