@@ -5,6 +5,8 @@ import { interruptWorkspaceTerminalSessionById, queueWorkspaceAgentPrompt } from
 import { stepWorkspaceCoordinator } from '../../lib/tauri-api/coordinator';
 import { formatSessionError } from '../../lib/ui-errors';
 import type { AgentChatNextAction } from '../../types/agent-chat';
+import type { AgentProviderId } from '../../lib/active-agent-providers';
+import { claudeLaunchExtraArgs } from './workspace-composer-options';
 
 import type { MnemonicWorkspaceConfig, TerminalSession } from '../../types';
 import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
@@ -14,6 +16,7 @@ interface UseWorkspaceTerminalComposerActionsParams {
   workspaceId: string | null;
   focusedSession: TerminalSession | null;
   selectedProfileId: string;
+  activePromptProvider: AgentProviderId;
   composerSettings: ComposerSettings;
   mnemonicConfig: MnemonicWorkspaceConfig | null;
   refreshSessions: (fetchOutput?: boolean) => Promise<void>;
@@ -35,6 +38,7 @@ export function useWorkspaceTerminalComposerActions({
   workspaceId,
   focusedSession,
   selectedProfileId,
+  activePromptProvider,
   composerSettings,
   mnemonicConfig,
   refreshSessions,
@@ -143,13 +147,23 @@ export function useWorkspaceTerminalComposerActions({
         }
         if (effectiveBehavior === 'interrupt_send' && targetSession?.status === 'running') {
           await interruptWorkspaceTerminalSessionById(targetSession.id).catch(() => undefined);
+          // Give the TUI a beat to abort the in-flight turn before the prompt
+          // arrives, so the text does not interleave with the abort redraw.
+          await new Promise((resolve) => setTimeout(resolve, 350));
         }
         const terminalProfileId = targetSession?.terminalKind === 'agent' ? targetSession.profile : selectedProfileId;
+        // "Queue if running" holds the prompt instead of typing it into a busy
+        // session; it is dispatched when the agent session ends or on demand.
+        const mode = effectiveBehavior === 'queue_send' && targetSession?.status === 'running'
+          ? 'queued' as const
+          : 'send_now' as const;
         await queueWorkspaceAgentPrompt({
           workspaceId,
-          sessionId: targetSession?.status === 'running' ? targetSession.id : undefined,
+          sessionId: mode === 'send_now' && targetSession?.status === 'running' ? targetSession.id : undefined,
           prompt: effectivePrompt,
           profileId: terminalProfileId,
+          mode,
+          extraArgs: activePromptProvider === 'claude_code' ? claudeLaunchExtraArgs(composerSettings) : undefined,
         });
       } catch (err) {
         const message = formatSessionError(err);

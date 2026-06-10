@@ -19,16 +19,16 @@ const DEPENDENCIES: &[Dependency] = &[
         optional: false,
     },
     Dependency {
-        name: "codex CLI",
-        binary: "codex",
-        fix: "brew install codex",
+        name: "claude CLI",
+        binary: "claude",
+        fix: "curl -fsSL https://claude.ai/install.sh | bash (or: npm install -g @anthropic-ai/claude-code)",
         optional: false,
     },
     Dependency {
-        name: "claude CLI",
-        binary: "claude",
-        fix: "brew install claude",
-        optional: false,
+        name: "codex CLI",
+        binary: "codex",
+        fix: "npm install -g @openai/codex (or: brew install codex)",
+        optional: true,
     },
     Dependency {
         name: "GitHub CLI",

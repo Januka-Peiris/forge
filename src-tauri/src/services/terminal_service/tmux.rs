@@ -3,6 +3,19 @@ use std::process::Command;
 
 use super::{enriched_path, TerminalCommandSpec};
 
+/// Dedicated tmux server socket so agent sessions are isolated from the
+/// user's own tmux: their config (status bar, prefix key, mouse mode) does
+/// not leak into embedded terminals and `tmux kill-server` on their personal
+/// server cannot kill persistent agent sessions.
+const SOCKET_NAME: &str = "mnemonic";
+
+fn tmux_command() -> Command {
+    let mut command = Command::new("tmux");
+    command.args(["-L", SOCKET_NAME]);
+    command.env("PATH", enriched_path());
+    command
+}
+
 pub(super) fn available() -> bool {
     Command::new("tmux")
         .arg("-V")
@@ -29,9 +42,8 @@ pub(super) fn safe_session_name(workspace_id: &str, session_id: &str) -> String 
 }
 
 pub(super) fn session_exists(name: &str) -> bool {
-    Command::new("tmux")
+    tmux_command()
         .args(["has-session", "-t", name])
-        .env("PATH", enriched_path())
         .output()
         .map(|output| output.status.success())
         .unwrap_or(false)
@@ -41,17 +53,32 @@ pub(super) fn start_detached(
     name: &str,
     cwd: &Path,
     command_spec: &TerminalCommandSpec,
+    cols: u16,
+    rows: u16,
 ) -> Result<(), String> {
-    let shell_command = shell_command(command_spec);
-    let output = Command::new("tmux")
-        .args(["new-session", "-d", "-s", name, "-c"])
+    // Embed PATH in the command itself: if the private server already exists
+    // it spawns sessions with its own (possibly stale) environment, and an
+    // npm-installed claude needs `node` from its own bin directory.
+    let shell_command = format!(
+        "env PATH={} {}",
+        shell_quote(&super::path_for_command(&command_spec.command)),
+        shell_command(command_spec)
+    );
+    // -f /dev/null skips the user's tmux.conf if this command ends up
+    // starting the private server.
+    let mut command = tmux_command();
+    command
+        .args(["-f", "/dev/null", "new-session", "-d", "-s", name])
+        .args(["-x", &cols.to_string(), "-y", &rows.to_string()])
+        .arg("-c")
         .arg(cwd)
         .arg(shell_command)
-        .env("TERM", "xterm-256color")
-        .env("PATH", enriched_path())
+        .env("TERM", "xterm-256color");
+    let output = command
         .output()
         .map_err(|err| format!("Failed to start tmux: {err}"))?;
     if output.status.success() {
+        configure_session(name);
         Ok(())
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -63,10 +90,23 @@ pub(super) fn start_detached(
     }
 }
 
+/// Best-effort session options: no status bar inside the embedded xterm pane
+/// and no escape-key delay (TUIs read lone ESC presses).
+fn configure_session(name: &str) {
+    let _ = tmux_command()
+        .args(["set-option", "-t", name, "status", "off"])
+        .output();
+    let _ = tmux_command()
+        .args(["set-option", "-g", "escape-time", "0"])
+        .output();
+    let _ = tmux_command()
+        .args(["set-option", "-g", "history-limit", "10000"])
+        .output();
+}
+
 pub(super) fn kill_session(name: &str) -> Result<(), String> {
-    let output = Command::new("tmux")
+    let output = tmux_command()
         .args(["kill-session", "-t", name])
-        .env("PATH", enriched_path())
         .output()
         .map_err(|err| format!("Failed to stop tmux session: {err}"))?;
     if output.status.success() || !session_exists(name) {
@@ -85,6 +125,8 @@ pub(super) fn attach_command(name: &str) -> (String, Vec<String>) {
     (
         "tmux".to_string(),
         vec![
+            "-L".to_string(),
+            SOCKET_NAME.to_string(),
             "attach-session".to_string(),
             "-t".to_string(),
             name.to_string(),

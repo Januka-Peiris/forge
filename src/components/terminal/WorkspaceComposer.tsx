@@ -132,6 +132,7 @@ interface WorkspaceComposerProps {
   onSend: (text: string) => void;
   onTogglePlanMode: () => void;
   onInterrupt: () => void;
+  onRunQueued?: () => void;
   onStopCoordinator: () => void;
 }
 
@@ -151,6 +152,7 @@ export function WorkspaceComposer({
   onSend,
   onTogglePlanMode,
   onInterrupt,
+  onRunQueued,
   onStopCoordinator,
 }: WorkspaceComposerProps) {
   const draftKey = workspaceId;
@@ -869,9 +871,14 @@ export function WorkspaceComposer({
               <Zap className="inline h-3.5 w-3.5" /> Send
             </button>
             {queuedCount > 0 && (
-              <div className="rounded-btn border border-mn-border/60 bg-black/20 px-2 py-1 text-center text-[11px] text-mn-muted">
-                {queuedCount} queued
-              </div>
+              <button
+                type="button"
+                onClick={onRunQueued}
+                className="rounded-btn border border-mn-border/60 bg-black/20 px-2 py-1 text-center text-[11px] text-mn-muted hover:bg-white/10 hover:text-mn-text"
+                title="Prompts held by Queue if running. Sent automatically when the agent session ends; click to send the next one now."
+              >
+                {queuedCount} queued · send next
+              </button>
             )}
           </div>
         </div>

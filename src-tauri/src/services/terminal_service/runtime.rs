@@ -129,6 +129,7 @@ pub(super) fn spawn_terminal_reader(
     session_id: String,
     next_seq: Arc<AtomicU64>,
     last_output_at_secs: Arc<AtomicU64>,
+    last_output_at_millis: Arc<AtomicU64>,
     mut reader: Box<dyn Read + Send>,
 ) {
     let (tx, rx) = mpsc::sync_channel::<Result<Vec<u8>, String>>(128);
@@ -178,11 +179,11 @@ pub(super) fn spawn_terminal_reader(
         loop {
             match rx.recv_timeout(MAX_BATCH_DELAY) {
                 Ok(Ok(bytes)) => {
-                    let now_secs = SystemTime::now()
+                    let now = SystemTime::now()
                         .duration_since(UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs();
-                    last_output_at_secs.store(now_secs, Ordering::Relaxed);
+                        .unwrap_or_default();
+                    last_output_at_secs.store(now.as_secs(), Ordering::Relaxed);
+                    last_output_at_millis.store(now.as_millis() as u64, Ordering::Relaxed);
 
                     let text = String::from_utf8_lossy(&bytes);
                     if let Some((tokens, cost)) = cost_parser::parse_cost(&text) {
@@ -381,6 +382,7 @@ pub(super) fn ensure_agent_session_for_prompt(
     state: &AppState,
     workspace_id: &str,
     profile: &str,
+    extra_args: Option<&[String]>,
 ) -> Result<(TerminalSession, bool), String> {
     if let Some(active) = active_for_workspace(state, workspace_id, "agent")? {
         let session = terminal_repository::get_session(&state.db, &active.session_id)?
@@ -414,7 +416,7 @@ pub(super) fn ensure_agent_session_for_prompt(
             cols: None,
             rows: None,
             replace_existing: Some(false),
-            extra_args: None,
+            extra_args: extra_args.map(<[String]>::to_vec),
         },
     )
     .map(|s| (s, true))

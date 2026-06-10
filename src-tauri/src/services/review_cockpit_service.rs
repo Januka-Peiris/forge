@@ -130,6 +130,7 @@ pub fn queue_review_agent_prompt(
             profile: None,
             profile_id: input.profile_id,
             mode: input.mode,
+            extra_args: None,
         },
     )
 }

@@ -560,6 +560,7 @@ pub fn replay_workspace_coordinator_action(
                     profile: None,
                     profile_id: Some(profile_id.clone()),
                     mode: Some("send_now".to_string()),
+                    extra_args: None,
                 },
             )?;
             coordinator_repository::insert_action_with_metadata(
@@ -768,6 +769,7 @@ pub fn step_workspace_coordinator(
                         profile: None,
                         profile_id: Some(coder.id.clone()),
                         mode: Some("send_now".to_string()),
+                        extra_args: None,
                     },
                 )?;
                 let worker = CoordinatorWorker {
@@ -814,6 +816,7 @@ pub fn step_workspace_coordinator(
                         profile: None,
                         profile_id: Some(chosen.profile_id.clone()),
                         mode: Some("send_now".to_string()),
+                        extra_args: None,
                     },
                 )?;
                 let mut worker = chosen.clone();

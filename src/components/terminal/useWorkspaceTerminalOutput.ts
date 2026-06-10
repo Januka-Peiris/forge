@@ -2,6 +2,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { OUTPUT_RETENTION_CHUNKS, type OutputMap } from './workspace-terminal-constants';
 import type { TerminalOutputChunk } from '../../types';
 
+/// Chunk seqs are monotonic per session, but the same chunk can arrive twice
+/// when the poll backfill races the live event stream. Drop already-buffered
+/// seqs so pane remounts and copy-output never replay duplicates.
+function mergeChunks(existing: TerminalOutputChunk[], incoming: TerminalOutputChunk[]): TerminalOutputChunk[] {
+  const lastSeq = existing.length > 0 ? existing[existing.length - 1].seq : -1;
+  const fresh = incoming.filter((chunk) => chunk.seq > lastSeq);
+  if (fresh.length === 0) return existing;
+  return [...existing, ...fresh].slice(-OUTPUT_RETENTION_CHUNKS);
+}
+
 export function useWorkspaceTerminalOutput() {
   const [outputs, setOutputs] = useState<OutputMap>({});
   const nextSeqRef = useRef<Record<string, number>>({});
@@ -12,7 +22,7 @@ export function useWorkspaceTerminalOutput() {
     if (chunks.length === 0 && !reset) return;
     setOutputs((current) => ({
       ...current,
-      [sessionId]: reset ? chunks : [...(current[sessionId] ?? []), ...chunks].slice(-OUTPUT_RETENTION_CHUNKS),
+      [sessionId]: reset ? chunks : mergeChunks(current[sessionId] ?? [], chunks),
     }));
   }, []);
 
@@ -33,8 +43,11 @@ export function useWorkspaceTerminalOutput() {
         let next = current;
         for (const [pendingSessionId, pendingChunks] of Object.entries(pending)) {
           if (pendingChunks.length === 0) continue;
+          const existing = next[pendingSessionId] ?? [];
+          const merged = mergeChunks(existing, pendingChunks);
+          if (merged === existing) continue;
           if (next === current) next = { ...current };
-          next[pendingSessionId] = [...(next[pendingSessionId] ?? []), ...pendingChunks].slice(-OUTPUT_RETENTION_CHUNKS);
+          next[pendingSessionId] = merged;
         }
         return next;
       });

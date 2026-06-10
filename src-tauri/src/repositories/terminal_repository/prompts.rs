@@ -112,7 +112,7 @@ pub fn latest_queued_prompt_for_workspace(
                 SELECT id, workspace_id, session_id, profile, prompt, status, created_at, sent_at
                 FROM terminal_prompt_entries
                 WHERE workspace_id = ?1 AND status = 'queued'
-                ORDER BY created_at ASC
+                ORDER BY created_at ASC, id ASC
                 LIMIT 1
                 "#,
                 params![workspace_id],
