@@ -32,6 +32,8 @@ pub struct WorkspacePrStatus {
     pub state: Option<String>,
     pub is_draft: bool,
     pub review_decision: Option<String>,
+    pub mergeable: Option<String>,
+    pub merge_state_status: Option<String>,
     pub checks_summary: String,
     pub checks: Vec<WorkspacePrCheck>,
     pub warning: Option<String>,

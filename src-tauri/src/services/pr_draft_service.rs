@@ -327,7 +327,7 @@ pub fn get_workspace_pr_status(
             "pr",
             "view",
             "--json",
-            "number,title,url,state,isDraft,reviewDecision,statusCheckRollup",
+            "number,title,url,state,isDraft,reviewDecision,mergeable,mergeStateStatus,statusCheckRollup",
         ])
         .current_dir(&work_dir)
         .output();
@@ -353,6 +353,8 @@ pub fn get_workspace_pr_status(
             state: None,
             is_draft: false,
             review_decision: None,
+            mergeable: None,
+            merge_state_status: None,
             checks_summary: "No PR found for this branch".to_string(),
             checks: vec![],
             warning: if stderr.is_empty() {
@@ -389,6 +391,14 @@ pub fn get_workspace_pr_status(
             .get("reviewDecision")
             .and_then(Value::as_str)
             .map(str::to_string),
+        mergeable: value
+            .get("mergeable")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        merge_state_status: value
+            .get("mergeStateStatus")
+            .and_then(Value::as_str)
+            .map(str::to_string),
         checks_summary,
         checks,
         warning: None,
@@ -405,6 +415,8 @@ fn pr_status_warning(workspace_id: &str, warning: String) -> WorkspacePrStatus {
         state: None,
         is_draft: false,
         review_decision: None,
+        mergeable: None,
+        merge_state_status: None,
         checks_summary: "PR status unavailable".to_string(),
         checks: vec![],
         warning: Some(warning),

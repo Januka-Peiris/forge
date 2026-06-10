@@ -24,6 +24,8 @@ export interface WorkspacePrStatus {
   state?: string | null;
   isDraft: boolean;
   reviewDecision?: string | null;
+  mergeable?: string | null;
+  mergeStateStatus?: string | null;
   checksSummary: string;
   checks: WorkspacePrCheck[];
   warning?: string | null;
