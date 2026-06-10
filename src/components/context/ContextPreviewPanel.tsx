@@ -251,7 +251,7 @@ function MetricCard({ label, value, detail }: { label: string; value: string; de
 function SegmentRow({ seg }: { seg: ContextSegment }) {
   const kindColour = {
     mandatory: 'bg-blue-500/20 text-blue-400',
-    related: 'bg-purple-500/20 text-purple-400',
+    related: 'bg-teal-500/20 text-teal-400',
   }[seg.tier] ?? 'bg-white/10 text-white/50';
 
   const modeLabel: Record<string, string> = {

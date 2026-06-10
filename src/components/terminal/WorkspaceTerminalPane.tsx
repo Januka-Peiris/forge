@@ -25,6 +25,18 @@ function sessionBadgeVariant(session: TerminalSession): 'warning' | 'success' | 
   return 'muted';
 }
 
+/** Human label instead of raw internal status vocabulary. */
+function sessionStatusLabel(session: TerminalSession): string {
+  switch (session.status) {
+    case 'running': return 'running';
+    case 'succeeded': return 'ended';
+    case 'interrupted':
+    case 'stopped': return 'stopped';
+    case 'failed': return 'failed';
+    default: return session.status;
+  }
+}
+
 function formatTerminalTimestamp(value?: string): string {
   if (!value) return 'a previous run';
   const numeric = Number(value);
@@ -246,12 +258,11 @@ export function TerminalPane({
         onMouseDown={onFocus}
         className="flex shrink-0 items-center justify-between gap-2 border-b border-mn-border/70 bg-mn-surface px-2 py-1.5"
       >
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2" title={`${session.status} · ${session.backend}`}>
           <span className="truncate text-[12px] font-bold text-mn-text">{title}</span>
           <Badge variant={sessionBadgeVariant(session)}>
-            {session.status}
+            {sessionStatusLabel(session)}
           </Badge>
-          <Badge variant="muted">{session.backend}</Badge>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {running && (
@@ -293,8 +304,8 @@ export function TerminalPane({
         </div>
       </div>
       {restored && (
-        <div className="shrink-0 border-b border-mn-border/70 bg-mn-blue/10 px-3 py-1 text-[11px] text-mn-blue">
-          Restored read-only session history from {formatTerminalTimestamp(session.endedAt)}. Start a new session to continue.
+        <div className="shrink-0 border-b border-mn-border/70 bg-black/20 px-3 py-1 text-[11px] text-mn-muted">
+          Read-only history · ended {formatTerminalTimestamp(session.endedAt)}
         </div>
       )}
       {showSearch && (

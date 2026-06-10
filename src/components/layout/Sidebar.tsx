@@ -694,7 +694,7 @@ export function Sidebar({
           <div className="flex items-center justify-between mb-1.5">
             <div className="flex items-center gap-1.5">
               <Brain className={`h-3.5 w-3.5 ${orchestrator.enabled ? 'text-mn-orange animate-pulse' : 'text-mn-muted'}`} />
-              <span className="text-sm font-semibold text-mn-text">Orchestrator</span>
+              <span className="text-sm font-semibold text-mn-text" title="Background automation: monitors agents every 5 min and can trigger follow-up checks. Model is configured in Settings.">Orchestrator</span>
               {orchestrator.enabled && (
                 <span className="text-xs px-1.5 py-0.5 rounded-full bg-mn-orange/15 text-mn-orange border border-mn-orange/20">
                   Opus
@@ -731,9 +731,6 @@ export function Sidebar({
                 </div>
               )}
             </div>
-          )}
-          {!orchestrator.enabled && (
-            <p className="text-xs text-mn-muted">Monitors agents every 5 min · configure model in Settings</p>
           )}
         </div>
       )}

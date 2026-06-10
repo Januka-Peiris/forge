@@ -393,7 +393,7 @@ function CommandIcon({ icon }: { icon: CommandItem['icon'] }) {
   if (icon === 'workspace') return <Zap className={`${cls} text-mn-cyan`} />;
   if (icon === 'file') return <FileCode className={`${cls} text-mn-cyan`} />;
   if (icon === 'terminal') return <TerminalIcon className={`${cls} text-mn-blue`} />;
-  if (icon === 'comment') return <GitPullRequest className={`${cls} text-mn-violet`} />;
+  if (icon === 'comment') return <GitPullRequest className={`${cls} text-mn-teal`} />;
   if (icon === 'action') return <Play className={`${cls} text-mn-cyan`} />;
   if (icon === 'checkpoint') return <ShieldCheck className={`${cls} text-mn-blue`} />;
   if (icon === 'ship') return <Ship className={`${cls} text-mn-cyan`} />;
