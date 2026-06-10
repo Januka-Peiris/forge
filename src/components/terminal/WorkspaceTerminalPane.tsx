@@ -83,6 +83,7 @@ export function TerminalPane({
     resultIndex: -1,
     resultCount: 0,
   });
+  const [isScrolledUp, setIsScrolledUp] = useState(false);
 
   const searchOptions: ISearchOptions = useMemo(() => ({
     caseSensitive,
@@ -133,6 +134,7 @@ export function TerminalPane({
 
   useEffect(() => {
     if (!containerRef.current) return;
+    setIsScrolledUp(false);
     const terminal = new Terminal({
       cursorBlink: true,
       convertEol: false,
@@ -163,8 +165,26 @@ export function TerminalPane({
     const searchDisposable = searchAddon.onDidChangeResults((event) => {
       setSearchResults(event);
     });
+    const scrollDisposable = terminal.onScroll(() => {
+      const buffer = terminal.buffer.active;
+      setIsScrolledUp(buffer.viewportY < buffer.baseY);
+    });
     terminal.attachCustomKeyEventHandler((event) => {
       if (event.type !== 'keydown') return true;
+
+      if (event.shiftKey && !event.metaKey && !event.ctrlKey) {
+        if (event.key === 'PageUp') {
+          event.preventDefault();
+          terminal.scrollLines(-(terminal.rows || 24));
+          return false;
+        }
+        if (event.key === 'PageDown') {
+          event.preventDefault();
+          terminal.scrollLines(terminal.rows || 24);
+          return false;
+        }
+      }
+
       if (!(event.metaKey || event.ctrlKey)) return true;
       const key = event.key.toLowerCase();
       if (key === 'f') {
@@ -175,7 +195,11 @@ export function TerminalPane({
       if (key === 'w' || key === '\\' || key === '-') {
         return false;
       }
-      if (readOnly) return false;
+      if (readOnly) {
+        const navKeys = ['home', 'end', 'pageup', 'pagedown', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'];
+        if (navKeys.includes(key)) return true;
+        return false;
+      }
       return true;
     });
     const fit = () => {
@@ -193,6 +217,7 @@ export function TerminalPane({
     return () => {
       disposable.dispose();
       searchDisposable.dispose();
+      scrollDisposable.dispose();
       observer.disconnect();
       terminal.dispose();
       terminalRef.current = null;
@@ -210,11 +235,25 @@ export function TerminalPane({
     const terminal = terminalRef.current;
     if (!terminal) return;
     const next = chunks.filter((chunk) => chunk.seq > lastRenderedSeqRef.current);
+    if (next.length === 0) return;
+
+    const buffer = terminal.buffer.active;
+    const wasScrolledUp = buffer.viewportY < buffer.baseY;
+    const savedOffset = buffer.baseY - buffer.viewportY;
+
     for (const chunk of next) {
       terminal.write(chunk.data);
       lastRenderedSeqRef.current = Math.max(lastRenderedSeqRef.current, chunk.seq);
     }
-    if (!showSearch && next.length > 0) {
+
+    if (wasScrolledUp && savedOffset > 0) {
+      requestAnimationFrame(() => {
+        terminal.scrollToBottom();
+        terminal.scrollLines(-savedOffset);
+      });
+    }
+
+    if (!showSearch) {
       searchAddonRef.current?.clearDecorations();
     }
   }, [chunks, showSearch]);
@@ -377,6 +416,21 @@ export function TerminalPane({
         </div>
       )}
       <div ref={containerRef} className="min-h-[180px] flex-1 overflow-hidden p-2" />
+      {isScrolledUp && (
+        <Button
+          variant="ghost"
+          size="xs"
+          onClick={() => {
+            terminalRef.current?.scrollToBottom();
+            setIsScrolledUp(false);
+          }}
+          className="absolute bottom-4 right-4 z-20 border border-mn-border bg-mn-surface/95 shadow-xl shadow-black/40 backdrop-blur"
+          title="Scroll to bottom"
+        >
+          <ChevronDown className="h-3.5 w-3.5" />
+          Scroll to bottom
+        </Button>
+      )}
       {chunks.length === 0 && <div className="pointer-events-none absolute hidden">Waiting for terminal output...</div>}
     </section>
   );
