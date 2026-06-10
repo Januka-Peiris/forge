@@ -9,9 +9,11 @@ import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
 import type { RepositoryRelationship } from '../../types/repository-relationship';
 import {
   getWorkspaceTerminalOutputForSession,
+  listWorkspaceAgentPrompts,
   listWorkspaceTerminalSessions,
   listWorkspaceVisibleTerminalSessions,
   resizeWorkspaceTerminalSession,
+  runNextWorkspaceAgentPrompt,
   writeWorkspaceTerminalSessionInput,
 } from '../../lib/tauri-api/terminal';
 import { CommandApprovalModal, type PendingCommand } from '../modals/CommandApprovalModal';
@@ -45,6 +47,7 @@ import { useTileLayoutState } from '../layout/useTileLayoutState';
 import { WorkspaceHeader } from './WorkspaceHeader';
 import { WorkspaceComposer, type ComposerSettings } from './WorkspaceComposer';
 import {
+  claudeLaunchExtraArgs,
   isKnownComposerModel,
   providerModelOptions,
   providerReasoningOptions,
@@ -170,6 +173,9 @@ export function WorkspaceTerminal({
   const [coordinatorStatus, setCoordinatorStatus] = useState<WorkspaceCoordinatorStatus | null>(null);
   const [coordinatorToast, setCoordinatorToast] = useState<string | null>(null);
   const [pendingCommand, setPendingCommand] = useState<PendingCommand | null>(null);
+  const [queuedPromptCount, setQueuedPromptCount] = useState(0);
+  const runNextPromptInFlightRef = useRef(false);
+  const hadRunningAgentSessionRef = useRef(false);
   const [openEditors, setOpenEditors] = useState<EditorTab[]>([]);
   const [activeEditorPath, setActiveEditorPath] = useState<string | null>(null);
   const [savingEditorPaths, setSavingEditorPaths] = useState<Set<string>>(new Set());
@@ -242,9 +248,20 @@ export function WorkspaceTerminal({
     const visibleIds = new Set(visibleSessions.map((s) => s.id));
     return allSessions.filter((s) => !s.closedAt && !visibleIds.has(s.id));
   }, [allSessions, visibleSessions]);
+  const refreshQueuedPrompts = useCallback(async () => {
+    if (!workspaceId) return;
+    try {
+      const prompts = await listWorkspaceAgentPrompts(workspaceId, 50);
+      setQueuedPromptCount(prompts.filter((prompt) => prompt.status === 'queued').length);
+    } catch (err) {
+      mnWarn('agent-prompts', 'load error', { err });
+    }
+  }, [workspaceId]);
+
   const refreshSessions = useCallback(async (fetchOutput = false, preferredFocusId?: string | null) => {
     if (!workspaceId) return;
     setError(null);
+    void refreshQueuedPrompts();
     try {
       const [visible, history] = await Promise.all([
         listWorkspaceVisibleTerminalSessions(workspaceId),
@@ -273,7 +290,7 @@ export function WorkspaceTerminal({
     } catch (err) {
       setActionError(err);
     }
-  }, [appendOutput, focusedIdRef, getNextSeq, setActionError, setNextSeq, workspaceId]);
+  }, [appendOutput, focusedIdRef, getNextSeq, refreshQueuedPrompts, setActionError, setNextSeq, workspaceId]);
 
 
   const refreshMnemonicConfig = useCallback(async () => {
@@ -513,6 +530,9 @@ export function WorkspaceTerminal({
     setSavingEditorPaths(new Set());
     setFocusedId(null);
     setError(null);
+    setQueuedPromptCount(0);
+    runNextPromptInFlightRef.current = false;
+    hadRunningAgentSessionRef.current = false;
     setCoordinatorStatus(null);
     setCoordinatorToast(null);
     lastCoordinatorAutoStepEventRef.current = null;
@@ -672,7 +692,7 @@ export function WorkspaceTerminal({
   const onCoordinatorNotifyRef = useRef<((payload: { workspaceId: string; message: string }) => void) | null>(null);
   onCoordinatorNotifyRef.current = (payload) => {
     showCoordinatorToast(payload.message);
-    const match = payload.message.match(/^Worker\\s+([^\\s]+)\\s+([^\\s]+)$/i);
+    const match = payload.message.match(/^Worker\s+(\S+)\s+(\S+)$/i);
     if (!match) return;
     if (!workspaceId) return;
     if (!composerSettings.coordinatorAutoStepOnWorkerComplete) return;
@@ -746,6 +766,7 @@ export function WorkspaceTerminal({
     workspaceId,
     focusedSession,
     selectedProfileId,
+    activePromptProvider,
     composerSettings,
     mnemonicConfig,
     refreshSessions,
@@ -763,6 +784,35 @@ export function WorkspaceTerminal({
     promptSendChainRef,
   });
 
+
+  const runNextQueuedPrompt = useCallback(() => {
+    if (!workspaceId || runNextPromptInFlightRef.current) return;
+    runNextPromptInFlightRef.current = true;
+    void runNextWorkspaceAgentPrompt(workspaceId)
+      .catch(setActionError)
+      .finally(() => {
+        runNextPromptInFlightRef.current = false;
+        void refreshQueuedPrompts();
+        void refreshSessions(true);
+      });
+  }, [refreshQueuedPrompts, refreshSessions, setActionError, workspaceId]);
+
+  const hasRunningAgentSession = useMemo(
+    () => allSessions.some((session) => !session.closedAt
+      && session.status === 'running'
+      && (session.terminalKind === 'agent' || session.sessionRole === 'agent')),
+    [allSessions],
+  );
+
+  // Dispatch queued prompts when an agent session transitions from running to
+  // idle. Stale queued prompts from a previous app run are not auto-fired on
+  // workspace open; the composer shows them with a send-next button instead.
+  useEffect(() => {
+    const hadRunning = hadRunningAgentSessionRef.current;
+    hadRunningAgentSessionRef.current = hasRunningAgentSession;
+    if (!workspaceId || queuedPromptCount === 0 || hasRunningAgentSession || !hadRunning) return;
+    runNextQueuedPrompt();
+  }, [hasRunningAgentSession, queuedPromptCount, runNextQueuedPrompt, workspaceId]);
 
   const handleCoordinatorReviewDiff = useCallback(() => {
     void refreshWorkbenchState();
@@ -941,7 +991,13 @@ export function WorkspaceTerminal({
         agentProfiles={agentProfiles}
         activeProviderIds={activeProviders.activeProviderSet}
         onOpenInCursor={onOpenInCursor}
-        onCreateTerminal={(kind, profile, title, profileId) => void createTerminal(kind, profile, title, profileId)}
+        onCreateTerminal={(kind, profile, title, profileId) => void createTerminal(
+          kind,
+          profile,
+          title,
+          profileId,
+          kind === 'agent' && profile === 'claude_code' ? claudeLaunchExtraArgs(composerSettings) : undefined,
+        )}
         onCopyFocusedOutput={() => void copyFocusedOutput()}
         onInterruptFocusedAgent={() => void interruptFocusedAgent()}
         onCloseTerminal={(sessionId) => void closeTerminal(sessionId)}
@@ -1003,7 +1059,7 @@ export function WorkspaceTerminal({
             <WorkspaceTerminalEmptyState
               busy={busy}
               activeProviderIds={activeProviders.activeProviderSet}
-              onStartClaude={() => void createTerminal('agent', 'claude_code', 'Claude', undefined, composerSettings.selectedModel ? ['--model', composerSettings.selectedModel] : undefined)}
+              onStartClaude={() => void createTerminal('agent', 'claude_code', 'Claude', undefined, claudeLaunchExtraArgs(composerSettings))}
               onStartCodex={() => void createTerminal('agent', 'codex', 'Codex')}
               onStartShell={() => void createTerminal('shell', 'shell', 'Shell')}
             />
@@ -1041,7 +1097,8 @@ export function WorkspaceTerminal({
         <WorkspaceComposer
           workspaceId={workspace.id}
           canInterrupt={focusedSession?.status === 'running' || false}
-          queuedCount={0}
+          queuedCount={queuedPromptCount}
+          onRunQueued={runNextQueuedPrompt}
           promptTemplateWarning={promptTemplateWarning}
           promptTemplates={promptTemplates}
           agentContext={agentContext}

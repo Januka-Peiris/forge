@@ -30,6 +30,9 @@ pub struct ActiveTerminal {
     /// Unix timestamp in seconds of the last output received from the PTY.
     /// 0 means no output yet. Updated atomically by the reader thread.
     pub last_output_at_secs: Arc<AtomicU64>,
+    /// Same signal in milliseconds, for sub-second readiness checks before
+    /// dispatching prompts into a freshly spawned TUI.
+    pub last_output_at_millis: Arc<AtomicU64>,
     /// Monotonically increasing sequence counter shared between the reader thread
     /// and any system log writes so all chunks for this session have globally
     /// ordered, non-colliding sequence numbers.

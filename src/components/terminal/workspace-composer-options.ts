@@ -62,6 +62,38 @@ export function providerReasoningOptions(provider: string): ComposerReasoningOpt
   return CLAUDE_THINKING_OPTIONS;
 }
 
+const CLAUDE_EFFORT_BY_REASONING: Record<string, string> = {
+  Low: 'low',
+  Medium: 'medium',
+  High: 'high',
+  'Extra High': 'xhigh',
+  Max: 'max',
+};
+
+/**
+ * CLI args for launching a new Claude Code session that reflect the composer
+ * selections: --model, --effort, and real plan mode via --permission-mode.
+ * Only used at session spawn; running sessions keep their launch settings.
+ */
+export function claudeLaunchExtraArgs(settings: {
+  selectedModel: string;
+  selectedReasoning: string;
+  selectedTaskMode: string;
+}): string[] | undefined {
+  const args: string[] = [];
+  if (settings.selectedModel.trim()) {
+    args.push('--model', settings.selectedModel.trim());
+  }
+  const effort = CLAUDE_EFFORT_BY_REASONING[settings.selectedReasoning];
+  if (effort) {
+    args.push('--effort', effort);
+  }
+  if (settings.selectedTaskMode === 'Plan') {
+    args.push('--permission-mode', 'plan');
+  }
+  return args.length > 0 ? args : undefined;
+}
+
 export function isKnownComposerModel(model: string): boolean {
   return [
     ...CLAUDE_MODEL_OPTIONS,

@@ -76,6 +76,14 @@ export function queueWorkspaceAgentPrompt(input: QueueAgentPromptInput): Promise
   return invokeCommand<AgentPromptEntry>('queue_workspace_agent_prompt', { input });
 }
 
+export function runNextWorkspaceAgentPrompt(workspaceId: string): Promise<AgentPromptEntry | null> {
+  return invokeCommand<AgentPromptEntry | null>('run_next_workspace_agent_prompt', { workspaceId });
+}
+
+export function listWorkspaceAgentPrompts(workspaceId: string, limit?: number): Promise<AgentPromptEntry[]> {
+  return invokeCommand<AgentPromptEntry[]>('list_workspace_agent_prompts', { workspaceId, limit });
+}
+
 export function searchTerminalOutput(query: string, workspaceId?: string): Promise<TerminalSearchResult[]> {
   return invokeCommand<TerminalSearchResult[]>('search_terminal_output', { query, workspaceId });
 }

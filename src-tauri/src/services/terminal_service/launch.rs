@@ -47,14 +47,19 @@ impl TerminalProfile {
         profile: &AgentProfile,
         effective_model: Option<&str>,
         session_resume: Option<&SessionResume>,
+        extra_args: &[String],
     ) -> Self {
+        // Extra args are appended after profile args by the caller, so
+        // consider both when deciding whether to add a default flag.
+        fn flag_present(args: &[String], extra_args: &[String], flag: &str) -> bool {
+            args.iter().any(|arg| arg == flag) || extra_args.iter().any(|arg| arg == flag)
+        }
+
         let args = if profile.command.contains("claude") {
             let mut args = profile.args.clone();
+            let has_flag = |args: &[String], flag: &str| flag_present(args, extra_args, flag);
 
-            if !args
-                .iter()
-                .any(|arg| arg == "--permission-mode" || arg == "--dangerously-skip-permissions")
-            {
+            if !has_flag(&args, "--permission-mode") && !has_flag(&args, "--dangerously-skip-permissions") {
                 args.push("--permission-mode".to_string());
                 args.push("bypassPermissions".to_string());
             }
@@ -74,8 +79,7 @@ impl TerminalProfile {
             }
 
             if let Some(model) = effective_model.filter(|model| !model.is_empty()) {
-                let has_model_arg = args.iter().any(|arg| arg == "--model" || arg == "-m");
-                if !has_model_arg {
+                if !has_flag(&args, "--model") && !has_flag(&args, "-m") {
                     args.push("--model".to_string());
                     args.push(model.to_string());
                 }

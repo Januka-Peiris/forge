@@ -118,6 +118,10 @@ pub struct QueueAgentPromptInput {
     pub profile: Option<String>,
     pub profile_id: Option<String>,
     pub mode: Option<String>,
+    /// Extra CLI args applied only when this prompt has to spawn a new
+    /// agent session (e.g. --model, --effort, --permission-mode plan).
+    #[serde(default)]
+    pub extra_args: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

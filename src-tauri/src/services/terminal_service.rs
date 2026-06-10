@@ -1,5 +1,5 @@
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 
@@ -100,7 +100,7 @@ fn spawn_active_terminal(
     command_builder.args(args);
     command_builder.cwd(cwd);
     command_builder.env("TERM", "xterm-256color");
-    command_builder.env("PATH", enriched_path());
+    command_builder.env("PATH", path_for_command(command));
     if std::env::var("SHELL").is_err() {
         command_builder.env("SHELL", "/bin/zsh");
     }
@@ -123,6 +123,7 @@ fn spawn_active_terminal(
         terminal_repository::next_seq(&state.db, &session.id).unwrap_or(0),
     ));
     let last_output_at_secs = Arc::new(AtomicU64::new(0));
+    let last_output_at_millis = Arc::new(AtomicU64::new(0));
     let active = Arc::new(ActiveTerminal {
         session_id: session.id.clone(),
         terminal_kind: session.terminal_kind.clone(),
@@ -130,6 +131,7 @@ fn spawn_active_terminal(
         killer: Mutex::new(killer),
         master: Mutex::new(pair.master),
         last_output_at_secs: last_output_at_secs.clone(),
+        last_output_at_millis: last_output_at_millis.clone(),
         seq_counter: seq_counter.clone(),
     });
     state
@@ -145,6 +147,7 @@ fn spawn_active_terminal(
         session.id.clone(),
         seq_counter,
         last_output_at_secs,
+        last_output_at_millis,
         reader,
     );
     spawn_terminal_monitor(
@@ -287,10 +290,21 @@ pub fn create_workspace_terminal(
         .filter(|id| !id.is_empty());
     let (session_resume, claude_session_id) = if is_claude_agent {
         if let Some(resume_id) = explicit_resume_id {
-            (
-                Some(SessionResume::Resume(resume_id.to_string())),
-                Some(resume_id.to_string()),
-            )
+            if claude_session_resumable(&cwd, resume_id) {
+                (
+                    Some(SessionResume::Resume(resume_id.to_string())),
+                    Some(resume_id.to_string()),
+                )
+            } else {
+                // `claude --resume` with a missing transcript exits instantly;
+                // start a fresh session instead of a guaranteed dead launch.
+                log::warn!(
+                    target: "mnemonic_lib",
+                    "create_workspace_terminal: no transcript for Claude session {resume_id}; starting a new session"
+                );
+                let new_id = uuid::Uuid::new_v4().to_string();
+                (Some(SessionResume::New(new_id.clone())), Some(new_id))
+            }
         } else {
             let has_active_agent =
                 runtime::active_for_workspace(state, &input.workspace_id, "agent")
@@ -310,7 +324,8 @@ pub fn create_workspace_terminal(
                 .flatten();
                 let resumable_id = prior
                     .filter(|s| s.status != "failed")
-                    .and_then(|s| s.claude_session_id);
+                    .and_then(|s| s.claude_session_id)
+                    .filter(|id| claude_session_resumable(&cwd, id));
                 if let Some(prior_id) = resumable_id {
                     (
                         Some(SessionResume::Resume(prior_id.clone())),
@@ -329,6 +344,7 @@ pub fn create_workspace_terminal(
         &resolved_profile,
         effective_model.as_deref(),
         session_resume.as_ref(),
+        input.extra_args.as_deref().unwrap_or(&[]),
     );
     let display_order = terminal_repository::next_display_order(&state.db, &input.workspace_id)?;
     let session_id = format!("term-{}", unique_suffix());
@@ -364,7 +380,7 @@ pub fn create_workspace_terminal(
     let tmux_session_name =
         use_tmux_backend.then(|| tmux::safe_session_name(&input.workspace_id, &session_id));
     if let Some(tmux_name) = &tmux_session_name {
-        tmux::start_detached(tmux_name, &cwd, &command_spec)?;
+        tmux::start_detached(tmux_name, &cwd, &command_spec, cols, rows)?;
     }
     let session = TerminalSession {
         id: session_id.clone(),
@@ -532,16 +548,18 @@ pub fn write_workspace_terminal_session_input(
     session_id: &str,
     data: &str,
 ) -> Result<(), String> {
-    if active_for_session(state, session_id)?.is_none() {
+    let mut active = active_for_session(state, session_id)?;
+    if active.is_none() {
         if let Some(session) = terminal_repository::get_session(&state.db, session_id)? {
             if session.backend == "tmux" && session.status == "running" {
                 let _ = attach_tmux_terminal(state, &session, None, None)?;
+                active = active_for_session(state, session_id)?;
             }
         }
     }
-    let is_shell_or_utility = active_for_session(state, session_id)?
-        .map(|active| matches!(active.terminal_kind.as_str(), "shell" | "utility"))
-        .unwrap_or(false);
+    let active = active
+        .ok_or_else(|| format!("Terminal session {session_id} is not attached"))?;
+    let is_shell_or_utility = matches!(active.terminal_kind.as_str(), "shell" | "utility");
 
     if is_shell_or_utility {
         let line = data.trim_end_matches(['\r', '\n']);
@@ -564,7 +582,17 @@ pub fn write_workspace_terminal_session_input(
             }
         }
     }
-    pty_write_raw(state, session_id, data)
+    let mut writer = active
+        .writer
+        .lock()
+        .map_err(|_| "Terminal writer lock poisoned".to_string())?;
+    writer
+        .write_all(data.as_bytes())
+        .map_err(|err| format!("Failed to write to terminal: {err}"))?;
+    writer
+        .flush()
+        .map_err(|err| format!("Failed to flush terminal input: {err}"))?;
+    Ok(())
 }
 
 /// Called after the user approves or denies a gated command.
@@ -1151,6 +1179,55 @@ pub fn enriched_path() -> String {
     enriched_path_impl()
 }
 
+/// Enriched PATH with the launch binary's own directory prepended. An
+/// npm/nvm-installed `claude` is a script that needs `node` from the same bin
+/// directory, which is not in the enriched PATH when launched from Finder.
+fn path_for_command(command: &str) -> String {
+    let base = enriched_path();
+    match Path::new(command)
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        Some(parent) => format!("{}:{base}", parent.display()),
+        None => base,
+    }
+}
+
+/// Whether `claude --resume <id>` can succeed for this worktree. Claude Code
+/// stores transcripts under `~/.claude/projects/<munged-cwd>/<id>.jsonl` and
+/// exits immediately when the transcript is missing (never-used sessions,
+/// pruned history). If the project directory cannot be located at all the
+/// check is inconclusive and we allow the resume rather than silently
+/// breaking session continuity.
+fn claude_session_resumable(cwd: &Path, session_id: &str) -> bool {
+    let Some(home) = std::env::var_os("HOME") else {
+        return true;
+    };
+    let projects_dir = PathBuf::from(home).join(".claude").join("projects");
+    let project_dir = projects_dir.join(claude_project_dir_name(cwd));
+    if project_dir.is_dir() {
+        return project_dir.join(format!("{session_id}.jsonl")).is_file();
+    }
+    // Munging mismatch or fresh machine: fall back to scanning project dirs.
+    let Ok(entries) = std::fs::read_dir(&projects_dir) else {
+        return true;
+    };
+    let transcript_name = format!("{session_id}.jsonl");
+    entries
+        .flatten()
+        .any(|entry| entry.path().join(&transcript_name).is_file())
+}
+
+/// Claude Code maps a project path to a directory name by replacing every
+/// non-alphanumeric character with '-': /Users/jay/dev/forge -> -Users-jay-dev-forge
+fn claude_project_dir_name(cwd: &Path) -> String {
+    cwd.display()
+        .to_string()
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })
+        .collect()
+}
+
 fn unique_suffix() -> String {
     output_unique_suffix()
 }
@@ -1220,8 +1297,62 @@ mod tests {
             last_captured_seq: 0,
             claude_session_id: None,
         };
-        let payload = prompts::terminal_prompt_payload_for_session(&session, "line one\nline two");
-        assert_eq!(payload, "\"\"\"\nline one\nline two\n\"\"\"\r\n");
+        match prompts::terminal_prompt_payload_for_session(&session, "line one\nline two") {
+            prompts::PromptPayload::Single(payload) => {
+                assert_eq!(payload, "\"\"\"\nline one\nline two\n\"\"\"\r\n");
+            }
+            prompts::PromptPayload::PasteThenEnter(_) => {
+                panic!("ollama prompts should be written as a single REPL message");
+            }
+        }
+    }
+
+    #[test]
+    fn wraps_claude_prompts_in_bracketed_paste_without_trailing_enter() {
+        let session = TerminalSession {
+            id: "term-claude".to_string(),
+            workspace_id: "ws-123".to_string(),
+            session_role: "agent".to_string(),
+            profile: "claude-code".to_string(),
+            cwd: "/tmp/forge-workspace".to_string(),
+            status: "running".to_string(),
+            started_at: "now".to_string(),
+            ended_at: None,
+            command: "/usr/local/bin/claude".to_string(),
+            args: vec![],
+            pid: None,
+            stale: false,
+            closed_at: None,
+            backend: "pty".to_string(),
+            tmux_session_name: None,
+            title: "Claude".to_string(),
+            terminal_kind: "agent".to_string(),
+            display_order: 0,
+            is_visible: true,
+            last_attached_at: None,
+            last_captured_seq: 0,
+            claude_session_id: None,
+        };
+        match prompts::terminal_prompt_payload_for_session(&session, "Use plan mode.\n\nfix it") {
+            prompts::PromptPayload::PasteThenEnter(payload) => {
+                assert_eq!(payload, "\x1b[200~Use plan mode.\n\nfix it\x1b[201~");
+            }
+            prompts::PromptPayload::Single(_) => {
+                panic!("claude prompts must defer Enter to a separate write");
+            }
+        }
+    }
+
+    #[test]
+    fn munges_claude_project_dir_name_like_claude_code() {
+        assert_eq!(
+            claude_project_dir_name(Path::new("/Users/jay/dev/forge")),
+            "-Users-jay-dev-forge"
+        );
+        assert_eq!(
+            claude_project_dir_name(Path::new("/tmp/my_repo.worktrees/feat-1")),
+            "-tmp-my-repo-worktrees-feat-1"
+        );
     }
 
     #[test]

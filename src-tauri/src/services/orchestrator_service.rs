@@ -376,6 +376,7 @@ Rules:
                         profile: None,
                         profile_id: None,
                         mode: Some("send_now".to_string()),
+                        extra_args: None,
                     };
                     if let Err(err) = terminal_service::queue_workspace_agent_prompt(state, input) {
                         log::warn!(
