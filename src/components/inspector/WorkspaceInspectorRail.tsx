@@ -94,16 +94,30 @@ export function WorkspaceInspectorRail({
     };
   }, [workspaceId, isOpen, refresh]);
 
-  const diffTotals = useMemo(() => {
-    const files = workspace?.changedFiles ?? [];
-    return files.reduce(
-      (totals, file) => ({
-        additions: totals.additions + (file.additions ?? 0),
-        deletions: totals.deletions + (file.deletions ?? 0),
-      }),
-      { additions: 0, deletions: 0 },
-    );
-  }, [workspace?.changedFiles]);
+  // Live changed files from the cockpit fetch (refresh button + 5s poll);
+  // the cached workspace summary only bridges the gap while loading.
+  const changedFiles = useMemo(() => {
+    if (review) {
+      return review.files.map((entry) => ({
+        path: entry.file.path,
+        additions: entry.file.additions ?? 0,
+        deletions: entry.file.deletions ?? 0,
+      }));
+    }
+    return (workspace?.changedFiles ?? []).map((file) => ({
+      path: file.path,
+      additions: file.additions,
+      deletions: file.deletions,
+    }));
+  }, [review, workspace?.changedFiles]);
+
+  const diffTotals = useMemo(() => changedFiles.reduce(
+    (totals, file) => ({
+      additions: totals.additions + file.additions,
+      deletions: totals.deletions + file.deletions,
+    }),
+    { additions: 0, deletions: 0 },
+  ), [changedFiles]);
 
   if (!isOpen) return null;
 
@@ -146,13 +160,13 @@ export function WorkspaceInspectorRail({
             <div className="space-y-3">
               <div className="rounded-lg border border-mn-border bg-mn-card/60 p-2.5 text-xs text-mn-muted">
                 <p>
-                  <span className="font-semibold text-mn-text">{workspace.changedFiles.length}</span> file(s) changed ·{' '}
+                  <span className="font-semibold text-mn-text">{changedFiles.length}</span> file(s) changed ·{' '}
                   <span className="text-mn-green">+{diffTotals.additions}</span> / <span className="text-mn-red">-{diffTotals.deletions}</span>
                 </p>
               </div>
               <div className="space-y-1">
-                {workspace.changedFiles.length === 0 && <p className="text-xs text-mn-muted">No changed files.</p>}
-                {workspace.changedFiles.map((file) => (
+                {changedFiles.length === 0 && <p className="text-xs text-mn-muted">No changed files.</p>}
+                {changedFiles.map((file) => (
                   <button
                     key={file.path}
                     type="button"

@@ -1,6 +1,6 @@
 import { useEffect, type Dispatch, type SetStateAction } from 'react';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { AgentDecisionPrompt, AgentDecisionResolvedEvent, TerminalOutputEvent } from '../../types';
+import type { AgentDecisionPrompt, AgentDecisionResolvedEvent, AgentModeChangedEvent, TerminalOutputEvent } from '../../types';
 import type { PendingCommand } from '../modals/CommandApprovalModal';
 
 interface UseWorkspaceTerminalEventsParams {
@@ -9,6 +9,7 @@ interface UseWorkspaceTerminalEventsParams {
   bumpNextSeqFromChunk: (sessionId: string, seq: number) => void;
   setPendingCommand: Dispatch<SetStateAction<PendingCommand | null>>;
   setPendingDecision: Dispatch<SetStateAction<AgentDecisionPrompt | null>>;
+  onAgentModeChanged: (payload: AgentModeChangedEvent) => void;
   refreshReadiness: () => Promise<void>;
   refreshWorkbenchState: () => Promise<void>;
   refreshCoordinatorStatus: () => Promise<void>;
@@ -21,6 +22,7 @@ export function useWorkspaceTerminalEvents({
   bumpNextSeqFromChunk,
   setPendingCommand,
   setPendingDecision,
+  onAgentModeChanged,
   refreshCoordinatorStatus,
   onCoordinatorNotify,
 }: UseWorkspaceTerminalEventsParams) {
@@ -62,6 +64,16 @@ export function useWorkspaceTerminalEvents({
     );
 
     promises.push(
+      listen<AgentModeChangedEvent>('mn://agent-mode-changed', (event) => {
+        if (disposed || event.payload.workspaceId !== workspaceId) return;
+        onAgentModeChanged(event.payload);
+      }).catch((err) => {
+        console.warn('Failed to listen for agent-mode-changed:', err);
+        return (() => {}) as UnlistenFn;
+      }),
+    );
+
+    promises.push(
       listen<TerminalOutputEvent>('mn://terminal-output', (event) => {
         if (disposed || event.payload.workspaceId !== workspaceId) return;
         const chunk = event.payload.chunk;
@@ -91,6 +103,7 @@ export function useWorkspaceTerminalEvents({
   }, [
     bumpNextSeqFromChunk,
     enqueueOutput,
+    onAgentModeChanged,
     onCoordinatorNotify,
     refreshCoordinatorStatus,
     setPendingCommand,

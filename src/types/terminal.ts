@@ -59,6 +59,15 @@ export interface AgentDecisionResolvedEvent {
   sessionId: string;
 }
 
+/** Permission mode shown in the agent TUI footer (shift+tab cycles it). */
+export type AgentPermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions';
+
+export interface AgentModeChangedEvent {
+  workspaceId: string;
+  sessionId: string;
+  mode: AgentPermissionMode;
+}
+
 export interface TerminalSessionState {
   activeSession?: TerminalSession | null;
   latestSession?: TerminalSession | null;

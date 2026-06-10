@@ -60,4 +60,20 @@ export function useWorkspaceTerminalPolling({
     visibleSessionsRef,
     workspaceId,
   ]);
+
+  // The interval skips ticks while hidden; catch up immediately on return so
+  // output missed in the background renders without waiting for the next tick.
+  useEffect(() => {
+    if (!workspaceId) return;
+    const onVisible = () => {
+      if (document.hidden) return;
+      void refreshSessions(true);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [refreshSessions, workspaceId]);
 }

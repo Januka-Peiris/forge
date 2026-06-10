@@ -26,7 +26,8 @@ function focusWorkspaceComposer(): void {
   window.dispatchEvent(new CustomEvent('mn:focus-composer'));
 }
 
-function toggleWorkspacePlanMode(): void {
+/** Cycles the agent's permission mode (Default / Accept Edits / Plan), like Shift+Tab in the TUI. */
+function cycleWorkspaceAgentMode(): void {
   window.dispatchEvent(new CustomEvent('mn:toggle-plan-mode'));
 }
 
@@ -97,7 +98,7 @@ export function useAppKeyboardShortcuts({
         if (!selectedWorkspaceId) return;
         event.preventDefault();
         onSetWorkspacesView();
-        window.setTimeout(toggleWorkspacePlanMode, 0);
+        window.setTimeout(cycleWorkspaceAgentMode, 0);
         return;
       }
 

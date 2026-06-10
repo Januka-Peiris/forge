@@ -222,6 +222,35 @@ export default function App() {
     void loadBackendState();
   }, [loadBackendState]);
 
+  /** Quiet workspace-summary refresh (no loading state): keeps sidebar diff counters fresh. */
+  const refreshWorkspaceSummaries = useCallback(async () => {
+    try {
+      replaceWorkspaces(await listWorkspaces());
+    } catch (err) {
+      mnWarn('workspaces', 'summary refresh failed', { err });
+    }
+  }, [replaceWorkspaces]);
+
+  // The backend recomputes changed files in the background on each
+  // list_workspaces call, so polling here converges sidebar +/- counters
+  // after commits/pushes/PRs. Window focus and the explicit
+  // mn:refresh-workspaces event (e.g. after Create PR) refresh immediately.
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      if (document.hidden) return;
+      void refreshWorkspaceSummaries();
+    }, 15000);
+    const onFocus = () => void refreshWorkspaceSummaries();
+    const onRefreshEvent = () => void refreshWorkspaceSummaries();
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('mn:refresh-workspaces', onRefreshEvent);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('mn:refresh-workspaces', onRefreshEvent);
+    };
+  }, [refreshWorkspaceSummaries]);
+
 
 
   const handleDeepLinkUrl = useCallback(async (url: string) => {

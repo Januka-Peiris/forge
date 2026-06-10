@@ -8,13 +8,41 @@ use crate::models::{
     WorkspaceSummary,
 };
 use crate::repositories::{repository_repository, workspace_repository};
-use crate::services::git_worktree_service;
+use crate::services::{git_review_service, git_worktree_service};
 use crate::state::AppState;
 
 mod ops;
 
 pub fn list_workspaces(state: &AppState) -> Result<Vec<WorkspaceSummary>, String> {
-    workspace_repository::list(&state.db)
+    let workspaces = workspace_repository::list(&state.db)?;
+    spawn_changed_files_refresh(state, &workspaces);
+    Ok(workspaces)
+}
+
+/// Recomputes and caches changed files for active workspaces in the
+/// background so the next list_workspaces poll returns fresh diff counters
+/// (get_workspace_changed_files persists what it computes). Single-flight
+/// guarded; per-workspace errors (missing worktree, deleted repo) are ignored.
+fn spawn_changed_files_refresh(state: &AppState, workspaces: &[WorkspaceSummary]) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static REFRESHING: AtomicBool = AtomicBool::new(false);
+
+    let ids: Vec<String> = workspaces
+        .iter()
+        .filter(|workspace| workspace.status != "Merged")
+        .map(|workspace| workspace.id.clone())
+        .collect();
+    if ids.is_empty() || REFRESHING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+
+    let state = state.clone();
+    std::thread::spawn(move || {
+        for id in ids {
+            let _ = git_review_service::get_workspace_changed_files(&state, &id);
+        }
+        REFRESHING.store(false, Ordering::SeqCst);
+    });
 }
 
 pub fn get_workspace_detail(state: &AppState, id: &str) -> Result<Option<WorkspaceDetail>, String> {

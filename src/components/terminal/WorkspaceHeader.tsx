@@ -1,12 +1,9 @@
 import {
-  Box,
-  ChevronRight,
   Copy,
   ExternalLink,
   GitBranch,
   GitPullRequest,
   HelpCircle,
-  Layout,
   MoreHorizontal,
   PlugZap,
   Square,
@@ -14,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { Tooltip } from '../ui/tooltip';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -77,32 +75,19 @@ export function WorkspaceHeader({
   return (
     <div className="shrink-0 border-b border-mn-border bg-mn-bg/95 backdrop-blur-md">
       <div className="flex h-11 items-center justify-between gap-2 px-4">
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 text-[11px]">
-          <div className="flex min-w-0 shrink items-center gap-1.5">
-            <Box className="h-3.5 w-3.5 shrink-0 text-mn-muted" />
-            <span className="truncate font-bold text-mn-text">{workspace.repo}</span>
-          </div>
-
-          <ChevronRight className="h-3 w-3 shrink-0 text-mn-dim" />
-
-          <div className="flex min-w-0 shrink items-center gap-1">
-            <GitBranch className="h-3.5 w-3.5 shrink-0 text-mn-muted" />
-            <span className="truncate font-mono text-mn-text/80">{workspace.branch}</span>
-          </div>
-
-          <span className="shrink-0 text-mn-border/40">/</span>
-
-          <h1 className="shrink-0 truncate font-bold text-mn-cyan">{workspace.name}</h1>
-
-          {workspace.currentTask.trim() && (
-            <>
-              <ChevronRight className="h-3 w-3 shrink-0 text-mn-dim" />
-              <div className="flex min-w-0 items-center gap-1.5 overflow-hidden text-mn-muted">
-                <Layout className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate font-medium text-mn-cyan/90">{workspace.currentTask}</span>
-              </div>
-            </>
-          )}
+        <div className="flex min-w-0 flex-1 items-center text-[11px]">
+          {/* Branch + name only; repo and task live in the tooltip to keep the bar quiet. */}
+          <Tooltip
+            content={`${workspace.repo}${workspace.currentTask.trim() ? ` · ${workspace.currentTask}` : ''}`}
+            side="bottom"
+          >
+            <div className="flex min-w-0 items-center gap-1.5">
+              <GitBranch className="h-3.5 w-3.5 shrink-0 text-mn-muted" />
+              <span className="truncate font-mono text-mn-text/80">{workspace.branch}</span>
+              <span className="shrink-0 text-mn-border/40">/</span>
+              <h1 className="min-w-0 truncate font-bold text-mn-cyan">{workspace.name}</h1>
+            </div>
+          </Tooltip>
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
@@ -126,7 +111,7 @@ export function WorkspaceHeader({
                 </div>
                 <div>
                   <p className="font-semibold text-mn-text">Plan &amp; model</p>
-                  <p className="text-mn-muted">The Plan button (Shift+Tab) cycles the agent's permission mode — the terminal footer shows the current one. Changing model switches a live Claude session via /model.</p>
+                  <p className="text-mn-muted">The mode button (Shift+Tab) cycles the agent's permission mode - the terminal footer shows the current one. Changing model switches a live Claude session via /model.</p>
                 </div>
                 <div>
                   <p className="font-semibold text-mn-text">Orchestrator</p>

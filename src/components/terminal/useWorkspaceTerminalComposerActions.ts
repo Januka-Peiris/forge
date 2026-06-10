@@ -60,16 +60,24 @@ export function useWorkspaceTerminalComposerActions({
     ? focusedSession.id
     : null;
 
-  const togglePlanMode = () => {
+  const cycleAgentMode = () => {
     // For a live agent TUI, forward a real Shift+Tab (CSI Z) so the agent
-    // cycles its own permission mode — the TUI footer is the source of truth.
-    // The composer setting still controls --permission-mode for new sessions.
+    // cycles its own permission mode. The TUI footer is the source of truth:
+    // the mode watcher mirrors it back via mn://agent-mode-changed, so local
+    // state is not flipped here.
     if (focusedRunningAgentSessionId) {
       void writeWorkspaceTerminalSessionInput(focusedRunningAgentSessionId, '\x1b[Z')
         .catch((err) => setActionError(err));
+      return;
     }
+    // No live session: cycle the launch mode used for --permission-mode on
+    // the next session spawn.
     setComposerSettings((current) => {
-      const next = current.selectedTaskMode === 'Plan' ? 'Act' : 'Plan';
+      const next = current.selectedTaskMode === 'Act'
+        ? 'Accept Edits'
+        : current.selectedTaskMode === 'Accept Edits'
+          ? 'Plan'
+          : 'Act';
       return { ...current, selectedTaskMode: next };
     });
   };
@@ -210,7 +218,7 @@ export function useWorkspaceTerminalComposerActions({
   };
 
   return {
-    togglePlanMode,
+    cycleAgentMode,
     changeModel,
     handleWorkbenchAction,
     sendPrompt,

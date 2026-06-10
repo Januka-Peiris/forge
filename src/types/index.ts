@@ -82,6 +82,8 @@ export type {
   AgentDecisionOption,
   AgentDecisionPrompt,
   AgentDecisionResolvedEvent,
+  AgentModeChangedEvent,
+  AgentPermissionMode,
   AgentPromptEntry,
   AgentPromptStatus,
   QueueAgentPromptInput,

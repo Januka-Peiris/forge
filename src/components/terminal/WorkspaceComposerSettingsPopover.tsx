@@ -68,10 +68,10 @@ export function WorkspaceComposerSettingsPopover({
             >
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {['Act', 'Plan', 'Review', 'Fix'].map((mode) => <SelectItem key={mode} value={mode}>{mode}</SelectItem>)}
+                {['Act', 'Accept Edits', 'Plan', 'Review', 'Fix'].map((mode) => <SelectItem key={mode} value={mode}>{mode}</SelectItem>)}
               </SelectContent>
             </Select>
-            <p className="mt-1 text-xs text-mn-muted">Shortcut: Shift+Tab toggles Plan mode.</p>
+            <p className="mt-1 text-xs text-mn-muted">Shortcut: Shift+Tab cycles the agent's permission mode.</p>
           </div>
           <div>
             <label className="mb-1 block text-xs text-mn-muted">Thinking / effort</label>
@@ -93,7 +93,7 @@ export function WorkspaceComposerSettingsPopover({
           </div>
           <div className="border-t border-mn-border/60 pt-2">
             <p className="mb-1.5 text-xs font-bold uppercase tracking-widest text-mn-muted">Repo context</p>
-            <p className="mb-2 text-xs leading-snug text-mn-muted">Git paths + changed-file diffs. Mnemonic does not cap size—large repos can produce very large context.</p>
+            <p className="mb-2 text-xs leading-snug text-mn-muted">Git paths + changed-file diffs. Mnemonic does not cap size - large repos can produce very large context.</p>
             <button type="button" disabled={contextBusy} onClick={onAddRepoContext} className="mb-1.5 w-full rounded-md border border-mn-cyan/30 bg-mn-cyan/10 px-2 py-1.5 text-xs font-semibold text-mn-cyan hover:bg-mn-cyan/15 disabled:opacity-50">
               {contextBusy ? 'Working…' : 'Add repo context to prompt'}
             </button>

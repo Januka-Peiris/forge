@@ -8,7 +8,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
 
 use crate::models::{
-    AgentDecisionEvent, AgentDecisionOption, AgentDecisionResolvedEvent, TerminalSession,
+    AgentDecisionEvent, AgentDecisionOption, AgentDecisionResolvedEvent, AgentModeChangedEvent,
+    TerminalSession,
 };
 use crate::repositories::terminal_repository;
 use crate::state::{ActiveTerminal, AppState};
@@ -29,6 +30,8 @@ const FALLBACK_LINE_WINDOW: usize = 50;
 /// Watches an agent TUI for numbered decision dialogs (plan approval,
 /// permission prompts, AskUserQuestion) and mirrors them to the chat UI via
 /// `mn://agent-decision-required` / `mn://agent-decision-resolved` events.
+/// Also tracks the permission mode shown in the TUI footer and mirrors it via
+/// `mn://agent-mode-changed`, so the composer's mode button stays truthful.
 pub(super) fn spawn_decision_watcher(
     state: AppState,
     session: TerminalSession,
@@ -38,7 +41,9 @@ pub(super) fn spawn_decision_watcher(
 }
 
 fn watch_session(state: AppState, session: TerminalSession, active: Arc<ActiveTerminal>) {
-    let mut last_inspected_seq = u64::MAX;
+    let mut last_mode_seq = u64::MAX;
+    let mut last_dialog_seq = u64::MAX;
+    let mut last_mode: Option<&'static str> = None;
     let mut pending_fingerprint: Option<u64> = None;
     loop {
         thread::sleep(Duration::from_millis(POLL_INTERVAL_MILLIS));
@@ -62,22 +67,42 @@ fn watch_session(state: AppState, session: TerminalSession, active: Arc<ActiveTe
             continue;
         }
         let seq = active.seq_counter.load(Ordering::Relaxed);
-        if seq == last_inspected_seq {
-            // Screen unchanged since the last inspection.
-            continue;
-        }
         // A fresh dialog is only looked for once output has settled; a dialog
         // already surfaced in chat is re-checked on any new output so the card
         // clears promptly after it is answered (in chat or in the terminal).
+        // Mode changes redraw the footer immediately, so they skip the idle gate.
         let idle = now_millis().saturating_sub(last_output) >= INSPECT_IDLE_MILLIS;
-        if pending_fingerprint.is_none() && !idle {
+        let mode_due = seq != last_mode_seq;
+        let dialog_due = seq != last_dialog_seq && (pending_fingerprint.is_some() || idle);
+        if !mode_due && !dialog_due {
             continue;
         }
 
         let Some(screen) = capture_screen(&state, &session) else {
             continue;
         };
-        last_inspected_seq = seq;
+
+        if mode_due {
+            last_mode_seq = seq;
+            if let Some(mode) = parse_agent_mode(&screen) {
+                if last_mode != Some(mode) {
+                    last_mode = Some(mode);
+                    let _ = state.app_handle.emit(
+                        "mn://agent-mode-changed",
+                        AgentModeChangedEvent {
+                            workspace_id: session.workspace_id.clone(),
+                            session_id: session.id.clone(),
+                            mode: mode.to_string(),
+                        },
+                    );
+                }
+            }
+        }
+
+        if !dialog_due {
+            continue;
+        }
+        last_dialog_seq = seq;
 
         match parse_decision_dialog(&screen) {
             Some(dialog) => {
@@ -102,6 +127,38 @@ fn watch_session(state: AppState, session: TerminalSession, active: Arc<ActiveTe
             }
         }
     }
+}
+
+/// Lines from the bottom of the screen inspected for the mode footer.
+const MODE_FOOTER_LINE_WINDOW: usize = 6;
+
+/// Permission mode shown in the agent TUI footer. None when the footer is not
+/// visible (mid-redraw, alt screens), so callers keep the last known mode.
+fn parse_agent_mode(screen: &str) -> Option<&'static str> {
+    let lines: Vec<String> = screen
+        .lines()
+        .map(clean_line)
+        .filter(|line| !line.is_empty())
+        .collect();
+    let start = lines.len().saturating_sub(MODE_FOOTER_LINE_WINDOW);
+    let mut composer_visible = false;
+    for line in &lines[start..] {
+        let lowered = line.to_lowercase();
+        if lowered.contains("plan mode on") {
+            return Some("plan");
+        }
+        if lowered.contains("accept edits on") {
+            return Some("acceptEdits");
+        }
+        if lowered.contains("bypass permissions on") {
+            return Some("bypassPermissions");
+        }
+        if line.starts_with('>') || lowered.contains("? for shortcuts") {
+            composer_visible = true;
+        }
+    }
+    // No mode marker but the composer is on screen: the TUI is in default mode.
+    composer_visible.then_some("default")
 }
 
 fn emit_resolved(state: &AppState, session: &TerminalSession) {
@@ -464,6 +521,64 @@ mod tests {
     fn requires_question_text() {
         let screen = "\n 1. Yes\n 2. No\n";
         assert!(parse_decision_dialog(screen).is_none());
+    }
+
+    #[test]
+    fn parses_plan_mode_footer() {
+        let screen = "\
+⏺ Done.
+
+╭──────────────────────────────────────────────╮
+│ >                                            │
+╰──────────────────────────────────────────────╯
+  ⏸ plan mode on (shift+tab to cycle) · PR #6 · ← for agents
+";
+        assert_eq!(parse_agent_mode(screen), Some("plan"));
+    }
+
+    #[test]
+    fn parses_accept_edits_footer() {
+        let screen = "\
+╭──────────────────────────────────────────────╮
+│ >                                            │
+╰──────────────────────────────────────────────╯
+  ⏵⏵ accept edits on (shift+tab to cycle)
+";
+        assert_eq!(parse_agent_mode(screen), Some("acceptEdits"));
+    }
+
+    #[test]
+    fn parses_bypass_permissions_footer() {
+        let screen = "\
+╭──────────────────────────────────────────────╮
+│ >                                            │
+╰──────────────────────────────────────────────╯
+  bypass permissions on (shift+tab to cycle)
+";
+        assert_eq!(parse_agent_mode(screen), Some("bypassPermissions"));
+    }
+
+    #[test]
+    fn default_mode_when_composer_visible_without_marker() {
+        let screen = "\
+⏺ All tests pass.
+
+╭──────────────────────────────────────────────╮
+│ >                                            │
+╰──────────────────────────────────────────────╯
+  ? for shortcuts
+";
+        assert_eq!(parse_agent_mode(screen), Some("default"));
+    }
+
+    #[test]
+    fn no_mode_when_footer_not_visible() {
+        let screen = "\
+Compiling crate foo v0.1.0
+Compiling crate bar v0.2.0
+Building [=========>          ] 42/100
+";
+        assert_eq!(parse_agent_mode(screen), None);
     }
 
     #[test]

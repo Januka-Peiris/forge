@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { FileText, Image, Link2, ListChecks, Paperclip, X, Zap } from 'lucide-react';
+import { FileText, HelpCircle, Image, Link2, ListChecks, Paperclip, X, Zap } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import type { WorkspaceAgentContext, WorkspaceContextPreview } from '../../types';
+import type { AgentDecisionPrompt, AgentPermissionMode, WorkspaceAgentContext, WorkspaceContextPreview } from '../../types';
 import type { PromptTemplate } from '../../types/prompt-template';
 import { getWorkspaceContextPreview, refreshWorkspaceRepoContext } from '../../lib/tauri-api/agent-context';
 import { saveWorkspaceAttachment, saveWorkspacePastedImage } from '../../lib/tauri-api/workspace-file-tree';
@@ -104,6 +104,14 @@ export interface ComposerSettings {
   coordinatorAutoStepCooldownSeconds: number;
 }
 
+/** Mode button label + active styling per TUI permission mode. */
+const MODE_BUTTON_STYLES: Record<AgentPermissionMode, { label: string; className: string }> = {
+  default: { label: 'Default', className: 'text-mn-muted/50 hover:text-mn-muted' },
+  acceptEdits: { label: 'Accept Edits', className: 'bg-mn-teal/15 text-mn-teal font-semibold' },
+  plan: { label: 'Plan', className: 'bg-mn-blue/15 text-mn-blue font-semibold' },
+  bypassPermissions: { label: 'Bypass', className: 'bg-mn-yellow/15 text-mn-yellow font-semibold' },
+};
+
 interface WorkspaceComposerProps {
   workspaceId: string;
   canInterrupt: boolean;
@@ -112,9 +120,15 @@ interface WorkspaceComposerProps {
   agentContext: WorkspaceAgentContext | null;
   provider: AgentProviderId;
   settings: ComposerSettings;
+  /** Permission mode of the live agent TUI (footer truth); null without a live session. */
+  liveAgentMode: AgentPermissionMode | null;
+  /** Decision dialog the agent is waiting on; renders inside the input box. */
+  pendingDecision: AgentDecisionPrompt | null;
   onSettingsChange: (patch: Partial<ComposerSettings>) => void;
   onSend: (text: string) => void;
-  onTogglePlanMode: () => void;
+  onCycleAgentMode: () => void;
+  onAnswerDecision: (sessionId: string, key: string, label: string) => void;
+  onAnswerDecisionWithText: (sessionId: string, text: string) => void;
   onInterrupt: () => void;
 }
 
@@ -126,9 +140,13 @@ export function WorkspaceComposer({
   agentContext,
   provider,
   settings,
+  liveAgentMode,
+  pendingDecision,
   onSettingsChange,
   onSend,
-  onTogglePlanMode,
+  onCycleAgentMode,
+  onAnswerDecision,
+  onAnswerDecisionWithText,
   onInterrupt,
 }: WorkspaceComposerProps) {
   const draftKey = workspaceId;
@@ -143,8 +161,14 @@ export function WorkspaceComposer({
   const [contextError, setContextError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [decisionBusy, setDecisionBusy] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const activeDraftKeyRef = useRef(draftKey);
+
+  // Each fresh decision re-enables its option buttons.
+  useEffect(() => {
+    setDecisionBusy(false);
+  }, [pendingDecision]);
 
   const updatePromptInput = (next: string | ((current: string) => string)) => {
     setPromptInput((current) => {
@@ -172,10 +196,10 @@ export function WorkspaceComposer({
   }, []);
 
   useEffect(() => {
-    const handleTogglePlanMode = () => onTogglePlanMode();
-    window.addEventListener('mn:toggle-plan-mode', handleTogglePlanMode);
-    return () => window.removeEventListener('mn:toggle-plan-mode', handleTogglePlanMode);
-  }, [onTogglePlanMode]);
+    const handleCycleAgentMode = () => onCycleAgentMode();
+    window.addEventListener('mn:toggle-plan-mode', handleCycleAgentMode);
+    return () => window.removeEventListener('mn:toggle-plan-mode', handleCycleAgentMode);
+  }, [onCycleAgentMode]);
 
   const promptMeter = useMemo(() => {
     if (!promptInput.trim()) return null;
@@ -262,6 +286,13 @@ export function WorkspaceComposer({
     const text = promptInput.trim();
     updatePromptInput('');
     setAttachments([]);
+    if (pendingDecision) {
+      // The agent dialog is blocking the TUI; route the text into it as a
+      // custom reply (e.g. "Tell Claude what to change") instead of queueing.
+      setDecisionBusy(true);
+      onAnswerDecisionWithText(pendingDecision.sessionId, text);
+      return;
+    }
     onSend(text);
   };
 
@@ -375,6 +406,15 @@ export function WorkspaceComposer({
   const modelOptions = providerModelOptions(provider);
   const thinkingOptions = providerReasoningOptions(provider);
 
+  // Live TUI footer wins; otherwise reflect the launch mode for new sessions.
+  const launchPermissionMode: AgentPermissionMode = settings.selectedTaskMode === 'Plan'
+    ? 'plan'
+    : settings.selectedTaskMode === 'Accept Edits'
+      ? 'acceptEdits'
+      : 'default';
+  const displayMode = liveAgentMode ?? launchPermissionMode;
+  const modeButton = MODE_BUTTON_STYLES[displayMode];
+
   return (
     <div className="shrink-0 border-t border-mn-border bg-mn-surface" style={{ height: `${composerHeight}px` }}>
       <div
@@ -390,12 +430,12 @@ export function WorkspaceComposer({
               {(provider === 'claude_code' || provider === 'codex') && (
                 <>
                   <button
-                    onClick={onTogglePlanMode}
-                    title="Toggle Plan mode (Shift+Tab)"
-                    className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] transition-colors ${settings.selectedTaskMode === 'Plan' ? 'bg-mn-blue/15 text-mn-blue font-semibold' : 'text-mn-muted/50 hover:text-mn-muted'}`}
+                    onClick={onCycleAgentMode}
+                    title="Cycle permission mode (Shift+Tab): Default, Accept Edits, Plan"
+                    className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] transition-colors ${modeButton.className}`}
                   >
                     <ListChecks className="h-3 w-3" />
-                    <span>Plan</span>
+                    <span>{modeButton.label}</span>
                   </button>
                   <div className="h-3.5 w-px bg-mn-border/50" />
                 </>
@@ -542,38 +582,74 @@ export function WorkspaceComposer({
                 <Paperclip className="mr-2 h-4 w-4" /> Drop files here
               </div>
             )}
-            <textarea
-              ref={textareaRef}
-              data-mn-composer="true"
-              value={promptInput}
-              onChange={(e) => updatePromptInput(e.target.value)}
-              onPaste={handlePaste}
-              onDrop={handleDrop}
-              onDragEnter={(event) => {
-                if (Array.from(event.dataTransfer.items).some((item) => item.kind === 'file')) {
-                  setDragActive(true);
-                }
-              }}
-              onDragLeave={(event) => {
-                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-                  setDragActive(false);
-                }
-              }}
-              onDragOver={(e) => {
-                if (Array.from(e.dataTransfer.items).some((item) => item.kind === 'file')) e.preventDefault();
-              }}
-              rows={5}
-              placeholder="Send instruction to agent (Enter to send, Shift+Enter for newline)…"
-              className="h-full min-h-0 w-full resize-none overflow-y-auto rounded-chat border border-mn-border bg-mn-bg px-3 py-2 text-sm leading-relaxed text-mn-text placeholder:text-mn-muted focus:border-mn-cyan/40 focus:outline-none"
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') { e.currentTarget.blur(); return; }
-                if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); onTogglePlanMode(); return; }
-                if (e.key !== 'Enter' || e.shiftKey) return;
-                if ('isComposing' in e.nativeEvent && e.nativeEvent.isComposing) return;
-                e.preventDefault();
-                handleSend();
-              }}
-            />
+            <div
+              className={`flex h-full min-h-0 w-full flex-col overflow-hidden ${pendingDecision ? 'rounded-chat border border-mn-cyan/50 bg-mn-bg focus-within:border-mn-cyan/70' : ''}`}
+            >
+              {pendingDecision && (
+                <div className="shrink-0 overflow-y-auto border-b border-mn-border/40 px-3 py-2">
+                  <div className="flex items-start gap-2">
+                    <HelpCircle className="mt-0.5 h-4 w-4 shrink-0 text-mn-cyan" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-mn-cyan">
+                        Claude is waiting for a decision
+                      </p>
+                      <p className="mt-1 text-[13px] leading-snug text-mn-text">{pendingDecision.question}</p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {pendingDecision.options.map((option) => (
+                          <button
+                            key={option.key}
+                            type="button"
+                            disabled={decisionBusy}
+                            onClick={() => {
+                              setDecisionBusy(true);
+                              onAnswerDecision(pendingDecision.sessionId, option.key, option.label);
+                            }}
+                            className="rounded-md border border-mn-border bg-black/20 px-2.5 py-1 text-left text-[12px] text-mn-text transition-colors hover:border-mn-cyan/60 hover:bg-mn-cyan/10 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <span className="mr-1.5 font-mono text-[11px] text-mn-muted">{option.key}.</span>
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <textarea
+                ref={textareaRef}
+                data-mn-composer="true"
+                value={promptInput}
+                onChange={(e) => updatePromptInput(e.target.value)}
+                onPaste={handlePaste}
+                onDrop={handleDrop}
+                onDragEnter={(event) => {
+                  if (Array.from(event.dataTransfer.items).some((item) => item.kind === 'file')) {
+                    setDragActive(true);
+                  }
+                }}
+                onDragLeave={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                    setDragActive(false);
+                  }
+                }}
+                onDragOver={(e) => {
+                  if (Array.from(e.dataTransfer.items).some((item) => item.kind === 'file')) e.preventDefault();
+                }}
+                rows={5}
+                placeholder={pendingDecision
+                  ? 'Or type a custom reply and press Enter…'
+                  : 'Send instruction to agent (Enter to send, Shift+Enter for newline)…'}
+                className={`h-full min-h-0 w-full flex-1 resize-none overflow-y-auto bg-mn-bg px-3 py-2 text-sm leading-relaxed text-mn-text placeholder:text-mn-muted focus:outline-none ${pendingDecision ? 'border-0' : 'rounded-chat border border-mn-border focus:border-mn-cyan/40'}`}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') { e.currentTarget.blur(); return; }
+                  if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); onCycleAgentMode(); return; }
+                  if (e.key !== 'Enter' || e.shiftKey) return;
+                  if ('isComposing' in e.nativeEvent && e.nativeEvent.isComposing) return;
+                  e.preventDefault();
+                  handleSend();
+                }}
+              />
+            </div>
           </div>
           <div className="flex flex-col gap-1.5">
             {canInterrupt && (

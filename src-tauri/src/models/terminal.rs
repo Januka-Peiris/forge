@@ -95,6 +95,16 @@ pub struct AgentDecisionResolvedEvent {
     pub session_id: String,
 }
 
+/// Emitted when the agent TUI footer reports a different permission mode
+/// (default / acceptEdits / plan / bypassPermissions).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentModeChangedEvent {
+    pub workspace_id: String,
+    pub session_id: String,
+    pub mode: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StartTerminalSessionInput {

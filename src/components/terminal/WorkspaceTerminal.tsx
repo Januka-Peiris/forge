@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as ContextMenu from '@radix-ui/react-context-menu';
 import { Terminal as TerminalIcon } from 'lucide-react';
-import type { AgentDecisionPrompt, AgentProfile, DiscoveredRepository, MnemonicWorkspaceConfig, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
+import type { AgentDecisionPrompt, AgentModeChangedEvent, AgentPermissionMode, AgentProfile, DiscoveredRepository, MnemonicWorkspaceConfig, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
 import type { AgentChatNextAction } from '../../types/agent-chat';
 import type { WorkspaceCoordinatorStatus } from '../../types/coordinator';
 import type { WorkspaceChangedFile } from '../../types/git-review';
 import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
 import type { RepositoryRelationship } from '../../types/repository-relationship';
 import {
+  answerWorkspaceTerminalDecision,
   getWorkspaceTerminalOutputForSession,
   listWorkspaceTerminalSessions,
   listWorkspaceVisibleTerminalSessions,
@@ -15,7 +16,6 @@ import {
   writeWorkspaceTerminalSessionInput,
 } from '../../lib/tauri-api/terminal';
 import { CommandApprovalModal, type PendingCommand } from '../modals/CommandApprovalModal';
-import { AgentDecisionCard } from './AgentDecisionCard';
 import {
   getWorkspaceMnemonicConfig,
 } from '../../lib/tauri-api/workspace-scripts';
@@ -175,6 +175,7 @@ export function WorkspaceTerminal({
   const [coordinatorToast, setCoordinatorToast] = useState<string | null>(null);
   const [pendingCommand, setPendingCommand] = useState<PendingCommand | null>(null);
   const [pendingDecision, setPendingDecision] = useState<AgentDecisionPrompt | null>(null);
+  const [agentModeBySessionId, setAgentModeBySessionId] = useState<Record<string, AgentPermissionMode>>({});
   const [openEditors, setOpenEditors] = useState<EditorTab[]>([]);
   const [activeEditorPath, setActiveEditorPath] = useState<string | null>(null);
   const [savingEditorPaths, setSavingEditorPaths] = useState<Set<string>>(new Set());
@@ -705,12 +706,21 @@ export function WorkspaceTerminal({
     onCoordinatorNotifyRef.current?.(payload);
   }, []);
 
+  const handleAgentModeChanged = useCallback((payload: AgentModeChangedEvent) => {
+    setAgentModeBySessionId((current) => (
+      current[payload.sessionId] === payload.mode
+        ? current
+        : { ...current, [payload.sessionId]: payload.mode }
+    ));
+  }, []);
+
   useWorkspaceTerminalEvents({
     workspaceId,
     enqueueOutput,
     bumpNextSeqFromChunk,
     setPendingCommand,
     setPendingDecision,
+    onAgentModeChanged: handleAgentModeChanged,
     refreshReadiness,
     refreshWorkbenchState,
     refreshCoordinatorStatus,
@@ -748,7 +758,7 @@ export function WorkspaceTerminal({
   });
 
   const {
-    togglePlanMode,
+    cycleAgentMode,
     changeModel,
     handleWorkbenchAction,
     sendPrompt,
@@ -775,6 +785,36 @@ export function WorkspaceTerminal({
   });
 
 
+  /** Permission mode of the focused live agent TUI, mirrored from its footer. */
+  const liveAgentMode = focusedSession?.status === 'running'
+    ? agentModeBySessionId[focusedSession.id] ?? null
+    : null;
+
+  /** Optimistic dismiss; the backend's resolved event is the authoritative clear. */
+  const handleAnswerDecision = useCallback((sessionId: string, key: string, label: string) => {
+    answerWorkspaceTerminalDecision(sessionId, key, label)
+      .then(() => setPendingDecision(null))
+      .catch(setActionError);
+  }, [setActionError]);
+
+  /**
+   * Free-text answer typed into the composer while a dialog is blocking the
+   * TUI: written raw into the dialog (it accepts typed feedback, e.g. "Tell
+   * Claude what to change"), Enter sent separately so it registers as submit.
+   */
+  const handleAnswerDecisionWithText = useCallback((sessionId: string, text: string) => {
+    void (async () => {
+      try {
+        await writeWorkspaceTerminalSessionInput(sessionId, text);
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        await writeWorkspaceTerminalSessionInput(sessionId, '\r');
+        setPendingDecision(null);
+      } catch (err) {
+        setActionError(err);
+      }
+    })();
+  }, [setActionError]);
+
   /**
    * One-click PR. With a live agent session, the agent commits/pushes/opens
    * the PR itself (it knows what it changed, so the PR text is better).
@@ -786,7 +826,7 @@ export function WorkspaceTerminal({
       && (focusedSession.terminalKind === 'agent' || focusedSession.sessionRole === 'agent');
     if (liveAgent) {
       sendPrompt(SHIP_PR_PROMPT);
-      showCoordinatorToast('Asked the agent to commit, push, and open the PR — watch the terminal.');
+      showCoordinatorToast('Asked the agent to commit, push, and open the PR - watch the terminal.');
       return;
     }
     setCreatingPr(true);
@@ -795,6 +835,8 @@ export function WorkspaceTerminal({
         showCoordinatorToast(`PR #${result.prNumber} ready · ${result.prUrl}`);
         void refreshReadiness();
         void refreshWorkbenchState();
+        // Sidebar diff counters and PR status come from workspace summaries.
+        window.dispatchEvent(new CustomEvent('mn:refresh-workspaces'));
       })
       .catch(setActionError)
       .finally(() => setCreatingPr(false));
@@ -1082,14 +1124,6 @@ export function WorkspaceTerminal({
 
       <WorkspaceContextFooter workspaceId={workspace.id} />
 
-      {pendingDecision && (
-        <AgentDecisionCard
-          decision={pendingDecision}
-          onAnswered={() => setPendingDecision(null)}
-          onError={setActionError}
-        />
-      )}
-
       {(focusedIsAgent || hasAnyAgentSession) && (
         <WorkspaceComposer
           workspaceId={workspace.id}
@@ -1099,6 +1133,8 @@ export function WorkspaceTerminal({
           agentContext={agentContext}
           provider={activePromptProvider}
           settings={composerSettings}
+          liveAgentMode={liveAgentMode}
+          pendingDecision={pendingDecision}
           onSettingsChange={(patch) => {
             // Model changes go through changeModel so a live Claude session
             // is switched in-place via /model.
@@ -1109,7 +1145,9 @@ export function WorkspaceTerminal({
             }
           }}
           onSend={sendPrompt}
-          onTogglePlanMode={togglePlanMode}
+          onCycleAgentMode={cycleAgentMode}
+          onAnswerDecision={handleAnswerDecision}
+          onAnswerDecisionWithText={handleAnswerDecisionWithText}
           onInterrupt={() => void interruptFocusedAgent()}
         />
       )}

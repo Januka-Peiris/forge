@@ -74,8 +74,9 @@ pub fn open_in_cursor(state: State<'_, AppState>, workspace_id: String) -> Resul
 
 #[tauri::command]
 pub fn open_external_url(url: String) -> Result<(), String> {
-    if !url.starts_with("https://") {
-        return Err("Only https URLs can be opened".to_string());
+    // http is allowed for localhost dev-server links printed in terminals.
+    if !url.starts_with("https://") && !url.starts_with("http://") {
+        return Err("Only http(s) URLs can be opened".to_string());
     }
     std::process::Command::new("open")
         .arg(&url)

@@ -132,6 +132,51 @@ pub fn insert(db: &Database, detail: &WorkspaceDetail) -> Result<(), String> {
     })
 }
 
+/// Replace the cached changed-files rows for a workspace with freshly computed
+/// ones (see git_review_service::get_workspace_changed_files). Keeps sidebar
+/// counters and conflict detection in sync with the real git state.
+pub fn replace_changed_files(
+    db: &Database,
+    workspace_id: &str,
+    files: &[ChangedFile],
+) -> Result<(), String> {
+    db.with_connection_mut(|connection| {
+        let transaction = connection.transaction()?;
+        write_changed_files(&transaction, workspace_id, files)?;
+        transaction.commit()
+    })
+}
+
+fn write_changed_files(
+    transaction: &rusqlite::Transaction<'_>,
+    workspace_id: &str,
+    files: &[ChangedFile],
+) -> rusqlite::Result<()> {
+    transaction.execute(
+        "DELETE FROM changed_files WHERE workspace_id = ?1",
+        params![workspace_id],
+    )?;
+
+    for (index, file) in files.iter().enumerate() {
+        transaction.execute(
+            r#"
+            INSERT INTO changed_files (workspace_id, path, additions, deletions, status, sort_order)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            "#,
+            params![
+                workspace_id,
+                file.path,
+                file.additions,
+                file.deletions,
+                file.status,
+                index as i64,
+            ],
+        )?;
+    }
+
+    Ok(())
+}
+
 fn insert_with_transaction(
     transaction: &rusqlite::Transaction<'_>,
     detail: &WorkspaceDetail,
@@ -212,27 +257,7 @@ fn insert_with_transaction(
         ],
     )?;
 
-    transaction.execute(
-        "DELETE FROM changed_files WHERE workspace_id = ?1",
-        params![summary.id],
-    )?;
-
-    for (index, file) in summary.changed_files.iter().enumerate() {
-        transaction.execute(
-            r#"
-            INSERT INTO changed_files (workspace_id, path, additions, deletions, status, sort_order)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-            "#,
-            params![
-                summary.id,
-                file.path,
-                file.additions,
-                file.deletions,
-                file.status,
-                index as i64,
-            ],
-        )?;
-    }
+    write_changed_files(transaction, &summary.id, &summary.changed_files)?;
 
     Ok(())
 }
