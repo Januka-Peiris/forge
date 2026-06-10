@@ -5,6 +5,7 @@ import { getWorkspaceMnemonicConfig, runWorkspaceSetup, startWorkspaceRunCommand
 import { getWorkspaceReadiness } from '../../lib/tauri-api/workspace-readiness';
 import { getWorkspaceReviewCockpit, syncWorkspacePrThreads } from '../../lib/tauri-api/review-cockpit';
 import { WorkspaceFilesPanel } from '../terminal/WorkspaceFilesPanel';
+import { PrChecksSection } from './PrChecksSection';
 import { Button } from '../ui/button';
 
 type InspectorTab = 'changes' | 'checks' | 'review' | 'files';
@@ -168,6 +169,9 @@ export function WorkspaceInspectorRail({
 
           {workspace && activeTab === 'checks' && (
             <div className="space-y-3">
+              <PrChecksSection workspaceId={workspace.id} />
+
+              <p className="text-[10px] font-bold uppercase tracking-widest text-mn-dim">Local checks</p>
               <div className="rounded-lg border border-mn-border bg-mn-card/60 p-2.5 text-xs text-mn-muted space-y-1">
                 <p>Status: <span className="font-semibold text-mn-text">{readiness?.status ?? 'unknown'}</span></p>
                 <p>Tests: <span className="font-semibold text-mn-text">{readiness?.testStatus ?? 'unknown'}</span></p>

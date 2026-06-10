@@ -73,6 +73,18 @@ pub fn open_in_cursor(state: State<'_, AppState>, workspace_id: String) -> Resul
 }
 
 #[tauri::command]
+pub fn open_external_url(url: String) -> Result<(), String> {
+    if !url.starts_with("https://") {
+        return Err("Only https URLs can be opened".to_string());
+    }
+    std::process::Command::new("open")
+        .arg(&url)
+        .spawn()
+        .map_err(|e| format!("Failed to open URL: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
 pub fn create_child_workspace(
     state: State<'_, AppState>,
     input: CreateChildWorkspaceInput,

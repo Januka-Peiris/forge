@@ -83,6 +83,7 @@ pub fn run() {
             workspaces::create_workspace,
             workspaces::create_child_workspace,
             workspaces::open_in_cursor,
+            workspaces::open_external_url,
             workspaces::open_worktree_in_cursor,
             workspaces::pull_workspace_branch,
             workspaces::delete_workspace,

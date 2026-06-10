@@ -58,6 +58,7 @@ import { useWorkspaceTerminalOutput } from './useWorkspaceTerminalOutput';
 import { SHIP_PR_PROMPT } from './workspace-terminal-constants';
 import { WorkspaceTerminalEmptyState } from './WorkspaceTerminalEmptyState';
 import { WorkspaceContextFooter } from './WorkspaceContextFooter';
+import { WorkspacePrRail } from './WorkspacePrRail';
 import { CoordinatorTimeline } from './CoordinatorTimeline';
 import { useWorkspaceTerminalComposerActions } from './useWorkspaceTerminalComposerActions';
 import { useWorkspaceTerminalSessionActions } from './useWorkspaceTerminalSessionActions';
@@ -1077,6 +1078,8 @@ export function WorkspaceTerminal({
           onEditorContentChange={updateEditorContent}
           onSaveEditor={(path) => void saveEditorFile(path)}
         />
+
+        <WorkspacePrRail workspaceId={workspace.id} />
       </div>
 
       <WorkspaceContextFooter workspaceId={workspace.id} />
