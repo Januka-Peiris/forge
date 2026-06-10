@@ -130,6 +130,83 @@ Workspace task: {}",
     Ok(draft)
 }
 
+fn run_in_dir(dir: &str, program: &str, args: &[&str]) -> Result<String, String> {
+    let output = std::process::Command::new(program)
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .map_err(|e| format!("Failed to run {program}: {e}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("{program} {} failed: {}", args.join(" "), stderr.trim()));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn workspace_work_dir(state: &AppState, workspace_id: &str) -> Result<String, String> {
+    let workspace = workspace_repository::get_detail(&state.db, workspace_id)?
+        .ok_or_else(|| format!("Workspace {workspace_id} not found"))?;
+    if !workspace.worktree_path.is_empty() {
+        return Ok(workspace.worktree_path);
+    }
+    workspace
+        .summary
+        .workspace_root_path
+        .ok_or_else(|| "Workspace has no worktree path".to_string())
+}
+
+/// One-click ship: commit any uncommitted changes, push the branch, then
+/// create the PR. Deterministic fallback used when no live agent session is
+/// available to do this with better judgment.
+pub fn ship_workspace_pr(
+    state: &AppState,
+    workspace_id: &str,
+) -> Result<WorkspacePrResult, String> {
+    let workspace = workspace_repository::get_detail(&state.db, workspace_id)?
+        .ok_or_else(|| format!("Workspace {workspace_id} not found"))?;
+    let work_dir = workspace_work_dir(state, workspace_id)?;
+
+    // Commit anything outstanding so the PR reflects the working tree.
+    let dirty = !run_in_dir(&work_dir, "git", &["status", "--porcelain"])?.is_empty();
+    if dirty {
+        run_in_dir(&work_dir, "git", &["add", "-A"])?;
+        let task = workspace.summary.current_task.trim().to_string();
+        let message = if task.is_empty() {
+            format!("Checkpoint {} work", workspace.summary.name)
+        } else {
+            task
+        };
+        run_in_dir(&work_dir, "git", &["commit", "-m", &message])?;
+    }
+
+    let branch = run_in_dir(&work_dir, "git", &["rev-parse", "--abbrev-ref", "HEAD"])?;
+    if branch == "HEAD" {
+        return Err("Workspace is on a detached HEAD; check out a branch first.".to_string());
+    }
+    run_in_dir(&work_dir, "git", &["push", "-u", "origin", &branch])?;
+
+    match create_workspace_pr(state, workspace_id) {
+        Ok(result) => Ok(result),
+        Err(err) if err.contains("already exists") => {
+            // Branch already has an open PR; the push above updated it.
+            let pr_url = run_in_dir(&work_dir, "gh", &["pr", "view", "--json", "url", "--jq", ".url"])?;
+            let pr_number = pr_url
+                .rsplit('/')
+                .next()
+                .and_then(|n| n.parse::<i64>().ok())
+                .unwrap_or(0);
+            workspace_repository::update_pr_status(&state.db, workspace_id, "open", Some(pr_number))?;
+            Ok(WorkspacePrResult {
+                workspace_id: workspace_id.to_string(),
+                pr_url,
+                pr_number,
+                title: workspace.summary.name,
+            })
+        }
+        Err(err) => Err(err),
+    }
+}
+
 pub fn create_workspace_pr(
     state: &AppState,
     workspace_id: &str,
