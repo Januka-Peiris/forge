@@ -197,6 +197,8 @@ export function useMnemonicWorkspaces({ onActivityItems, onError, onViewWorkspac
     setWorkspaces((current) => current.map((workspace) => (
       workspace.id === workspaceId ? { ...workspace, prStatus: 'Open', prNumber: result.prNumber } : workspace
     )));
+    // Pull fresh summaries (diff counters, PR status) behind the optimistic update.
+    window.dispatchEvent(new CustomEvent('mn:refresh-workspaces'));
     return result;
   }, []);
 

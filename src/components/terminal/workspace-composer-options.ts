@@ -90,6 +90,8 @@ export function claudeLaunchExtraArgs(settings: {
   }
   if (settings.selectedTaskMode === 'Plan') {
     args.push('--permission-mode', 'plan');
+  } else if (settings.selectedTaskMode === 'Accept Edits') {
+    args.push('--permission-mode', 'acceptEdits');
   }
   return args.length > 0 ? args : undefined;
 }

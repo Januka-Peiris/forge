@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, RotateCcw, Search, Square, X } from 'lucide-react';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon, type ISearchOptions, type ISearchResultChangeEvent } from '@xterm/addon-search';
+import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import type { TerminalOutputChunk, TerminalProfile, TerminalSession } from '../../types';
+import { invokeCommand } from '../../lib/tauri-api/client';
 import { PROFILE_LABELS } from './workspace-terminal-constants';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -35,6 +37,11 @@ function sessionStatusLabel(session: TerminalSession): string {
     case 'failed': return 'failed';
     default: return session.status;
   }
+}
+
+/** Opens a terminal link in the default browser via the backend (http/https only). */
+function openExternalUrl(uri: string): void {
+  void invokeCommand<void>('open_external_url', { url: uri }).catch(() => {});
 }
 
 function formatTerminalTimestamp(value?: string): string {
@@ -142,6 +149,10 @@ export function TerminalPane({
       fontSize: 12,
       lineHeight: 1.15,
       scrollback: 10000,
+      // OSC 8 hyperlinks (e.g. from gh, modern CLIs) open in the browser.
+      linkHandler: {
+        activate: (_event, text) => openExternalUrl(text),
+      },
       theme: {
         background: '#0a0a0a',
         foreground: '#d7dce5',
@@ -151,8 +162,11 @@ export function TerminalPane({
     });
     const fitAddon = new FitAddon();
     const searchAddon = new SearchAddon({ highlightLimit: 2000 });
+    // Plain-text URLs become clickable links.
+    const webLinksAddon = new WebLinksAddon((_event, uri) => openExternalUrl(uri));
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(searchAddon);
+    terminal.loadAddon(webLinksAddon);
     terminal.open(containerRef.current);
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
@@ -212,6 +226,40 @@ export function TerminalPane({
         // xterm can throw before layout settles.
       }
     };
+    // Initial fit: the ResizeObserver only fires on size changes, so without
+    // this the terminal can render its first chunks at the 80x24 default (or
+    // stay blank when mounted while the container has no layout yet). Retry
+    // briefly while the container is still zero-sized (tab transitions).
+    let fitRetryTimer = 0;
+    const fitWhenSized = (attempt = 0) => {
+      const element = containerRef.current;
+      if (!element) return;
+      if (element.clientWidth === 0 || element.clientHeight === 0) {
+        if (attempt < 10) {
+          fitRetryTimer = window.setTimeout(() => fitWhenSized(attempt + 1), 100);
+        }
+        return;
+      }
+      fit();
+    };
+    requestAnimationFrame(() => requestAnimationFrame(() => fitWhenSized()));
+
+    // Coming back to the app/tab: re-fit and force a repaint, since layout
+    // and renderer work may have been skipped while hidden.
+    const onVisible = () => {
+      if (document.hidden) return;
+      requestAnimationFrame(() => {
+        fitWhenSized();
+        try {
+          terminal.refresh(0, Math.max(0, terminal.rows - 1));
+        } catch {
+          // xterm can throw before layout settles.
+        }
+      });
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+
     const observer = new ResizeObserver(fit);
     observer.observe(containerRef.current);
     return () => {
@@ -219,6 +267,9 @@ export function TerminalPane({
       searchDisposable.dispose();
       scrollDisposable.dispose();
       observer.disconnect();
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+      window.clearTimeout(fitRetryTimer);
       terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
