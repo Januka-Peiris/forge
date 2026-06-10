@@ -24,7 +24,7 @@ import { getWorkspaceHealth } from '../../lib/tauri-api/workspace-health';
 import { getWorkspaceReadiness } from '../../lib/tauri-api/workspace-readiness';
 import { getWorkspaceChangedFiles } from '../../lib/tauri-api/git-review';
 import { getWorkspaceReviewCockpit } from '../../lib/tauri-api/review-cockpit';
-import { createWorkspacePr } from '../../lib/tauri-api/pr-draft';
+import { createWorkspacePr, shipWorkspacePr } from '../../lib/tauri-api/pr-draft';
 import { getAiModelSettings } from '../../lib/tauri-api/settings';
 import {
   getWorkspaceCoordinatorStatus,
@@ -54,6 +54,7 @@ import { useSyncedRef } from '../../lib/hooks/useSyncedRef';
 import { useActiveAgentProviders } from '../../lib/hooks/useActiveAgentProviders';
 import { providerForAgentProfile, type AgentProviderId } from '../../lib/active-agent-providers';
 import { useWorkspaceTerminalOutput } from './useWorkspaceTerminalOutput';
+import { SHIP_PR_PROMPT } from './workspace-terminal-constants';
 import { WorkspaceTerminalEmptyState } from './WorkspaceTerminalEmptyState';
 import { WorkspaceContextFooter } from './WorkspaceContextFooter';
 import { CoordinatorTimeline } from './CoordinatorTimeline';
@@ -148,6 +149,7 @@ export function WorkspaceTerminal({
   const [allSessions, setAllSessions] = useState<TerminalSession[]>([]);
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [creatingPr, setCreatingPr] = useState(false);
   const [, setCommandBusy] = useState<string | null>(null);
   const [mnemonicConfig, setMnemonicConfig] = useState<MnemonicWorkspaceConfig | null>(null);
   const [, setPorts] = useState<WorkspacePort[]>([]);
@@ -769,6 +771,31 @@ export function WorkspaceTerminal({
   });
 
 
+  /**
+   * One-click PR. With a live agent session, the agent commits/pushes/opens
+   * the PR itself (it knows what it changed, so the PR text is better).
+   * Otherwise fall back to the deterministic backend: commit + push + gh.
+   */
+  const handleCreatePr = useCallback(() => {
+    if (!workspaceId) return;
+    const liveAgent = focusedSession?.status === 'running'
+      && (focusedSession.terminalKind === 'agent' || focusedSession.sessionRole === 'agent');
+    if (liveAgent) {
+      sendPrompt(SHIP_PR_PROMPT);
+      showCoordinatorToast('Asked the agent to commit, push, and open the PR — watch the terminal.');
+      return;
+    }
+    setCreatingPr(true);
+    shipWorkspacePr(workspaceId)
+      .then((result) => {
+        showCoordinatorToast(`PR #${result.prNumber} ready · ${result.prUrl}`);
+        void refreshReadiness();
+        void refreshWorkbenchState();
+      })
+      .catch(setActionError)
+      .finally(() => setCreatingPr(false));
+  }, [focusedSession, refreshReadiness, refreshWorkbenchState, sendPrompt, setActionError, showCoordinatorToast, workspaceId]);
+
   const handleCoordinatorReviewDiff = useCallback(() => {
     void refreshWorkbenchState();
   }, [refreshWorkbenchState]);
@@ -942,6 +969,8 @@ export function WorkspaceTerminal({
         dockOverflowSessions={dockOverflowSessions}
         busy={busy}
         error={error}
+        creatingPr={creatingPr}
+        onCreatePr={handleCreatePr}
         focusedSession={focusedSession}
         agentProfiles={agentProfiles}
         activeProviderIds={activeProviders.activeProviderSet}

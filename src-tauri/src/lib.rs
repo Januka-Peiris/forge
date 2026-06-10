@@ -160,6 +160,7 @@ pub fn run() {
             pr_draft::get_workspace_pr_draft,
             pr_draft::refresh_workspace_pr_draft,
             pr_draft::create_workspace_pr,
+            pr_draft::ship_workspace_pr,
             pr_draft::get_workspace_pr_status,
             prompt_templates::list_workspace_prompt_templates,
             terminal::create_workspace_terminal,

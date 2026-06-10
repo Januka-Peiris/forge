@@ -38,6 +38,11 @@ export function createWorkspacePr(workspaceId: string): Promise<WorkspacePrResul
   return invokeCommand<WorkspacePrResult>('create_workspace_pr', { workspaceId });
 }
 
+/** Commit outstanding changes, push the branch, and open (or update) the PR. */
+export function shipWorkspacePr(workspaceId: string): Promise<WorkspacePrResult> {
+  return invokeCommand<WorkspacePrResult>('ship_workspace_pr', { workspaceId });
+}
+
 export async function getWorkspacePrStatus(workspaceId: string): Promise<WorkspacePrStatus> {
   const status = await invokeCommand<WorkspacePrStatus>('get_workspace_pr_status', { workspaceId });
   cacheWorkspacePrStatus(workspaceId, status);

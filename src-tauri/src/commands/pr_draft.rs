@@ -29,6 +29,14 @@ pub fn create_workspace_pr(
 }
 
 #[tauri::command]
+pub fn ship_workspace_pr(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> Result<WorkspacePrResult, String> {
+    pr_draft_service::ship_workspace_pr(&state, &workspace_id)
+}
+
+#[tauri::command]
 pub fn get_workspace_pr_status(
     state: State<'_, AppState>,
     workspace_id: String,
