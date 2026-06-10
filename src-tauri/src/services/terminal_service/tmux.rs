@@ -11,8 +11,13 @@ const SOCKET_NAME: &str = "mnemonic";
 
 fn tmux_command() -> Command {
     let mut command = Command::new("tmux");
-    command.args(["-L", SOCKET_NAME]);
+    // -u forces UTF-8: the GUI app has no LANG/LC_* in its environment, and
+    // without it tmux assumes the client cannot display UTF-8 and replaces
+    // every non-ASCII glyph with '_'. LANG covers the server side so programs
+    // inside panes also see a UTF-8 locale.
+    command.args(["-u", "-L", SOCKET_NAME]);
     command.env("PATH", enriched_path());
+    command.env("LANG", "en_US.UTF-8");
     command
 }
 
@@ -104,6 +109,26 @@ fn configure_session(name: &str) {
         .output();
 }
 
+/// Returns the currently rendered pane contents as plain text lines. Far more
+/// reliable than parsing the raw escape-code stream when inspecting what a
+/// TUI is showing right now.
+pub(super) fn capture_pane(name: &str) -> Result<String, String> {
+    let output = tmux_command()
+        .args(["capture-pane", "-p", "-t", name])
+        .output()
+        .map_err(|err| format!("Failed to capture tmux pane: {err}"))?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        Err(if stderr.is_empty() {
+            format!("tmux failed to capture pane for session {name}")
+        } else {
+            format!("tmux failed to capture pane for session {name}: {stderr}")
+        })
+    }
+}
+
 pub(super) fn kill_session(name: &str) -> Result<(), String> {
     let output = tmux_command()
         .args(["kill-session", "-t", name])
@@ -125,6 +150,8 @@ pub(super) fn attach_command(name: &str) -> (String, Vec<String>) {
     (
         "tmux".to_string(),
         vec![
+            // -u forces UTF-8 output; see tmux_command().
+            "-u".to_string(),
             "-L".to_string(),
             SOCKET_NAME.to_string(),
             "attach-session".to_string(),

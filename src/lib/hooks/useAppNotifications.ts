@@ -243,6 +243,26 @@ export function useAppNotifications({
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
     let disposed = false;
+    void listen<{ workspaceId: string; sessionId: string; question: string }>(
+      'mn://agent-decision-required',
+      (event) => {
+        if (disposed) return;
+        routeEnvelope({
+          source: 'approval',
+          severity: 'warn',
+          workspaceId: event.payload.workspaceId,
+          dedupeKey: `decision:${event.payload.sessionId}:${event.payload.question}`,
+          message: `Claude is waiting for a decision: ${event.payload.question.slice(0, 120)}`,
+          actionable: true,
+        });
+      },
+    ).then((fn) => { if (disposed) fn(); else unlisten = fn; }).catch(() => undefined);
+    return () => { disposed = true; if (unlisten) unlisten(); };
+  }, [routeEnvelope]);
+
+  useEffect(() => {
+    let unlisten: UnlistenFn | undefined;
+    let disposed = false;
     void listen<{ workspaceId: string; cost: string; limit: number }>(
       'mn://workspace-budget-exceeded',
       (event) => {

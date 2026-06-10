@@ -4,8 +4,6 @@ use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use tauri::Emitter;
-
 use crate::models::{StartTerminalSessionInput, TerminalSession};
 use crate::repositories::terminal_repository;
 use crate::services::terminal_service;

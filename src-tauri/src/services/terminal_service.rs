@@ -17,6 +17,7 @@ use crate::state::{ActiveTerminal, AppState};
 use tauri::Emitter;
 
 mod activity;
+mod decisions;
 mod launch;
 mod output;
 mod prompts;
@@ -99,6 +100,11 @@ fn spawn_active_terminal(
     command_builder.args(args);
     command_builder.cwd(cwd);
     command_builder.env("TERM", "xterm-256color");
+    // GUI apps inherit no LANG/LC_*; without a UTF-8 locale tmux renders
+    // every non-ASCII glyph as '_' and TUIs may fall back to ASCII art.
+    if std::env::var("LANG").is_err() {
+        command_builder.env("LANG", "en_US.UTF-8");
+    }
     command_builder.env("PATH", path_for_command(command));
     if std::env::var("SHELL").is_err() {
         command_builder.env("SHELL", "/bin/zsh");
@@ -137,7 +143,7 @@ fn spawn_active_terminal(
         .terminals
         .lock()
         .map_err(|_| "Terminal registry lock poisoned".to_string())?
-        .insert(session.id.clone(), active);
+        .insert(session.id.clone(), active.clone());
 
     spawn_terminal_reader(
         state.app_handle.clone(),
@@ -158,6 +164,9 @@ fn spawn_active_terminal(
         session.tmux_session_name.clone(),
         child,
     );
+    if session.terminal_kind == "agent" || session.session_role == "agent" {
+        decisions::spawn_decision_watcher(state.clone(), session.clone(), active);
+    }
     Ok(())
 }
 
@@ -631,6 +640,40 @@ pub fn approve_workspace_terminal_command(
         // Send Ctrl-C to cancel whatever the shell was about to execute.
         pty_write_raw(state, session_id, "\x03")
     }
+}
+
+/// Answers a decision dialog surfaced in chat by pressing its option key in
+/// the terminal. Claude Code's numbered dialogs act on the digit immediately,
+/// so no Enter is sent.
+pub fn answer_workspace_terminal_decision(
+    state: &AppState,
+    session_id: &str,
+    option_key: &str,
+    option_label: &str,
+) -> Result<(), String> {
+    if option_key.is_empty()
+        || option_key.len() > 2
+        || !option_key.chars().all(|ch| ch.is_ascii_digit())
+    {
+        return Err(format!("Invalid decision option key: {option_key}"));
+    }
+    let session = terminal_repository::get_session(&state.db, session_id)?
+        .ok_or_else(|| format!("Terminal session {session_id} was not found"))?;
+    if active_for_session(state, session_id)?.is_none()
+        && session.backend == "tmux"
+        && session.status == "running"
+    {
+        let _ = attach_tmux_terminal(state, &session, None, None)?;
+    }
+    pty_write_raw(state, session_id, option_key)?;
+    append_log_line(
+        state,
+        &session.workspace_id,
+        session_id,
+        "system",
+        &format!("\r\n[mnemonic] answered \"{option_label}\" from chat\r\n"),
+    );
+    Ok(())
 }
 
 /// Writes bytes directly to the PTY without any safety check.
