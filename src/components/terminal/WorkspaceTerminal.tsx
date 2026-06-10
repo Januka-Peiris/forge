@@ -9,11 +9,9 @@ import type { WorkspaceReviewCockpit } from '../../types/review-cockpit';
 import type { RepositoryRelationship } from '../../types/repository-relationship';
 import {
   getWorkspaceTerminalOutputForSession,
-  listWorkspaceAgentPrompts,
   listWorkspaceTerminalSessions,
   listWorkspaceVisibleTerminalSessions,
   resizeWorkspaceTerminalSession,
-  runNextWorkspaceAgentPrompt,
   writeWorkspaceTerminalSessionInput,
 } from '../../lib/tauri-api/terminal';
 import { CommandApprovalModal, type PendingCommand } from '../modals/CommandApprovalModal';
@@ -32,7 +30,6 @@ import {
   getWorkspaceCoordinatorStatus,
   stepWorkspaceCoordinator,
   replayWorkspaceCoordinatorAction,
-  stopWorkspaceCoordinator,
 } from '../../lib/tauri-api/coordinator';
 import {
   defaultWorkspaceAgentProfileId,
@@ -79,7 +76,6 @@ const COMPOSER_SETTINGS_DEFAULTS: ComposerSettings = {
   selectedModel: '',
   selectedTaskMode: 'Act',
   selectedReasoning: 'Default',
-  sendBehavior: 'send_now',
   promptMode: 'direct',
   coordinatorBrainProvider: 'claude_code',
   coordinatorCoderProvider: 'claude_code',
@@ -112,7 +108,9 @@ function providerFromProfileRef(profileRef?: string | null): AgentProviderId | n
 function loadComposerSettings(): ComposerSettings {
   try {
     const raw = window.localStorage.getItem(COMPOSER_SETTINGS_KEY);
-    if (raw) return { ...COMPOSER_SETTINGS_DEFAULTS, ...JSON.parse(raw) };
+    // promptMode is pinned to 'direct': the coordinator picker is no longer
+    // in the composer UI, so a stale stored value must not reroute prompts.
+    if (raw) return { ...COMPOSER_SETTINGS_DEFAULTS, ...JSON.parse(raw), promptMode: 'direct' as const };
   } catch {
     // ignore corrupt data
   }
@@ -173,9 +171,6 @@ export function WorkspaceTerminal({
   const [coordinatorStatus, setCoordinatorStatus] = useState<WorkspaceCoordinatorStatus | null>(null);
   const [coordinatorToast, setCoordinatorToast] = useState<string | null>(null);
   const [pendingCommand, setPendingCommand] = useState<PendingCommand | null>(null);
-  const [queuedPromptCount, setQueuedPromptCount] = useState(0);
-  const runNextPromptInFlightRef = useRef(false);
-  const hadRunningAgentSessionRef = useRef(false);
   const [openEditors, setOpenEditors] = useState<EditorTab[]>([]);
   const [activeEditorPath, setActiveEditorPath] = useState<string | null>(null);
   const [savingEditorPaths, setSavingEditorPaths] = useState<Set<string>>(new Set());
@@ -248,20 +243,11 @@ export function WorkspaceTerminal({
     const visibleIds = new Set(visibleSessions.map((s) => s.id));
     return allSessions.filter((s) => !s.closedAt && !visibleIds.has(s.id));
   }, [allSessions, visibleSessions]);
-  const refreshQueuedPrompts = useCallback(async () => {
-    if (!workspaceId) return;
-    try {
-      const prompts = await listWorkspaceAgentPrompts(workspaceId, 50);
-      setQueuedPromptCount(prompts.filter((prompt) => prompt.status === 'queued').length);
-    } catch (err) {
-      mnWarn('agent-prompts', 'load error', { err });
-    }
-  }, [workspaceId]);
-
   const refreshSessions = useCallback(async (fetchOutput = false, preferredFocusId?: string | null) => {
     if (!workspaceId) return;
-    setError(null);
-    void refreshQueuedPrompts();
+    // Do NOT clear `error` here: this runs on every poll tick and right after
+    // failed sends, which made action errors vanish before they could render.
+    // Errors are cleared at the start of the next user action instead.
     try {
       const [visible, history] = await Promise.all([
         listWorkspaceVisibleTerminalSessions(workspaceId),
@@ -290,7 +276,7 @@ export function WorkspaceTerminal({
     } catch (err) {
       setActionError(err);
     }
-  }, [appendOutput, focusedIdRef, getNextSeq, refreshQueuedPrompts, setActionError, setNextSeq, workspaceId]);
+  }, [appendOutput, focusedIdRef, getNextSeq, setActionError, setNextSeq, workspaceId]);
 
 
   const refreshMnemonicConfig = useCallback(async () => {
@@ -530,9 +516,6 @@ export function WorkspaceTerminal({
     setSavingEditorPaths(new Set());
     setFocusedId(null);
     setError(null);
-    setQueuedPromptCount(0);
-    runNextPromptInFlightRef.current = false;
-    hadRunningAgentSessionRef.current = false;
     setCoordinatorStatus(null);
     setCoordinatorToast(null);
     lastCoordinatorAutoStepEventRef.current = null;
@@ -760,6 +743,7 @@ export function WorkspaceTerminal({
 
   const {
     togglePlanMode,
+    changeModel,
     handleWorkbenchAction,
     sendPrompt,
   } = useWorkspaceTerminalComposerActions({
@@ -784,35 +768,6 @@ export function WorkspaceTerminal({
     promptSendChainRef,
   });
 
-
-  const runNextQueuedPrompt = useCallback(() => {
-    if (!workspaceId || runNextPromptInFlightRef.current) return;
-    runNextPromptInFlightRef.current = true;
-    void runNextWorkspaceAgentPrompt(workspaceId)
-      .catch(setActionError)
-      .finally(() => {
-        runNextPromptInFlightRef.current = false;
-        void refreshQueuedPrompts();
-        void refreshSessions(true);
-      });
-  }, [refreshQueuedPrompts, refreshSessions, setActionError, workspaceId]);
-
-  const hasRunningAgentSession = useMemo(
-    () => allSessions.some((session) => !session.closedAt
-      && session.status === 'running'
-      && (session.terminalKind === 'agent' || session.sessionRole === 'agent')),
-    [allSessions],
-  );
-
-  // Dispatch queued prompts when an agent session transitions from running to
-  // idle. Stale queued prompts from a previous app run are not auto-fired on
-  // workspace open; the composer shows them with a send-next button instead.
-  useEffect(() => {
-    const hadRunning = hadRunningAgentSessionRef.current;
-    hadRunningAgentSessionRef.current = hasRunningAgentSession;
-    if (!workspaceId || queuedPromptCount === 0 || hasRunningAgentSession || !hadRunning) return;
-    runNextQueuedPrompt();
-  }, [hasRunningAgentSession, queuedPromptCount, runNextQueuedPrompt, workspaceId]);
 
   const handleCoordinatorReviewDiff = useCallback(() => {
     void refreshWorkbenchState();
@@ -1097,25 +1052,23 @@ export function WorkspaceTerminal({
         <WorkspaceComposer
           workspaceId={workspace.id}
           canInterrupt={focusedSession?.status === 'running' || false}
-          queuedCount={queuedPromptCount}
-          onRunQueued={runNextQueuedPrompt}
           promptTemplateWarning={promptTemplateWarning}
           promptTemplates={promptTemplates}
           agentContext={agentContext}
-          agentProfiles={agentProfiles}
-          activeProviderIds={activeProviders.activeProviderSet}
           provider={activePromptProvider}
-          coordinatorStatus={coordinatorStatus}
           settings={composerSettings}
-          onSettingsChange={(patch) => setComposerSettings((current) => ({ ...current, ...patch }))}
+          onSettingsChange={(patch) => {
+            // Model changes go through changeModel so a live Claude session
+            // is switched in-place via /model.
+            const { selectedModel, ...rest } = patch;
+            if (typeof selectedModel === 'string') changeModel(selectedModel);
+            if (Object.keys(rest).length > 0) {
+              setComposerSettings((current) => ({ ...current, ...rest }));
+            }
+          }}
           onSend={sendPrompt}
           onTogglePlanMode={togglePlanMode}
           onInterrupt={() => void interruptFocusedAgent()}
-          onStopCoordinator={() => {
-            void stopWorkspaceCoordinator(workspace.id)
-              .then((status) => setCoordinatorStatus(status))
-              .catch(setActionError);
-          }}
         />
       )}
     </div>

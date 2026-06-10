@@ -179,7 +179,6 @@ export function ReviewCockpit({
         commentId: comment?.commentId ?? null,
         action,
         profileId: selectedProfileId,
-        mode: 'send_now',
       });
     } catch (err) {
       setError(formatSessionError(err));

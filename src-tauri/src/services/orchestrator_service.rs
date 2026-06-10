@@ -375,7 +375,6 @@ Rules:
                         prompt: prompt_text.to_string(),
                         profile: None,
                         profile_id: None,
-                        mode: Some("send_now".to_string()),
                         extra_args: None,
                     };
                     if let Err(err) = terminal_service::queue_workspace_agent_prompt(state, input) {

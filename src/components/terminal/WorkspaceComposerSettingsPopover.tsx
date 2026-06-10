@@ -86,16 +86,8 @@ export function WorkspaceComposerSettingsPopover({
             </p>
           </div>
           <div>
-            <label className="mb-1 block text-xs text-mn-muted">Send behavior</label>
-            <Select value={settings.sendBehavior} onValueChange={(v) => onSettingsChange({ sendBehavior: v as ComposerSettings['sendBehavior'] })}>
-              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="send_now">Send now</SelectItem>
-                <SelectItem value="interrupt_send">Interrupt + send</SelectItem>
-                <SelectItem value="queue_send">Queue if running</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="mt-1.5 text-xs leading-snug text-mn-muted">
+            <p className="text-xs leading-snug text-mn-muted">
+              Prompts send immediately; the agent queues input it receives mid-turn.
               Stop the focused tab any time: header <span className="font-mono text-mn-text/70">⋯</span> menu → Interrupt terminal.
             </p>
           </div>

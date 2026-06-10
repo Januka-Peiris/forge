@@ -559,7 +559,6 @@ pub fn replay_workspace_coordinator_action(
                     prompt: prompt.clone(),
                     profile: None,
                     profile_id: Some(profile_id.clone()),
-                    mode: Some("send_now".to_string()),
                     extra_args: None,
                 },
             )?;
@@ -768,7 +767,6 @@ pub fn step_workspace_coordinator(
                         prompt: prompt.clone(),
                         profile: None,
                         profile_id: Some(coder.id.clone()),
-                        mode: Some("send_now".to_string()),
                         extra_args: None,
                     },
                 )?;
@@ -815,7 +813,6 @@ pub fn step_workspace_coordinator(
                         prompt: prompt.clone(),
                         profile: None,
                         profile_id: Some(chosen.profile_id.clone()),
-                        mode: Some("send_now".to_string()),
                         extra_args: None,
                     },
                 )?;
