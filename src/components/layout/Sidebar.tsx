@@ -4,13 +4,12 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
-  Filter,
   FolderPlus,
   LayoutGrid,
   Plus,
   Search,
   Settings,
-  ArrowUpDown,
+  SlidersHorizontal,
   Archive,
   ArchiveRestore,
   Trash2,
@@ -37,6 +36,7 @@ import {
   SelectItem,
 } from '../ui/select';
 import { Tooltip } from '../ui/tooltip';
+import { Popover, PopoverTrigger, PopoverContent } from '../ui/popover';
 import { WorkspaceListItem } from '../workspaces/WorkspaceListItem';
 import { deriveCompanionWarnings } from '../../lib/federation';
 
@@ -355,6 +355,46 @@ export function Sidebar({
         <div className="flex items-center justify-between px-2">
           <p className="text-xs font-semibold text-mn-muted uppercase tracking-widest">Workspaces</p>
           <div className="flex items-center gap-0.5">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className="text-mn-muted/60 hover:text-mn-text hover:bg-mn-surface-overlay"
+                  title="Filter and sort"
+                >
+                  <SlidersHorizontal className="w-3 h-3" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-56 space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs text-mn-muted">Filter</span>
+                  <Select value={filter} onValueChange={(v) => setFilter(v as WorkspaceFilter)}>
+                    <SelectTrigger className="w-28 px-2 py-1 text-xs bg-mn-card border-mn-border rounded-md h-auto">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="archived">Archived</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs text-mn-muted">Sort by</span>
+                  <Select value={sort} onValueChange={(v) => setSort(v as 'recent' | 'name' | 'status')}>
+                    <SelectTrigger className="w-28 px-2 py-1 text-xs bg-mn-card border-mn-border rounded-md h-auto">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="recent">Recent</SelectItem>
+                      <SelectItem value="name">Name</SelectItem>
+                      <SelectItem value="status">Status</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </PopoverContent>
+            </Popover>
             {onAddRepository && (
               <Tooltip content="Add Repository" side="bottom">
                 <Button
@@ -367,45 +407,6 @@ export function Sidebar({
                 </Button>
               </Tooltip>
             )}
-            <Tooltip content="New Workspace" side="bottom">
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                onClick={() => onNewWorkspace()}
-                className="text-mn-orange hover:text-mn-text"
-              >
-                <Plus className="w-3 h-3" />
-              </Button>
-            </Tooltip>
-          </div>
-        </div>
-
-        <div className="mt-2 px-2 flex items-center gap-2">
-          <div className="relative flex-1">
-            <Filter className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-mn-muted pointer-events-none z-10" />
-            <Select value={filter} onValueChange={(v) => setFilter(v as WorkspaceFilter)}>
-              <SelectTrigger className="w-full pl-6 pr-2 py-1 text-xs bg-mn-card border-mn-border rounded-md h-auto">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="archived">Archived</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="relative flex-1">
-            <ArrowUpDown className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-mn-muted pointer-events-none z-10" />
-            <Select value={sort} onValueChange={(v) => setSort(v as 'recent' | 'name' | 'status')}>
-              <SelectTrigger className="w-full pl-6 pr-2 py-1 text-xs bg-mn-card border-mn-border rounded-md h-auto">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="recent">Recent</SelectItem>
-                <SelectItem value="name">Name</SelectItem>
-                <SelectItem value="status">Status</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </div>
 
@@ -534,10 +535,7 @@ export function Sidebar({
 
                 {!isCollapsed && (
                   <div className="space-y-1">
-                    {repo.workspaces.length === 0 ? (
-                      <p className="px-2 py-1 text-xs text-mn-muted leading-relaxed">No workspaces in this repo yet. Use + to create one.</p>
-                    ) : (
-                      repo.workspaces.map((workspace) => {
+                    {repo.workspaces.map((workspace) => {
                         const isSelected = workspace.id === selectedWorkspaceId;
                         const isHovered = hoveredId === workspace.id;
                         const attention = workspaceAttention[workspace.id];
@@ -618,8 +616,7 @@ export function Sidebar({
                             }
                           />
                         );
-                      })
-                    )}
+                      })}
                   </div>
                 )}
               </div>
