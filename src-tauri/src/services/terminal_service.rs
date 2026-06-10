@@ -42,7 +42,6 @@ use queue::{
     batch_dispatch_workspace_agent_prompt as batch_dispatch_workspace_agent_prompt_impl,
     list_workspace_agent_prompts as list_workspace_agent_prompts_impl,
     queue_workspace_agent_prompt as queue_workspace_agent_prompt_impl,
-    run_next_workspace_agent_prompt as run_next_workspace_agent_prompt_impl,
 };
 use runtime::{
     active_for_session, active_for_workspace, detach_active_terminal,
@@ -669,7 +668,7 @@ pub fn interrupt_workspace_terminal_session_by_id(
         &session.workspace_id,
         session_id,
         "system",
-        "\r\n[mnemonic] interrupt sent (Ctrl-C)\r\n",
+        "\r\n[mnemonic] interrupt sent\r\n",
     );
     terminal_repository::get_session(&state.db, session_id)?
         .ok_or_else(|| format!("Terminal session {session_id} was not found"))
@@ -764,7 +763,7 @@ pub fn interrupt_workspace_terminal_session(
                 &active.session_id,
                 &seq,
                 "system",
-                "\r\n[mnemonic] interrupt sent (Ctrl-C)\r\n",
+                "\r\n[mnemonic] interrupt sent\r\n",
             );
         }
         None => {
@@ -779,7 +778,7 @@ pub fn interrupt_workspace_terminal_session(
                         workspace_id,
                         &attached.id,
                         "system",
-                        "\r\n[mnemonic] interrupt sent (Ctrl-C)\r\n",
+                        "\r\n[mnemonic] interrupt sent\r\n",
                     );
                 } else {
                     reconcile_orphan_running_session(state, workspace_id, "agent", "interrupted")?;
@@ -1031,13 +1030,6 @@ pub fn batch_dispatch_workspace_agent_prompt(
     input: crate::models::BatchDispatchPromptInput,
 ) -> Result<Vec<AgentPromptEntry>, String> {
     batch_dispatch_workspace_agent_prompt_impl(state, input)
-}
-
-pub fn run_next_workspace_agent_prompt(
-    state: &AppState,
-    workspace_id: &str,
-) -> Result<Option<AgentPromptEntry>, String> {
-    run_next_workspace_agent_prompt_impl(state, workspace_id)
 }
 
 pub fn list_workspace_agent_prompts(

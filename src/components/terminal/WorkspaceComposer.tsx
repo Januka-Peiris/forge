@@ -2,13 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FileText, Image, Link2, ListChecks, Paperclip, X, Zap } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import type { AgentProfile, WorkspaceAgentContext, WorkspaceContextPreview, WorkspaceCoordinatorStatus } from '../../types';
+import type { WorkspaceAgentContext, WorkspaceContextPreview } from '../../types';
 import type { PromptTemplate } from '../../types/prompt-template';
 import { getWorkspaceContextPreview, refreshWorkspaceRepoContext } from '../../lib/tauri-api/agent-context';
 import { saveWorkspaceAttachment, saveWorkspacePastedImage } from '../../lib/tauri-api/workspace-file-tree';
-import { agentProfilesForCoordinatorPicker } from '../../lib/tauri-api/agent-profiles';
 import { formatSessionError } from '../../lib/ui-errors';
-import { isAgentProfileActive, type AgentProviderId } from '../../lib/active-agent-providers';
+import type { AgentProviderId } from '../../lib/active-agent-providers';
 import {
   AGENT_COMPOSER_DEFAULT_PX,
   AGENT_COMPOSER_HEIGHT_KEY,
@@ -33,16 +32,6 @@ interface ComposerAttachment {
   path: string;
   size: number;
   kind: 'image' | 'text' | 'file';
-}
-
-const COORDINATOR_PROVIDER_OPTIONS = [
-  { value: 'claude_code', label: 'Claude' },
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'codex', label: 'Codex' },
-];
-
-function coordinatorProviderLabel(provider: string): string {
-  return COORDINATOR_PROVIDER_OPTIONS.find((option) => option.value === provider)?.label ?? provider;
 }
 
 function compactLabel(model: string, provider?: string) {
@@ -101,7 +90,6 @@ export interface ComposerSettings {
   selectedModel: string;
   selectedTaskMode: string;
   selectedReasoning: string;
-  sendBehavior: 'send_now' | 'interrupt_send' | 'queue_send';
   promptMode: 'direct' | 'coordinator';
   coordinatorBrainProvider: string;
   coordinatorCoderProvider: string;
@@ -119,41 +107,29 @@ export interface ComposerSettings {
 interface WorkspaceComposerProps {
   workspaceId: string;
   canInterrupt: boolean;
-  queuedCount: number;
   promptTemplateWarning: string | null;
   promptTemplates: PromptTemplate[];
   agentContext: WorkspaceAgentContext | null;
-  agentProfiles: AgentProfile[];
-  activeProviderIds: ReadonlySet<AgentProviderId>;
   provider: AgentProviderId;
-  coordinatorStatus: WorkspaceCoordinatorStatus | null;
   settings: ComposerSettings;
   onSettingsChange: (patch: Partial<ComposerSettings>) => void;
   onSend: (text: string) => void;
   onTogglePlanMode: () => void;
   onInterrupt: () => void;
-  onRunQueued?: () => void;
-  onStopCoordinator: () => void;
 }
 
 export function WorkspaceComposer({
   workspaceId,
   canInterrupt,
-  queuedCount,
   promptTemplateWarning,
   promptTemplates,
   agentContext,
-  agentProfiles,
-  activeProviderIds,
   provider,
-  coordinatorStatus,
   settings,
   onSettingsChange,
   onSend,
   onTogglePlanMode,
   onInterrupt,
-  onRunQueued,
-  onStopCoordinator,
 }: WorkspaceComposerProps) {
   const draftKey = workspaceId;
   const [promptInput, setPromptInput] = useState(() => COMPOSER_DRAFTS.get(draftKey) ?? '');
@@ -165,7 +141,6 @@ export function WorkspaceComposer({
   const [contextPreview, setContextPreview] = useState<WorkspaceContextPreview | null>(null);
   const [contextBusy, setContextBusy] = useState(false);
   const [contextError, setContextError] = useState<string | null>(null);
-  const [coordinatorModelsOpen, setCoordinatorModelsOpen] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -400,38 +375,6 @@ export function WorkspaceComposer({
   const modelOptions = providerModelOptions(provider);
   const thinkingOptions = providerReasoningOptions(provider);
 
-  const coordinatorWorkerCount = coordinatorStatus?.workers.filter((worker) => worker.status === 'running').length ?? 0;
-  const activeCoordinatorProviderOptions = useMemo(
-    () => COORDINATOR_PROVIDER_OPTIONS.filter((option) => activeProviderIds.has(option.value as AgentProviderId)),
-    [activeProviderIds],
-  );
-  const coordinatorProfiles = useMemo(
-    () => agentProfilesForCoordinatorPicker(agentProfiles.filter((profile) => isAgentProfileActive(profile, activeProviderIds))),
-    [activeProviderIds, agentProfiles],
-  );
-  const coordinatorBrainProviderModelOptions = providerModelOptions(settings.coordinatorBrainProvider);
-  const coordinatorCoderProviderModelOptions = providerModelOptions(settings.coordinatorCoderProvider);
-  const coordinatorBrainProviderReasoningOptions = providerReasoningOptions(settings.coordinatorBrainProvider);
-  const coordinatorCoderProviderReasoningOptions = providerReasoningOptions(settings.coordinatorCoderProvider);
-  const latestPlannerDiagnostic = coordinatorStatus?.plannerLastMessage
-    ?? coordinatorStatus?.recentActions.find((action) => action.actionKind === 'planner')?.message
-    ?? null;
-
-  useEffect(() => {
-    if (activeCoordinatorProviderOptions.length === 0 || settings.promptMode !== 'coordinator') return;
-    const fallback = activeCoordinatorProviderOptions[0].value;
-    const patch: Partial<ComposerSettings> = {};
-    if (!activeProviderIds.has(settings.coordinatorBrainProvider as AgentProviderId)) {
-      patch.coordinatorBrainProvider = fallback;
-      patch.coordinatorBrainProfileId = '';
-    }
-    if (!activeProviderIds.has(settings.coordinatorCoderProvider as AgentProviderId)) {
-      patch.coordinatorCoderProvider = fallback;
-      patch.coordinatorCoderProfileId = '';
-    }
-    if (Object.keys(patch).length > 0) onSettingsChange(patch);
-  }, [activeCoordinatorProviderOptions, activeProviderIds, onSettingsChange, settings.coordinatorBrainProvider, settings.coordinatorCoderProvider, settings.promptMode]);
-
   return (
     <div className="shrink-0 border-t border-mn-border bg-mn-surface" style={{ height: `${composerHeight}px` }}>
       <div
@@ -442,219 +385,6 @@ export function WorkspaceComposer({
       />
       <div className="flex h-[calc(100%-4px)] min-h-0 flex-col gap-2 overflow-hidden p-2">
         <div className="shrink-0 flex items-center gap-2 overflow-x-auto">
-          <div className="flex shrink-0 items-center gap-1 rounded border border-mn-border bg-mn-bg px-2 py-1 text-xs text-mn-muted">
-            <span className="text-mn-dim">Mode</span>
-            <Select value={settings.promptMode} onValueChange={(value) => onSettingsChange({ promptMode: value as ComposerSettings['promptMode'] })}>
-              <SelectTrigger compact className={settings.promptMode === 'coordinator' ? 'text-mn-orange' : ''}><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="direct">Direct</SelectItem>
-                <SelectItem value="coordinator">Coordinator</SelectItem>
-              </SelectContent>
-            </Select>
-            {settings.promptMode === 'coordinator' && (
-              <>
-                <span>·</span>
-                <Select
-                  value={settings.coordinatorBrainProvider}
-                  onValueChange={(value) => onSettingsChange({ coordinatorBrainProvider: value, coordinatorBrainProfileId: '' })}
-                >
-                  <SelectTrigger compact title="Coordinator brain provider"><SelectValue placeholder="Brain provider" /></SelectTrigger>
-                  <SelectContent>
-                    {activeCoordinatorProviderOptions.map((providerOption) => (
-                      <SelectItem key={`composer-brain-provider-${providerOption.value}`} value={providerOption.value}>{providerOption.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <span>→</span>
-                <Select
-                  value={settings.coordinatorCoderProvider}
-                  onValueChange={(value) => onSettingsChange({ coordinatorCoderProvider: value, coordinatorCoderProfileId: '' })}
-                >
-                  <SelectTrigger compact title="Coordinator coder provider"><SelectValue placeholder="Coder provider" /></SelectTrigger>
-                  <SelectContent>
-                    {activeCoordinatorProviderOptions.map((providerOption) => (
-                      <SelectItem key={`composer-coder-provider-${providerOption.value}`} value={providerOption.value}>{providerOption.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <span className="rounded border border-mn-blue/30 bg-mn-blue/10 px-1.5 py-0.5 text-[10px] text-mn-blue">
-                  brain {coordinatorProviderLabel(settings.coordinatorBrainProvider)}
-                </span>
-                <span className="rounded border border-mn-violet/30 bg-mn-violet/10 px-1.5 py-0.5 text-[10px] text-mn-violet">
-                  coder {coordinatorProviderLabel(settings.coordinatorCoderProvider)}
-                </span>
-                <Popover open={coordinatorModelsOpen} onOpenChange={setCoordinatorModelsOpen}>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="rounded border border-mn-border bg-black/10 px-1.5 py-0.5 text-[10px] text-mn-muted hover:bg-white/10"
-                      title="Coordinator provider model settings"
-                    >
-                      Models
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent align="end" className="w-[420px] max-w-[calc(100vw-24px)]">
-                    <p className="mb-2 text-xs font-semibold text-mn-text">Coordinator models & overrides</p>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div className="rounded border border-mn-border/70 bg-black/10 p-2">
-                        <p className="mb-2 text-[11px] font-semibold text-mn-text">Brain ({coordinatorProviderLabel(settings.coordinatorBrainProvider)})</p>
-                        <label className="mb-1 block text-[10px] uppercase tracking-widest text-mn-muted">Model</label>
-                        <Select value={settings.coordinatorBrainModel || '__default__'} onValueChange={(value) => onSettingsChange({ coordinatorBrainModel: value === '__default__' ? '' : value })}>
-                          <SelectTrigger className="w-full"><SelectValue placeholder="Default model" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__default__">Default model</SelectItem>
-                            {coordinatorBrainProviderModelOptions.map((option) => (
-                              <SelectItem key={`coord-brain-model-${option.value}`} value={option.value}>{option.label}</SelectItem>
-                            ))}
-                            {settings.coordinatorBrainModel && !coordinatorBrainProviderModelOptions.some((option) => option.value === settings.coordinatorBrainModel) && (
-                              <SelectItem value={settings.coordinatorBrainModel}>{settings.coordinatorBrainModel}</SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
-                        <label className="mb-1 mt-2 block text-[10px] uppercase tracking-widest text-mn-muted">Reasoning</label>
-                        <Select value={settings.coordinatorBrainReasoning || '__default__'} onValueChange={(value) => onSettingsChange({ coordinatorBrainReasoning: value === '__default__' ? '' : value })}>
-                          <SelectTrigger className="w-full"><SelectValue placeholder="Default reasoning" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__default__">Default reasoning</SelectItem>
-                            {coordinatorBrainProviderReasoningOptions.map((option) => (
-                              <SelectItem key={`coord-brain-reasoning-${option.value}`} value={option.value}>{option.label}</SelectItem>
-                            ))}
-                            {settings.coordinatorBrainReasoning && !coordinatorBrainProviderReasoningOptions.some((option) => option.value === settings.coordinatorBrainReasoning) && (
-                              <SelectItem value={settings.coordinatorBrainReasoning}>{settings.coordinatorBrainReasoning}</SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
-                        <label className="mb-1 mt-2 block text-[10px] uppercase tracking-widest text-mn-muted">Advanced profile override</label>
-                        <Select value={settings.coordinatorBrainProfileId || '__none__'} onValueChange={(value) => onSettingsChange({ coordinatorBrainProfileId: value === '__none__' ? '' : value })}>
-                          <SelectTrigger className="w-full"><SelectValue placeholder="None (provider default)" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">None (provider default)</SelectItem>
-                            {coordinatorProfiles.map((profile) => (
-                              <SelectItem key={`coord-brain-profile-${profile.id}`} value={profile.id}>{profile.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="rounded border border-mn-border/70 bg-black/10 p-2">
-                        <p className="mb-2 text-[11px] font-semibold text-mn-text">Coder ({coordinatorProviderLabel(settings.coordinatorCoderProvider)})</p>
-                        <label className="mb-1 block text-[10px] uppercase tracking-widest text-mn-muted">Model</label>
-                        <Select value={settings.coordinatorCoderModel || '__default__'} onValueChange={(value) => onSettingsChange({ coordinatorCoderModel: value === '__default__' ? '' : value })}>
-                          <SelectTrigger className="w-full"><SelectValue placeholder="Default model" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__default__">Default model</SelectItem>
-                            {coordinatorCoderProviderModelOptions.map((option) => (
-                              <SelectItem key={`coord-coder-model-${option.value}`} value={option.value}>{option.label}</SelectItem>
-                            ))}
-                            {settings.coordinatorCoderModel && !coordinatorCoderProviderModelOptions.some((option) => option.value === settings.coordinatorCoderModel) && (
-                              <SelectItem value={settings.coordinatorCoderModel}>{settings.coordinatorCoderModel}</SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
-                        <label className="mb-1 mt-2 block text-[10px] uppercase tracking-widest text-mn-muted">Reasoning</label>
-                        <Select value={settings.coordinatorCoderReasoning || '__default__'} onValueChange={(value) => onSettingsChange({ coordinatorCoderReasoning: value === '__default__' ? '' : value })}>
-                          <SelectTrigger className="w-full"><SelectValue placeholder="Default reasoning" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__default__">Default reasoning</SelectItem>
-                            {coordinatorCoderProviderReasoningOptions.map((option) => (
-                              <SelectItem key={`coord-coder-reasoning-${option.value}`} value={option.value}>{option.label}</SelectItem>
-                            ))}
-                            {settings.coordinatorCoderReasoning && !coordinatorCoderProviderReasoningOptions.some((option) => option.value === settings.coordinatorCoderReasoning) && (
-                              <SelectItem value={settings.coordinatorCoderReasoning}>{settings.coordinatorCoderReasoning}</SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
-                        <label className="mb-1 mt-2 block text-[10px] uppercase tracking-widest text-mn-muted">Advanced profile override</label>
-                        <Select value={settings.coordinatorCoderProfileId || '__none__'} onValueChange={(value) => onSettingsChange({ coordinatorCoderProfileId: value === '__none__' ? '' : value })}>
-                          <SelectTrigger className="w-full"><SelectValue placeholder="None (provider default)" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">None (provider default)</SelectItem>
-                            {coordinatorProfiles.map((profile) => (
-                              <SelectItem key={`coord-coder-profile-${profile.id}`} value={profile.id}>{profile.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <p className="mt-2 text-[10px] text-mn-muted">
-                      Provider list follows Settings → Agent Setup. Profile override is optional.
-                    </p>
-                  </PopoverContent>
-                </Popover>
-                {activeCoordinatorProviderOptions.length === 0 && (
-                  <span className="rounded border border-mn-yellow/30 bg-mn-yellow/10 px-1.5 py-0.5 text-[10px] text-mn-yellow">
-                    enable a provider in Settings
-                  </span>
-                )}
-                <span>·</span>
-                <span className={coordinatorStatus?.activeRun ? 'text-mn-orange' : 'text-mn-muted'}>
-                  {coordinatorStatus?.activeRun ? `running (${coordinatorWorkerCount} workers)` : 'idle'}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => onSettingsChange({ coordinatorAutoStepOnWorkerComplete: !settings.coordinatorAutoStepOnWorkerComplete })}
-                  className={`rounded border px-1.5 py-0.5 text-[10px] ${
-                    settings.coordinatorAutoStepOnWorkerComplete
-                      ? 'border-mn-cyan/30 bg-mn-cyan/10 text-mn-cyan'
-                      : 'border-mn-border bg-black/10 text-mn-muted'
-                  }`}
-                  title="Automatically run a coordinator step when a worker completes"
-                >
-                  Auto-step {settings.coordinatorAutoStepOnWorkerComplete ? 'on' : 'off'}
-                </button>
-                {settings.coordinatorAutoStepOnWorkerComplete && (
-                  <>
-                    <Select
-                      value={settings.coordinatorAutoStepTrigger}
-                      onValueChange={(value) => onSettingsChange({ coordinatorAutoStepTrigger: value as ComposerSettings['coordinatorAutoStepTrigger'] })}
-                    >
-                      <SelectTrigger compact title="Auto-step trigger"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="terminal_completion">on complete</SelectItem>
-                        <SelectItem value="any_worker_status">on any update</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Select
-                      value={String(settings.coordinatorAutoStepCooldownSeconds)}
-                      onValueChange={(value) => {
-                        const next = Number.parseInt(value, 10);
-                        onSettingsChange({
-                          coordinatorAutoStepCooldownSeconds: Number.isFinite(next) ? next : 3,
-                        });
-                      }}
-                    >
-                      <SelectTrigger compact title="Auto-step cooldown"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="0">0s</SelectItem>
-                        <SelectItem value="3">3s</SelectItem>
-                        <SelectItem value="5">5s</SelectItem>
-                        <SelectItem value="10">10s</SelectItem>
-                        <SelectItem value="20">20s</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </>
-                )}
-                {latestPlannerDiagnostic && (
-                  <>
-                    <span>·</span>
-                    <span className="max-w-[280px] truncate text-mn-dim" title={latestPlannerDiagnostic}>
-                      {latestPlannerDiagnostic}
-                    </span>
-                  </>
-                )}
-                {coordinatorStatus?.activeRun && (
-                  <button
-                    type="button"
-                    onClick={onStopCoordinator}
-                    className="rounded border border-mn-yellow/30 bg-mn-yellow/10 px-1.5 py-0.5 text-[10px] text-mn-yellow hover:bg-mn-yellow/20"
-                    title="Stop active coordinator run"
-                  >
-                    Stop
-                  </button>
-                )}
-              </>
-            )}
-          </div>
 
           <div className="flex shrink-0 items-center gap-1.5 rounded border border-mn-border bg-mn-bg px-2 py-1 text-xs text-mn-muted">
               {(provider === 'claude_code' || provider === 'codex') && (
@@ -835,11 +565,7 @@ export function WorkspaceComposer({
                 if (Array.from(e.dataTransfer.items).some((item) => item.kind === 'file')) e.preventDefault();
               }}
               rows={5}
-              placeholder={
-                settings.sendBehavior === 'interrupt_send'
-                  ? 'Send instruction to agent (Enter interrupts agent if needed then sends, Shift+Enter for newline)…'
-                  : 'Send instruction to agent (Enter to send, Shift+Enter for newline)…'
-              }
+              placeholder="Send instruction to agent (Enter to send, Shift+Enter for newline)…"
               className="h-full min-h-0 w-full resize-none overflow-y-auto rounded-chat border border-mn-border bg-mn-bg px-3 py-2 text-sm leading-relaxed text-mn-text placeholder:text-mn-muted focus:border-mn-cyan/40 focus:outline-none"
               onKeyDown={(e) => {
                 if (e.key === 'Escape') { e.currentTarget.blur(); return; }
@@ -866,20 +592,10 @@ export function WorkspaceComposer({
               disabled={!promptInput.trim()}
               onClick={handleSend}
               className="rounded-btn border border-mn-cyan/30 bg-mn-cyan/5 px-3 py-2 text-sm font-semibold text-mn-cyan/80 hover:bg-mn-cyan/10 disabled:opacity-50"
-              title={settings.sendBehavior === 'interrupt_send' ? 'Interrupt then send (same as Enter)' : 'Send now (same as Enter)'}
+              title="Send now (same as Enter)"
             >
               <Zap className="inline h-3.5 w-3.5" /> Send
             </button>
-            {queuedCount > 0 && (
-              <button
-                type="button"
-                onClick={onRunQueued}
-                className="rounded-btn border border-mn-border/60 bg-black/20 px-2 py-1 text-center text-[11px] text-mn-muted hover:bg-white/10 hover:text-mn-text"
-                title="Prompts held by Queue if running. Sent automatically when the agent session ends; click to send the next one now."
-              >
-                {queuedCount} queued · send next
-              </button>
-            )}
           </div>
         </div>
         {attachments.length > 0 && (

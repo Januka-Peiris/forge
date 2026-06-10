@@ -100,8 +100,6 @@ export interface QueueAgentPromptInput {
   prompt: string;
   profile?: TerminalProfile;
   profileId?: string;
-  /** Anything other than 'send_now' stores the prompt without dispatching it. */
-  mode?: 'send_now' | 'queued';
   /** Extra CLI args used only if this prompt has to spawn a new agent session. */
   extraArgs?: string[];
 }

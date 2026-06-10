@@ -1,7 +1,7 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { createWorkspacePr } from '../../lib/tauri-api/pr-draft';
 import { refreshWorkspacePrComments } from '../../lib/tauri-api/review-cockpit';
-import { interruptWorkspaceTerminalSessionById, queueWorkspaceAgentPrompt } from '../../lib/tauri-api/terminal';
+import { queueWorkspaceAgentPrompt, writeWorkspaceTerminalSessionInput } from '../../lib/tauri-api/terminal';
 import { stepWorkspaceCoordinator } from '../../lib/tauri-api/coordinator';
 import { formatSessionError } from '../../lib/ui-errors';
 import type { AgentChatNextAction } from '../../types/agent-chat';
@@ -55,11 +55,49 @@ export function useWorkspaceTerminalComposerActions({
   onCoordinatorInfo,
   promptSendChainRef,
 }: UseWorkspaceTerminalComposerActionsParams) {
+  const focusedRunningAgentSessionId = focusedSession?.status === 'running'
+    && (focusedSession.terminalKind === 'agent' || focusedSession.sessionRole === 'agent')
+    ? focusedSession.id
+    : null;
+
   const togglePlanMode = () => {
+    // For a live agent TUI, forward a real Shift+Tab (CSI Z) so the agent
+    // cycles its own permission mode — the TUI footer is the source of truth.
+    // The composer setting still controls --permission-mode for new sessions.
+    if (focusedRunningAgentSessionId) {
+      void writeWorkspaceTerminalSessionInput(focusedRunningAgentSessionId, '\x1b[Z')
+        .catch((err) => setActionError(err));
+    }
     setComposerSettings((current) => {
       const next = current.selectedTaskMode === 'Plan' ? 'Act' : 'Plan';
       return { ...current, selectedTaskMode: next };
     });
+  };
+
+  /**
+   * Update the selected model. If a Claude session is live, also switch it
+   * in-place by typing "/model <id>" into the TUI; otherwise the selection
+   * applies via --model on the next session spawn.
+   */
+  const changeModel = (model: string) => {
+    if (
+      focusedRunningAgentSessionId
+      && activePromptProvider === 'claude_code'
+      && model !== composerSettings.selectedModel
+    ) {
+      const sessionId = focusedRunningAgentSessionId;
+      void (async () => {
+        try {
+          await writeWorkspaceTerminalSessionInput(sessionId, `/model ${model}`);
+          // Enter as a separate write so the TUI treats it as submit.
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          await writeWorkspaceTerminalSessionInput(sessionId, '\r');
+        } catch (err) {
+          setActionError(err);
+        }
+      })();
+    }
+    setComposerSettings((current) => ({ ...current, selectedModel: model }));
   };
 
   const handleWorkbenchAction = async (action: AgentChatNextAction) => {
@@ -99,16 +137,11 @@ export function useWorkspaceTerminalComposerActions({
     }
   };
 
-  const sendPrompt = (text: string, opts?: { forceImmediate?: boolean }) => {
+  const sendPrompt = (text: string) => {
     if (!workspaceId || !text.trim()) return;
-    const { sendBehavior, selectedTaskMode } = composerSettings;
-    const effectiveBehavior = opts?.forceImmediate ? 'send_now' : sendBehavior;
-
-    const trimmedText = text.trim();
-    const alreadyRequestsPlanMode = /^use\s+plan\s+mode\.?/i.test(trimmedText);
-    const effectivePrompt = selectedTaskMode === 'Plan' && !alreadyRequestsPlanMode
-      ? `Use plan mode.\n\n${trimmedText}`
-      : trimmedText;
+    // Plan mode is real now: new sessions get --permission-mode plan, running
+    // sessions are toggled via a forwarded Shift+Tab. No prompt-text prefix.
+    const effectivePrompt = text.trim();
 
     const work = async () => {
       setBusy(true);
@@ -145,24 +178,15 @@ export function useWorkspaceTerminalComposerActions({
         if (shouldAutoResumeClaude && focusedSession) {
           targetSession = await resumeClaudeSession(focusedSession);
         }
-        if (effectiveBehavior === 'interrupt_send' && targetSession?.status === 'running') {
-          await interruptWorkspaceTerminalSessionById(targetSession.id).catch(() => undefined);
-          // Give the TUI a beat to abort the in-flight turn before the prompt
-          // arrives, so the text does not interleave with the abort redraw.
-          await new Promise((resolve) => setTimeout(resolve, 350));
-        }
         const terminalProfileId = targetSession?.terminalKind === 'agent' ? targetSession.profile : selectedProfileId;
-        // "Queue if running" holds the prompt instead of typing it into a busy
-        // session; it is dispatched when the agent session ends or on demand.
-        const mode = effectiveBehavior === 'queue_send' && targetSession?.status === 'running'
-          ? 'queued' as const
-          : 'send_now' as const;
+        // Prompts always dispatch immediately: the agent TUI (Claude Code,
+        // Codex) natively queues input submitted while it is mid-turn, so
+        // there is no app-level queueing or interrupt-before-send.
         await queueWorkspaceAgentPrompt({
           workspaceId,
-          sessionId: mode === 'send_now' && targetSession?.status === 'running' ? targetSession.id : undefined,
+          sessionId: targetSession?.status === 'running' ? targetSession.id : undefined,
           prompt: effectivePrompt,
           profileId: terminalProfileId,
-          mode,
           extraArgs: activePromptProvider === 'claude_code' ? claudeLaunchExtraArgs(composerSettings) : undefined,
         });
       } catch (err) {
@@ -187,6 +211,7 @@ export function useWorkspaceTerminalComposerActions({
 
   return {
     togglePlanMode,
+    changeModel,
     handleWorkbenchAction,
     sendPrompt,
   };

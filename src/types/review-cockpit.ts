@@ -60,7 +60,6 @@ export interface QueueReviewAgentPromptInput {
   commentId?: string | null;
   action: 'fix_file' | 'address_comment' | 'explain_diff' | 'prepare_pr_summary' | string;
   profileId?: string | null;
-  mode?: 'send_now' | 'interrupt_send' | string | null;
 }
 
 export type QueueReviewAgentPromptResult = AgentPromptEntry;

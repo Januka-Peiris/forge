@@ -219,7 +219,7 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
       run: async () => {
         const prompt = query.slice(1).trim();
         if (prompt) {
-          await queueWorkspaceAgentPrompt({ workspaceId: selectedWorkspace.id, prompt, mode: 'send_now' });
+          await queueWorkspaceAgentPrompt({ workspaceId: selectedWorkspace.id, prompt });
           onOpenWorkspace();
         }
       }
@@ -290,7 +290,7 @@ export function CommandPalette({ open, workspaces, selectedWorkspace, changedFil
         subtitle: 'Review · explain/fix current file',
         keywords: 'send diff agent fix explain review',
         icon: 'agent' as const,
-        run: async () => { const file = availableChangedFiles[0]; if (file) await queueReviewAgentPrompt({ workspaceId: selectedWorkspace.id, path: file.path, action: 'fix_file', mode: 'send_now' }); },
+        run: async () => { const file = availableChangedFiles[0]; if (file) await queueReviewAgentPrompt({ workspaceId: selectedWorkspace.id, path: file.path, action: 'fix_file' }); },
       },
       {
         id: 'action-cleanup',

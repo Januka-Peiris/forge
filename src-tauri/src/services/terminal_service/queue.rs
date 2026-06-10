@@ -52,29 +52,36 @@ pub(super) fn queue_workspace_agent_prompt(
     };
     terminal_repository::insert_prompt_entry(&state.db, &entry)?;
 
-    let mode = input.mode.unwrap_or_else(|| "send_now".to_string());
-    if mode == "send_now" {
-        let hook_context = serde_json::json!({
-            "workspaceId": input.workspace_id,
-            "actionKind": "queue_agent_prompt",
-            "profileId": entry.profile,
-        });
-        hook_service::run_workspace_hooks(
-            state,
-            &entry.workspace_id,
-            "tool",
-            hook_service::HookPhase::Pre,
-            &hook_context,
-        )?;
-        dispatch_prompt_entry(state, &mut entry, input.extra_args.as_deref())?;
-        let _ = hook_service::run_workspace_hooks(
-            state,
-            &entry.workspace_id,
-            "tool",
-            hook_service::HookPhase::Post,
-            &hook_context,
-        );
+    // Prompts always dispatch immediately. Interactive agent TUIs (Claude
+    // Code, Codex) natively queue input submitted while they are mid-turn, so
+    // app-level queueing is redundant — and with a persistent TUI session
+    // there is no reliable "idle" signal to key it on anyway.
+    let hook_context = serde_json::json!({
+        "workspaceId": input.workspace_id,
+        "actionKind": "queue_agent_prompt",
+        "profileId": entry.profile,
+    });
+    let dispatch_result = hook_service::run_workspace_hooks(
+        state,
+        &entry.workspace_id,
+        "tool",
+        hook_service::HookPhase::Pre,
+        &hook_context,
+    )
+    .and_then(|()| dispatch_prompt_entry(state, &mut entry, input.extra_args.as_deref()));
+    if let Err(err) = dispatch_result {
+        // Nothing re-dispatches stored prompts anymore, so a row left in
+        // 'queued' would linger forever; record the failure instead.
+        let _ = terminal_repository::mark_prompt_failed(&state.db, &entry.id);
+        return Err(err);
     }
+    let _ = hook_service::run_workspace_hooks(
+        state,
+        &entry.workspace_id,
+        "tool",
+        hook_service::HookPhase::Post,
+        &hook_context,
+    );
     Ok(entry)
 }
 
@@ -95,7 +102,6 @@ pub(super) fn batch_dispatch_workspace_agent_prompt(
                 prompt: input.prompt.clone(),
                 profile: None,
                 profile_id: input.profile_id.clone(),
-                mode: Some("send_now".to_string()),
                 extra_args: None,
             },
         );
@@ -108,19 +114,6 @@ pub(super) fn batch_dispatch_workspace_agent_prompt(
         }
     }
     Ok(entries)
-}
-
-pub(super) fn run_next_workspace_agent_prompt(
-    state: &AppState,
-    workspace_id: &str,
-) -> Result<Option<AgentPromptEntry>, String> {
-    let mut entry =
-        match terminal_repository::latest_queued_prompt_for_workspace(&state.db, workspace_id)? {
-            Some(entry) => entry,
-            None => return Ok(None),
-        };
-    dispatch_prompt_entry(state, &mut entry, None)?;
-    Ok(Some(entry))
 }
 
 pub(super) fn list_workspace_agent_prompts(

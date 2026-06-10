@@ -7,8 +7,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
 
 use crate::models::{StartTerminalSessionInput, TerminalSession};
-use crate::repositories::{terminal_repository, workspace_repository};
-use crate::services::{cost_parser, terminal_service};
+use crate::repositories::terminal_repository;
+use crate::services::terminal_service;
 use crate::state::{ActiveTerminal, AppState};
 
 use super::output::append_output;
@@ -57,12 +57,18 @@ pub(super) fn send_interrupt_to_session(
     session: &TerminalSession,
 ) -> Result<(), String> {
     if let Some(active) = active_for_session(state, &session.id)? {
+        // Interactive agent TUIs (Claude Code, Codex) interrupt the current
+        // turn with Esc. Ctrl-C there clears the input — or exits the whole
+        // app on a double-press, killing the session. Ctrl-C remains correct
+        // for shell/run sessions.
+        let is_agent_tui = session.terminal_kind == "agent" || session.session_role == "agent";
+        let interrupt_bytes: &[u8] = if is_agent_tui { b"\x1b" } else { b"\x03" };
         let mut writer = active
             .writer
             .lock()
             .map_err(|_| "Terminal writer lock poisoned".to_string())?;
         writer
-            .write_all(b"\x03")
+            .write_all(interrupt_bytes)
             .map_err(|err| format!("Failed to interrupt terminal: {err}"))?;
         writer
             .flush()
@@ -184,33 +190,6 @@ pub(super) fn spawn_terminal_reader(
                         .unwrap_or_default();
                     last_output_at_secs.store(now.as_secs(), Ordering::Relaxed);
                     last_output_at_millis.store(now.as_millis() as u64, Ordering::Relaxed);
-
-                    let text = String::from_utf8_lossy(&bytes);
-                    if let Some((tokens, cost)) = cost_parser::parse_cost(&text) {
-                        let _ = workspace_repository::update_agent_session_cost(
-                            &db,
-                            &workspace_id,
-                            tokens,
-                            &cost,
-                        );
-                        if let Ok(ws) = workspace_repository::get(&db, &workspace_id) {
-                            if let Some(limit) = ws.cost_limit_usd {
-                                if let Ok(cost_float) = cost.trim_start_matches('$').parse::<f64>()
-                                {
-                                    if cost_float >= limit {
-                                        let _ = app_handle.emit(
-                                            "mn://workspace-budget-exceeded",
-                                            serde_json::json!({
-                                                "workspaceId": workspace_id,
-                                                "cost": cost,
-                                                "limit": limit,
-                                            }),
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                    }
 
                     pending.extend_from_slice(&bytes);
                     if pending.len() > MAX_PENDING_BYTES {

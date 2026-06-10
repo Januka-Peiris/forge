@@ -186,7 +186,6 @@ pub fn run() {
             terminal::reconnect_workspace_terminal_session,
             terminal::queue_workspace_agent_prompt,
             terminal::batch_dispatch_workspace_agent_prompt,
-            terminal::run_next_workspace_agent_prompt,
             terminal::list_workspace_agent_prompts,
             terminal::write_workspace_utility_terminal_input,
             terminal::resize_workspace_utility_terminal,

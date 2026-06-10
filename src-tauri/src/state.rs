@@ -88,6 +88,7 @@ impl AppState {
         }
         let stale_terminal_groups = terminal_repository::list_running_session_groups(&db)?;
         terminal_repository::mark_stale_running_sessions(&db, &now)?;
+        terminal_repository::mark_all_queued_prompts_stale(&db)?;
         for group in stale_terminal_groups {
             let details = format!(
                 "{} running terminal session(s) were marked stale after app restart; history was preserved.",
