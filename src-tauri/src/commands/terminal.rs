@@ -58,6 +58,21 @@ pub fn interrupt_workspace_terminal_session_by_id(
 }
 
 #[tauri::command]
+pub fn answer_workspace_terminal_decision(
+    state: State<'_, AppState>,
+    session_id: String,
+    option_key: String,
+    option_label: String,
+) -> Result<(), String> {
+    terminal_service::answer_workspace_terminal_decision(
+        &state,
+        &session_id,
+        &option_key,
+        &option_label,
+    )
+}
+
+#[tauri::command]
 pub fn approve_workspace_terminal_command(
     state: State<'_, AppState>,
     session_id: String,

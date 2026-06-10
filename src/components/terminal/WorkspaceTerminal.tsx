@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as ContextMenu from '@radix-ui/react-context-menu';
 import { Terminal as TerminalIcon } from 'lucide-react';
-import type { AgentProfile, DiscoveredRepository, MnemonicWorkspaceConfig, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
+import type { AgentDecisionPrompt, AgentProfile, DiscoveredRepository, MnemonicWorkspaceConfig, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
 import type { AgentChatNextAction } from '../../types/agent-chat';
 import type { WorkspaceCoordinatorStatus } from '../../types/coordinator';
 import type { WorkspaceChangedFile } from '../../types/git-review';
@@ -15,6 +15,7 @@ import {
   writeWorkspaceTerminalSessionInput,
 } from '../../lib/tauri-api/terminal';
 import { CommandApprovalModal, type PendingCommand } from '../modals/CommandApprovalModal';
+import { AgentDecisionCard } from './AgentDecisionCard';
 import {
   getWorkspaceMnemonicConfig,
 } from '../../lib/tauri-api/workspace-scripts';
@@ -173,6 +174,7 @@ export function WorkspaceTerminal({
   const [coordinatorStatus, setCoordinatorStatus] = useState<WorkspaceCoordinatorStatus | null>(null);
   const [coordinatorToast, setCoordinatorToast] = useState<string | null>(null);
   const [pendingCommand, setPendingCommand] = useState<PendingCommand | null>(null);
+  const [pendingDecision, setPendingDecision] = useState<AgentDecisionPrompt | null>(null);
   const [openEditors, setOpenEditors] = useState<EditorTab[]>([]);
   const [activeEditorPath, setActiveEditorPath] = useState<string | null>(null);
   const [savingEditorPaths, setSavingEditorPaths] = useState<Set<string>>(new Set());
@@ -520,6 +522,7 @@ export function WorkspaceTerminal({
     setError(null);
     setCoordinatorStatus(null);
     setCoordinatorToast(null);
+    setPendingDecision(null);
     lastCoordinatorAutoStepEventRef.current = null;
     coordinatorAutoStepRunningRef.current = false;
     coordinatorAutoStepQueuedRef.current = false;
@@ -707,6 +710,7 @@ export function WorkspaceTerminal({
     enqueueOutput,
     bumpNextSeqFromChunk,
     setPendingCommand,
+    setPendingDecision,
     refreshReadiness,
     refreshWorkbenchState,
     refreshCoordinatorStatus,
@@ -1076,6 +1080,14 @@ export function WorkspaceTerminal({
       </div>
 
       <WorkspaceContextFooter workspaceId={workspace.id} />
+
+      {pendingDecision && (
+        <AgentDecisionCard
+          decision={pendingDecision}
+          onAnswered={() => setPendingDecision(null)}
+          onError={setActionError}
+        />
+      )}
 
       {(focusedIsAgent || hasAnyAgentSession) && (
         <WorkspaceComposer

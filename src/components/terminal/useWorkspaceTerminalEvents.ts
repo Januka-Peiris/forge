@@ -1,6 +1,6 @@
 import { useEffect, type Dispatch, type SetStateAction } from 'react';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { TerminalOutputEvent } from '../../types';
+import type { AgentDecisionPrompt, AgentDecisionResolvedEvent, TerminalOutputEvent } from '../../types';
 import type { PendingCommand } from '../modals/CommandApprovalModal';
 
 interface UseWorkspaceTerminalEventsParams {
@@ -8,6 +8,7 @@ interface UseWorkspaceTerminalEventsParams {
   enqueueOutput: (sessionId: string, chunks: TerminalOutputEvent['chunk'][]) => void;
   bumpNextSeqFromChunk: (sessionId: string, seq: number) => void;
   setPendingCommand: Dispatch<SetStateAction<PendingCommand | null>>;
+  setPendingDecision: Dispatch<SetStateAction<AgentDecisionPrompt | null>>;
   refreshReadiness: () => Promise<void>;
   refreshWorkbenchState: () => Promise<void>;
   refreshCoordinatorStatus: () => Promise<void>;
@@ -19,6 +20,7 @@ export function useWorkspaceTerminalEvents({
   enqueueOutput,
   bumpNextSeqFromChunk,
   setPendingCommand,
+  setPendingDecision,
   refreshCoordinatorStatus,
   onCoordinatorNotify,
 }: UseWorkspaceTerminalEventsParams) {
@@ -34,6 +36,27 @@ export function useWorkspaceTerminalEvents({
         setPendingCommand(event.payload);
       }).catch((err) => {
         console.warn('Failed to listen for command-approval-required:', err);
+        return (() => {}) as UnlistenFn;
+      }),
+    );
+
+    promises.push(
+      listen<AgentDecisionPrompt>('mn://agent-decision-required', (event) => {
+        if (disposed || event.payload.workspaceId !== workspaceId) return;
+        setPendingDecision(event.payload);
+      }).catch((err) => {
+        console.warn('Failed to listen for agent-decision-required:', err);
+        return (() => {}) as UnlistenFn;
+      }),
+    );
+
+    promises.push(
+      listen<AgentDecisionResolvedEvent>('mn://agent-decision-resolved', (event) => {
+        if (disposed || event.payload.workspaceId !== workspaceId) return;
+        const { sessionId } = event.payload;
+        setPendingDecision((current) => (current?.sessionId === sessionId ? null : current));
+      }).catch((err) => {
+        console.warn('Failed to listen for agent-decision-resolved:', err);
         return (() => {}) as UnlistenFn;
       }),
     );
@@ -71,6 +94,7 @@ export function useWorkspaceTerminalEvents({
     onCoordinatorNotify,
     refreshCoordinatorStatus,
     setPendingCommand,
+    setPendingDecision,
     workspaceId,
   ]);
 }

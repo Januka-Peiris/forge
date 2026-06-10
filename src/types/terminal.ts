@@ -40,6 +40,25 @@ export interface TerminalOutputEvent {
   chunk: TerminalOutputChunk;
 }
 
+export interface AgentDecisionOption {
+  /** The key to press in the terminal to pick this option (e.g. "1"). */
+  key: string;
+  label: string;
+}
+
+/** A numbered decision dialog an agent TUI is waiting on (plan approval, permission prompt, AskUserQuestion). */
+export interface AgentDecisionPrompt {
+  workspaceId: string;
+  sessionId: string;
+  question: string;
+  options: AgentDecisionOption[];
+}
+
+export interface AgentDecisionResolvedEvent {
+  workspaceId: string;
+  sessionId: string;
+}
+
 export interface TerminalSessionState {
   activeSession?: TerminalSession | null;
   latestSession?: TerminalSession | null;

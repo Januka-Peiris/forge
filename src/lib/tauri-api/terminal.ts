@@ -26,6 +26,14 @@ export function approveWorkspaceTerminalCommand(sessionId: string, approved: boo
   return invokeCommand<void>('approve_workspace_terminal_command', { sessionId, approved });
 }
 
+export function answerWorkspaceTerminalDecision(
+  sessionId: string,
+  optionKey: string,
+  optionLabel: string,
+): Promise<void> {
+  return invokeCommand<void>('answer_workspace_terminal_decision', { sessionId, optionKey, optionLabel });
+}
+
 export interface BatchDispatchPromptInput {
   workspaceIds: string[];
   prompt: string;
