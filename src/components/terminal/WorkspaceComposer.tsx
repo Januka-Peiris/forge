@@ -310,7 +310,8 @@ export const WorkspaceComposer = memo(function WorkspaceComposer({
     const buffer = await file.arrayBuffer();
     const bytes = Array.from(new Uint8Array(buffer));
     const path = await saveWorkspacePastedImage(workspaceId, file.name || 'pasted-image.png', bytes);
-    appendTextToPrompt(`[Read and analyze the image at: ${path}]`);
+    const displayName = file.name || 'image.png';
+    appendTextToPrompt(`[${displayName}](${path})`);
     setAttachments((current) => [
       ...current,
       {
@@ -355,7 +356,7 @@ export const WorkspaceComposer = memo(function WorkspaceComposer({
     ]);
 
     if (kind === 'image') {
-      appendTextToPrompt(`[Read and analyze the image at: ${path}]`);
+      appendTextToPrompt(`[${file.name || 'image.png'}](${path})`);
       return;
     }
 

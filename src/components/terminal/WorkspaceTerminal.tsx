@@ -247,7 +247,7 @@ export function WorkspaceTerminal({
   /** Running sessions not shown in the main panes (for the attach overflow strip only). */
   const dockOverflowSessions = useMemo(() => {
     const visibleIds = new Set(visibleSessions.map((s) => s.id));
-    return allSessions.filter((s) => !s.closedAt && !visibleIds.has(s.id));
+    return allSessions.filter((s) => !s.closedAt && !visibleIds.has(s.id) && s.title !== 'Inspector Shell');
   }, [allSessions, visibleSessions]);
   const refreshSessions = useCallback(async (fetchOutput = false, preferredFocusId?: string | null) => {
     if (!workspaceId) return;
