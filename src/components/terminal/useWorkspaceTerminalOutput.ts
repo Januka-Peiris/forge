@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 import { OUTPUT_RETENTION_CHUNKS, type OutputMap } from './workspace-terminal-constants';
 import type { TerminalOutputChunk } from '../../types';
 
-/// Chunk seqs are monotonic per session, but the same chunk can arrive twice
-/// when the poll backfill races the live event stream. Drop already-buffered
-/// seqs so pane remounts and copy-output never replay duplicates.
+const EMPTY_CHUNKS: TerminalOutputChunk[] = [];
+
 function mergeChunks(existing: TerminalOutputChunk[], incoming: TerminalOutputChunk[]): TerminalOutputChunk[] {
   const lastSeq = existing.length > 0 ? existing[existing.length - 1].seq : -1;
   const fresh = incoming.filter((chunk) => chunk.seq > lastSeq);
@@ -12,19 +11,48 @@ function mergeChunks(existing: TerminalOutputChunk[], incoming: TerminalOutputCh
   return [...existing, ...fresh].slice(-OUTPUT_RETENTION_CHUNKS);
 }
 
+export interface TerminalOutputStore {
+  subscribe: (sessionId: string, listener: () => void) => () => void;
+  getSessionChunks: (sessionId: string) => TerminalOutputChunk[];
+  getOutputs: () => OutputMap;
+}
+
 export function useWorkspaceTerminalOutput() {
-  const [outputs, setOutputs] = useState<OutputMap>({});
+  const outputsRef = useRef<OutputMap>({});
+  const listenersRef = useRef(new Map<string, Set<() => void>>());
   const nextSeqRef = useRef<Record<string, number>>({});
   const pendingOutputRef = useRef<Record<string, TerminalOutputChunk[]>>({});
   const outputFlushRafRef = useRef<number | null>(null);
 
+  const notify = useCallback((sessionId: string) => {
+    listenersRef.current.get(sessionId)?.forEach((l) => l());
+  }, []);
+
+  const subscribe = useCallback((sessionId: string, listener: () => void) => {
+    if (!listenersRef.current.has(sessionId)) {
+      listenersRef.current.set(sessionId, new Set());
+    }
+    listenersRef.current.get(sessionId)!.add(listener);
+    return () => {
+      listenersRef.current.get(sessionId)?.delete(listener);
+    };
+  }, []);
+
+  const getSessionChunks = useCallback((sessionId: string) => {
+    return outputsRef.current[sessionId] ?? EMPTY_CHUNKS;
+  }, []);
+
+  const getOutputs = useCallback(() => outputsRef.current, []);
+
   const appendOutput = useCallback((sessionId: string, chunks: TerminalOutputChunk[], reset = false) => {
     if (chunks.length === 0 && !reset) return;
-    setOutputs((current) => ({
+    const current = outputsRef.current;
+    outputsRef.current = {
       ...current,
       [sessionId]: reset ? chunks : mergeChunks(current[sessionId] ?? [], chunks),
-    }));
-  }, []);
+    };
+    notify(sessionId);
+  }, [notify]);
 
   const enqueueOutput = useCallback((sessionId: string, chunks: TerminalOutputChunk[]) => {
     if (chunks.length === 0) return;
@@ -39,20 +67,24 @@ export function useWorkspaceTerminalOutput() {
       const pending = pendingOutputRef.current;
       pendingOutputRef.current = {};
 
-      setOutputs((current) => {
-        let next = current;
-        for (const [pendingSessionId, pendingChunks] of Object.entries(pending)) {
-          if (pendingChunks.length === 0) continue;
-          const existing = next[pendingSessionId] ?? [];
-          const merged = mergeChunks(existing, pendingChunks);
-          if (merged === existing) continue;
-          if (next === current) next = { ...current };
-          next[pendingSessionId] = merged;
-        }
-        return next;
-      });
+      const current = outputsRef.current;
+      let next = current;
+      const notifyIds: string[] = [];
+      for (const [pendingSessionId, pendingChunks] of Object.entries(pending)) {
+        if (pendingChunks.length === 0) continue;
+        const existing = next[pendingSessionId] ?? [];
+        const merged = mergeChunks(existing, pendingChunks);
+        if (merged === existing) continue;
+        if (next === current) next = { ...current };
+        next[pendingSessionId] = merged;
+        notifyIds.push(pendingSessionId);
+      }
+      if (next !== current) {
+        outputsRef.current = next;
+        for (const id of notifyIds) notify(id);
+      }
     });
-  }, []);
+  }, [notify]);
 
   const getNextSeq = useCallback((sessionId: string) => nextSeqRef.current[sessionId] ?? 0, []);
 
@@ -66,12 +98,14 @@ export function useWorkspaceTerminalOutput() {
 
   const removeSessionOutput = useCallback((sessionId: string) => {
     delete nextSeqRef.current[sessionId];
-    setOutputs((current) => {
+    const current = outputsRef.current;
+    if (sessionId in current) {
       const next = { ...current };
       delete next[sessionId];
-      return next;
-    });
-  }, []);
+      outputsRef.current = next;
+      notify(sessionId);
+    }
+  }, [notify]);
 
   const resetOutputState = useCallback(() => {
     nextSeqRef.current = {};
@@ -80,7 +114,7 @@ export function useWorkspaceTerminalOutput() {
       window.cancelAnimationFrame(outputFlushRafRef.current);
       outputFlushRafRef.current = null;
     }
-    setOutputs({});
+    outputsRef.current = {};
   }, []);
 
   useEffect(() => () => {
@@ -90,8 +124,10 @@ export function useWorkspaceTerminalOutput() {
     }
   }, []);
 
+  const store: TerminalOutputStore = { subscribe, getSessionChunks, getOutputs };
+
   return {
-    outputs,
+    outputStore: store,
     appendOutput,
     enqueueOutput,
     getNextSeq,
@@ -100,4 +136,11 @@ export function useWorkspaceTerminalOutput() {
     removeSessionOutput,
     resetOutputState,
   };
+}
+
+export function useSessionChunks(store: TerminalOutputStore, sessionId: string): TerminalOutputChunk[] {
+  return useSyncExternalStore(
+    (cb) => store.subscribe(sessionId, cb),
+    () => store.getSessionChunks(sessionId),
+  );
 }

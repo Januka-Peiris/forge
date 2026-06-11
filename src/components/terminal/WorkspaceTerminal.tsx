@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import * as ContextMenu from '@radix-ui/react-context-menu';
 import { Terminal as TerminalIcon } from 'lucide-react';
 import type { AgentDecisionPrompt, AgentModeChangedEvent, AgentPermissionMode, AgentProfile, DiscoveredRepository, MnemonicWorkspaceConfig, TerminalSession, Workspace, WorkspaceAgentContext, WorkspaceHealth, WorkspacePort, WorkspaceReadiness } from '../../types';
@@ -54,7 +54,7 @@ import type { PromptTemplate } from '../../types/prompt-template';
 import { useSyncedRef } from '../../lib/hooks/useSyncedRef';
 import { useActiveAgentProviders } from '../../lib/hooks/useActiveAgentProviders';
 import { providerForAgentProfile, type AgentProviderId } from '../../lib/active-agent-providers';
-import { useWorkspaceTerminalOutput } from './useWorkspaceTerminalOutput';
+import { useWorkspaceTerminalOutput, useSessionChunks, type TerminalOutputStore } from './useWorkspaceTerminalOutput';
 import { SHIP_PR_PROMPT } from './workspace-terminal-constants';
 import { WorkspaceTerminalEmptyState } from './WorkspaceTerminalEmptyState';
 import { WorkspaceContextFooter } from './WorkspaceContextFooter';
@@ -134,6 +134,18 @@ interface WorkspaceTerminalProps {
   onCreateWorkspaceForRepo?: (repositoryId: string, parentWorkspaceId?: string, sourceWorkspaceId?: string) => void;
 }
 
+function ConnectedTerminalPane({
+  outputStore,
+  session,
+  ...rest
+}: {
+  outputStore: TerminalOutputStore;
+  session: TerminalSession;
+} & Omit<ComponentProps<typeof TerminalPane>, 'chunks'>) {
+  const chunks = useSessionChunks(outputStore, session.id);
+  return <TerminalPane session={session} chunks={chunks} {...rest} />;
+}
+
 export function WorkspaceTerminal({
   workspace,
   workspaces = [],
@@ -186,7 +198,7 @@ export function WorkspaceTerminal({
     return Number.isFinite(parsed) ? Math.min(640, Math.max(280, parsed)) : 420;
   });
   const {
-    outputs,
+    outputStore,
     appendOutput,
     enqueueOutput,
     getNextSeq,
@@ -247,7 +259,7 @@ export function WorkspaceTerminal({
   /** Running sessions not shown in the main panes (for the attach overflow strip only). */
   const dockOverflowSessions = useMemo(() => {
     const visibleIds = new Set(visibleSessions.map((s) => s.id));
-    return allSessions.filter((s) => !s.closedAt && !visibleIds.has(s.id));
+    return allSessions.filter((s) => !s.closedAt && !visibleIds.has(s.id) && s.title !== 'Inspector Shell');
   }, [allSessions, visibleSessions]);
   const refreshSessions = useCallback(async (fetchOutput = false, preferredFocusId?: string | null) => {
     if (!workspaceId) return;
@@ -738,7 +750,7 @@ export function WorkspaceTerminal({
     setSelectedProfileId,
     focusedSession,
     focusedIdRef,
-    outputs,
+    outputStore,
     setBusy,
     setError,
     setCommandBusy,
@@ -957,8 +969,8 @@ export function WorkspaceTerminal({
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [focusedSession, closeTerminal]);
 
-  const tileLeafRef = useRef({ visibleSessions, outputs, workspaceHealth, stopTerminal, closeTerminal, resumeClaudeSession, setActionError });
-  tileLeafRef.current = { visibleSessions, outputs, workspaceHealth, stopTerminal, closeTerminal, resumeClaudeSession, setActionError };
+  const tileLeafRef = useRef({ visibleSessions, workspaceHealth, stopTerminal, closeTerminal, resumeClaudeSession, setActionError });
+  tileLeafRef.current = { visibleSessions, workspaceHealth, stopTerminal, closeTerminal, resumeClaudeSession, setActionError };
 
   const renderTileLeaf = useCallback((leaf: TileLeaf, focused: boolean) => {
     const ctx = tileLeafRef.current;
@@ -981,10 +993,10 @@ export function WorkspaceTerminal({
     return (
       <TerminalContextMenu onKillSession={() => void tileLeafRef.current.closeTerminal(session.id)}>
         <div className="relative flex min-h-0 flex-1">
-          <TerminalPane
+          <ConnectedTerminalPane
             key={session.id}
+            outputStore={outputStore}
             session={session}
-            chunks={ctx.outputs[session.id] ?? []}
             focused={focused}
             stuckSince={ctx.workspaceHealth?.terminals.find((t) => t.sessionId === session.id)?.stuckSince ?? null}
             onFocus={noop}
@@ -1003,7 +1015,7 @@ export function WorkspaceTerminal({
         </div>
       </TerminalContextMenu>
     );
-  }, []);
+  }, [outputStore]);
 
   if (!workspace) {
     return (

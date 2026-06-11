@@ -17,15 +17,15 @@ import {
   killWorkspacePortProcess,
   openWorkspacePort,
 } from '../../lib/tauri-api/workspace-ports';
-import type { OutputMap } from './workspace-terminal-constants';
 import type { TerminalOutputChunk, TerminalProfile, TerminalSession, WorkspacePort } from '../../types';
+import type { TerminalOutputStore } from './useWorkspaceTerminalOutput';
 
 interface UseWorkspaceTerminalSessionActionsParams {
   workspaceId: string | null;
   setSelectedProfileId: (value: string | ((current: string) => string)) => void;
   focusedSession: TerminalSession | null;
   focusedIdRef: MutableRefObject<string | null>;
-  outputs: OutputMap;
+  outputStore: TerminalOutputStore;
   setBusy: (busy: boolean) => void;
   setError: (error: string | null) => void;
   setCommandBusy: (busy: string | null) => void;
@@ -46,7 +46,7 @@ export function useWorkspaceTerminalSessionActions({
   setSelectedProfileId,
   focusedSession,
   focusedIdRef,
-  outputs,
+  outputStore,
   setBusy,
   setError,
   setCommandBusy,
@@ -270,7 +270,7 @@ export function useWorkspaceTerminalSessionActions({
   const copyFocusedOutput = async () => {
     if (!focusedSession) return;
     try {
-      await navigator.clipboard.writeText((outputs[focusedSession.id] ?? []).map((chunk) => chunk.data).join(''));
+      await navigator.clipboard.writeText(outputStore.getSessionChunks(focusedSession.id).map((chunk) => chunk.data).join(''));
     } catch (err) {
       setActionError(err);
     }
