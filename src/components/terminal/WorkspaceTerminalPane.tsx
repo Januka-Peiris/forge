@@ -207,12 +207,15 @@ export const TerminalPane = memo(function TerminalPane({
     });
 
     // In normal buffer, xterm.js handles scrollback natively.
-    // In alternate buffer (Claude's TUI), block wheel events so xterm.js
-    // doesn't convert them into arrow key sequences.
+    // In alternate buffer (Claude's TUI), scrolling up shows the
+    // scrollback overlay with pre-TUI content (like native terminals).
     const wheelHandler = (e: WheelEvent) => {
       if (terminal.buffer.active.type === 'alternate') {
         e.preventDefault();
         e.stopPropagation();
+        if (e.deltaY < 0) {
+          setShowScrollback(true);
+        }
       }
     };
     containerRef.current.addEventListener('wheel', wheelHandler, { passive: false });
@@ -554,7 +557,19 @@ export const TerminalPane = memo(function TerminalPane({
       {showScrollback && (
         <div
           ref={scrollbackRef}
-          className={`${compact ? 'min-h-[80px]' : 'min-h-[180px]'} terminal-scrollbar flex-1 overflow-y-auto bg-[#0a0a0a] p-2 font-mono text-[12px] leading-[1.15] text-[#d7dce5]`}
+          tabIndex={-1}
+          onKeyDown={(e) => { if (e.key === 'Escape') setShowScrollback(false); }}
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
+            const hasScrolledUp = el.dataset.hasScrolledUp === 'true';
+            if (!atBottom) {
+              el.dataset.hasScrolledUp = 'true';
+            } else if (hasScrolledUp) {
+              setShowScrollback(false);
+            }
+          }}
+          className={`${compact ? 'min-h-[80px]' : 'min-h-[180px]'} terminal-scrollbar flex-1 overflow-y-auto bg-[#0a0a0a] p-2 font-mono text-[12px] leading-[1.15] text-[#d7dce5] focus:outline-none`}
         >
           <div className="sticky top-0 z-10 mb-2 flex items-center justify-between rounded border border-mn-border/50 bg-mn-surface/90 px-2 py-1 backdrop-blur">
             <span className="text-[11px] text-mn-muted">Scrollback - {scrollbackLines.length} lines</span>
