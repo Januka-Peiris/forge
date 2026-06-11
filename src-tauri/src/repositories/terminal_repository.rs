@@ -7,7 +7,7 @@ use crate::models::{TerminalOutputChunk, TerminalSession};
 mod output;
 mod prompts;
 
-pub use output::{insert_output_chunk, list_output_chunks, next_seq, prune_output_chunks};
+pub use output::{insert_output_chunk, insert_output_chunks, list_output_chunks, next_seq, prune_output_chunks};
 pub use prompts::{
     insert_prompt_entry, list_prompts_for_workspace, mark_all_queued_prompts_stale,
     mark_prompt_failed, mark_prompt_sent, mark_prompt_status_by_session,

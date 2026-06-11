@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { TerminalWebSocket } from '../../lib/terminal-ws';
 import { ChevronDown, ChevronUp, RotateCcw, Search, Square, X } from 'lucide-react';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon, type ISearchOptions, type ISearchResultChangeEvent } from '@xterm/addon-search';
@@ -64,6 +65,7 @@ export const TerminalPane = memo(function TerminalPane({
   onData,
   onResize,
   compact = false,
+  terminalWs,
 }: {
   session: TerminalSession;
   chunks: TerminalOutputChunk[];
@@ -76,6 +78,7 @@ export const TerminalPane = memo(function TerminalPane({
   onData: (data: string) => void;
   onResize: (cols: number, rows: number) => void;
   compact?: boolean;
+  terminalWs?: TerminalWebSocket | null;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -85,6 +88,7 @@ export const TerminalPane = memo(function TerminalPane({
   const lastRenderedSeqRef = useRef<number>(-1);
   const onDataRef = useRef(onData);
   const onResizeRef = useRef(onResize);
+  const terminalWsRef = useRef(terminalWs);
   const [showSearch, setShowSearch] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [caseSensitive, setCaseSensitive] = useState(false);
@@ -144,6 +148,9 @@ export const TerminalPane = memo(function TerminalPane({
   useEffect(() => {
     onResizeRef.current = onResize;
   }, [onResize]);
+  useEffect(() => {
+    terminalWsRef.current = terminalWs;
+  }, [terminalWs]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -199,23 +206,18 @@ export const TerminalPane = memo(function TerminalPane({
       }
     });
 
-    const wheelHandler = (e: WheelEvent) => {
-      if (terminal.buffer.active.type === 'alternate') {
-        e.preventDefault();
-        e.stopPropagation();
-        setShowScrollback(true);
-        return;
-      }
-      e.preventDefault();
-      e.stopPropagation();
-      const lines = Math.max(1, Math.ceil(Math.abs(e.deltaY) / 30));
-      terminal.scrollLines(e.deltaY > 0 ? lines : -lines);
-    };
-    containerRef.current.addEventListener('wheel', wheelHandler, { passive: false });
+    // xterm.js handles scroll natively. No custom wheel handler needed.
 
     const disposable = readOnly
       ? { dispose: () => undefined }
-      : terminal.onData((data) => onDataRef.current(data));
+      : terminal.onData((data) => {
+          const ws = terminalWsRef.current;
+          if (ws?.connected) {
+            ws.send(data);
+          } else {
+            onDataRef.current(data);
+          }
+        });
     const searchDisposable = searchAddon.onDidChangeResults((event) => {
       setSearchResults(event);
     });
@@ -267,7 +269,12 @@ export const TerminalPane = memo(function TerminalPane({
       try {
         fitAddon.fit();
         if (!readOnly && terminal.cols > 0 && terminal.rows > 0) {
-          onResizeRef.current(terminal.cols, terminal.rows);
+          const ws = terminalWsRef.current;
+          if (ws?.connected) {
+            ws.sendResize(terminal.cols, terminal.rows);
+          } else {
+            onResizeRef.current(terminal.cols, terminal.rows);
+          }
         }
       } catch {
         // xterm can throw before layout settles.
@@ -315,7 +322,7 @@ export const TerminalPane = memo(function TerminalPane({
       scrollDisposable.dispose();
       bufferChangeDisposable.dispose();
       observer.disconnect();
-      containerRef.current?.removeEventListener('wheel', wheelHandler);
+      // wheelHandler removed: xterm.js handles scroll natively.
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onVisible);
       window.removeEventListener('mn:composer-scroll', onComposerScroll);
@@ -374,6 +381,16 @@ export const TerminalPane = memo(function TerminalPane({
   useEffect(() => {
     if (focused && !readOnly) terminalRef.current?.focus();
   }, [focused, readOnly]);
+
+  // When a WebSocket is active, write its output directly to xterm (bypasses chunk store).
+  useEffect(() => {
+    if (!terminalWs) return;
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+    terminalWs.onData = (bytes: Uint8Array) => {
+      terminal.write(bytes);
+    };
+  }, [terminalWs]);
 
   useEffect(() => {
     if (showScrollback && scrollbackRef.current) {

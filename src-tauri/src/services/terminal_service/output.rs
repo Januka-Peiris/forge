@@ -12,6 +12,54 @@ use crate::state::AppState;
 const OUTPUT_RETENTION_CHUNKS: u32 = 5000;
 const OUTPUT_PRUNE_INTERVAL: u64 = 500;
 
+/// Emit a chunk to the frontend immediately (no database write).
+/// Used by the fast display path so the UI renders output with zero delay.
+pub(super) fn emit_output(
+    app_handle: &tauri::AppHandle,
+    workspace_id: &str,
+    session_id: &str,
+    next_seq: &AtomicU64,
+    stream_type: &str,
+    data: &str,
+) -> TerminalOutputChunk {
+    let seq = next_seq.fetch_add(1, Ordering::SeqCst);
+    let chunk = TerminalOutputChunk {
+        id: format!("term-out-{}-{seq}", unique_suffix()),
+        session_id: session_id.to_string(),
+        seq,
+        timestamp: timestamp(),
+        stream_type: stream_type.to_string(),
+        data: data.to_string(),
+    };
+    let _ = app_handle.emit(
+        "mn://terminal-output",
+        TerminalOutputEvent {
+            workspace_id: workspace_id.to_string(),
+            chunk: chunk.clone(),
+        },
+    );
+    chunk
+}
+
+/// Persist chunks to SQLite in batch (background persistence path).
+pub(super) fn persist_output_chunks(
+    db: &crate::db::Database,
+    session_id: &str,
+    chunks: &[TerminalOutputChunk],
+) {
+    if chunks.is_empty() {
+        return;
+    }
+    let _ = terminal_repository::insert_output_chunks(db, chunks);
+    if let Some(last) = chunks.last() {
+        if last.seq != 0 && last.seq.is_multiple_of(OUTPUT_PRUNE_INTERVAL) {
+            let _ = terminal_repository::prune_output_chunks(db, session_id, OUTPUT_RETENTION_CHUNKS);
+        }
+    }
+}
+
+/// Emit to frontend and persist to database (used for system messages and
+/// non-hot-path output where immediate persistence is acceptable).
 pub(super) fn append_output(
     app_handle: Option<&tauri::AppHandle>,
     db: &crate::db::Database,

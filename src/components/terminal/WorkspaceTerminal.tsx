@@ -55,6 +55,8 @@ import { useSyncedRef } from '../../lib/hooks/useSyncedRef';
 import { useActiveAgentProviders } from '../../lib/hooks/useActiveAgentProviders';
 import { providerForAgentProfile, type AgentProviderId } from '../../lib/active-agent-providers';
 import { useWorkspaceTerminalOutput, useSessionChunks, type TerminalOutputStore } from './useWorkspaceTerminalOutput';
+import { TerminalWebSocket } from '../../lib/terminal-ws';
+import { getTerminalWsInfo } from '../../lib/tauri-api/terminal-ws';
 import { RAW_TERMINAL_MODE_KEY, SHIP_PR_PROMPT } from './workspace-terminal-constants';
 import { WorkspaceTerminalEmptyState } from './WorkspaceTerminalEmptyState';
 import { WorkspaceContextFooter } from './WorkspaceContextFooter';
@@ -224,6 +226,48 @@ export function WorkspaceTerminal({
     const parsed = raw ? Number(raw) : NaN;
     return Number.isFinite(parsed) ? Math.min(640, Math.max(280, parsed)) : 420;
   });
+  const [wsInfo, setWsInfo] = useState<{ port: number; token: string } | null>(null);
+  const wsMapRef = useRef<Map<string, TerminalWebSocket>>(new Map());
+
+  useEffect(() => {
+    getTerminalWsInfo().then(setWsInfo).catch(() => undefined);
+  }, []);
+
+  const getOrCreateWs = useCallback((sessionId: string): TerminalWebSocket | null => {
+    if (!wsInfo) return null;
+    const existing = wsMapRef.current.get(sessionId);
+    if (existing) return existing;
+    const ws = new TerminalWebSocket(
+      wsInfo.port,
+      wsInfo.token,
+      sessionId,
+      () => {},
+    );
+    wsMapRef.current.set(sessionId, ws);
+    return ws;
+  }, [wsInfo]);
+
+  // Clean up WS connections for sessions that are no longer running.
+  useEffect(() => {
+    const runningIds = new Set(
+      visibleSessions.filter((s) => s.status === 'running').map((s) => s.id),
+    );
+    for (const [id, ws] of wsMapRef.current) {
+      if (!runningIds.has(id)) {
+        ws.close();
+        wsMapRef.current.delete(id);
+      }
+    }
+  }, [visibleSessions]);
+
+  // Clean up all WS connections on unmount.
+  useEffect(() => {
+    return () => {
+      for (const ws of wsMapRef.current.values()) ws.close();
+      wsMapRef.current.clear();
+    };
+  }, []);
+
   const {
     outputStore,
     appendOutput,
@@ -1017,8 +1061,8 @@ export function WorkspaceTerminal({
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [focusedSession, closeTerminal]);
 
-  const tileLeafRef = useRef({ visibleSessions, workspaceHealth, stopTerminal, closeTerminal, resumeClaudeSession, setActionError });
-  tileLeafRef.current = { visibleSessions, workspaceHealth, stopTerminal, closeTerminal, resumeClaudeSession, setActionError };
+  const tileLeafRef = useRef({ visibleSessions, workspaceHealth, stopTerminal, closeTerminal, resumeClaudeSession, setActionError, getOrCreateWs });
+  tileLeafRef.current = { visibleSessions, workspaceHealth, stopTerminal, closeTerminal, resumeClaudeSession, setActionError, getOrCreateWs };
 
   const renderTileLeaf = useCallback((leaf: TileLeaf, focused: boolean) => {
     const ctx = tileLeafRef.current;
@@ -1059,6 +1103,7 @@ export function WorkspaceTerminal({
               if (session.status !== 'running') return;
               void resizeWorkspaceTerminalSession(session.id, cols, rows).catch(() => undefined);
             }}
+            terminalWs={session.status === 'running' ? ctx.getOrCreateWs(session.id) : null}
           />
         </div>
       </TerminalContextMenu>

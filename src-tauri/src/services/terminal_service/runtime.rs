@@ -9,7 +9,7 @@ use crate::repositories::terminal_repository;
 use crate::services::terminal_service;
 use crate::state::{ActiveTerminal, AppState};
 
-use super::output::append_output;
+use super::output::{append_output, emit_output, persist_output_chunks};
 
 const RETAINED_OUTPUT_CHUNKS_ON_EXIT: u32 = 5000;
 
@@ -26,7 +26,7 @@ pub(super) fn active_for_workspace(
     active_for_session(state, &session.id)
 }
 
-pub(super) fn active_for_session(
+pub(crate) fn active_for_session(
     state: &AppState,
     session_id: &str,
 ) -> Result<Option<Arc<ActiveTerminal>>, String> {
@@ -135,6 +135,7 @@ pub(super) fn spawn_terminal_reader(
     last_output_at_secs: Arc<AtomicU64>,
     last_output_at_millis: Arc<AtomicU64>,
     mut reader: Box<dyn Read + Send>,
+    ws_connections: crate::state::WsConnectionRegistry,
 ) {
     let (tx, rx) = mpsc::sync_channel::<Result<Vec<u8>, String>>(128);
     thread::spawn(move || {
@@ -158,30 +159,28 @@ pub(super) fn spawn_terminal_reader(
     });
 
     thread::spawn(move || {
-        const MAX_BATCH_BYTES: usize = 16 * 1024;
-        const MAX_BATCH_DELAY: Duration = Duration::from_millis(50);
-        const MAX_PENDING_BYTES: usize = 256 * 1024;
-        let mut pending = Vec::<u8>::with_capacity(MAX_BATCH_BYTES);
+        use crate::models::TerminalOutputChunk;
 
-        let flush_pending = |pending: &mut Vec<u8>| {
-            if pending.is_empty() {
+        const PERSIST_FLUSH_INTERVAL: Duration = Duration::from_millis(250);
+        const MAX_PENDING_BYTES: usize = 256 * 1024;
+        let mut display_pending = Vec::<u8>::with_capacity(4096);
+        let mut persist_queue: Vec<TerminalOutputChunk> = Vec::new();
+        let mut last_persist = std::time::Instant::now();
+
+        let emit_and_queue = |buf: &mut Vec<u8>, queue: &mut Vec<TerminalOutputChunk>| {
+            if buf.is_empty() {
                 return;
             }
-            let data = String::from_utf8_lossy(pending).to_string();
-            pending.clear();
-            append_output(
-                Some(&app_handle),
-                &db,
-                &workspace_id,
-                &session_id,
-                &next_seq,
-                "pty",
-                &data,
+            let data = String::from_utf8_lossy(buf).to_string();
+            buf.clear();
+            let chunk = emit_output(
+                &app_handle, &workspace_id, &session_id, &next_seq, "pty", &data,
             );
+            queue.push(chunk);
         };
 
         loop {
-            match rx.recv_timeout(MAX_BATCH_DELAY) {
+            match rx.recv_timeout(PERSIST_FLUSH_INTERVAL) {
                 Ok(Ok(bytes)) => {
                     let now = SystemTime::now()
                         .duration_since(UNIX_EPOCH)
@@ -189,33 +188,87 @@ pub(super) fn spawn_terminal_reader(
                     last_output_at_secs.store(now.as_secs(), Ordering::Relaxed);
                     last_output_at_millis.store(now.as_millis() as u64, Ordering::Relaxed);
 
-                    pending.extend_from_slice(&bytes);
-                    if pending.len() > MAX_PENDING_BYTES {
-                        let keep_from = pending.len() - MAX_BATCH_BYTES;
-                        pending.drain(..keep_from);
+                    display_pending.extend_from_slice(&bytes);
+
+                    // Drain any additional data already in the channel so we
+                    // coalesce rapid-fire reads into a single emit.
+                    while let Ok(Ok(more)) = rx.try_recv() {
+                        display_pending.extend_from_slice(&more);
                     }
-                    while pending.len() >= MAX_BATCH_BYTES {
-                        let tail = pending.split_off(MAX_BATCH_BYTES);
-                        flush_pending(&mut pending);
-                        pending = tail;
+
+                    if display_pending.len() > MAX_PENDING_BYTES {
+                        let keep_from = display_pending.len().saturating_sub(64 * 1024);
+                        display_pending.drain(..keep_from);
+                    }
+
+                    // Immediate display: send via WebSocket if connected,
+                    // otherwise fall back to Tauri event emission.
+                    if !display_pending.is_empty() {
+                        let sent_via_ws = ws_connections
+                            .lock()
+                            .ok()
+                            .map(|conns| {
+                                if let Some(senders) = conns.get(&session_id) {
+                                    if !senders.is_empty() {
+                                        let raw = display_pending.clone();
+                                        for sender in senders {
+                                            let _ = sender.try_send(raw.clone());
+                                        }
+                                        return true;
+                                    }
+                                }
+                                false
+                            })
+                            .unwrap_or(false);
+
+                        if sent_via_ws {
+                            // WS delivered raw bytes directly. Build chunk
+                            // for persistence only (no Tauri event emit).
+                            let data = String::from_utf8_lossy(&display_pending).to_string();
+                            display_pending.clear();
+                            let seq = next_seq.fetch_add(1, Ordering::SeqCst);
+                            persist_queue.push(crate::models::TerminalOutputChunk {
+                                id: format!("term-out-{}-{seq}", super::output::unique_suffix()),
+                                session_id: session_id.clone(),
+                                seq,
+                                timestamp: super::output::timestamp(),
+                                stream_type: "pty".to_string(),
+                                data,
+                            });
+                        } else {
+                            // No WS: emit via Tauri event (existing path).
+                            emit_and_queue(&mut display_pending, &mut persist_queue);
+                        }
+                    }
+
+                    // Background persistence: flush to SQLite periodically.
+                    if last_persist.elapsed() >= PERSIST_FLUSH_INTERVAL {
+                        persist_output_chunks(&db, &session_id, &persist_queue);
+                        persist_queue.clear();
+                        last_persist = std::time::Instant::now();
                     }
                 }
                 Ok(Err(message)) => {
-                    flush_pending(&mut pending);
+                    emit_and_queue(&mut display_pending, &mut persist_queue);
+                    persist_output_chunks(&db, &session_id, &persist_queue);
+                    persist_queue.clear();
                     append_output(
-                        Some(&app_handle),
-                        &db,
-                        &workspace_id,
-                        &session_id,
-                        &next_seq,
-                        "system",
-                        &message,
+                        Some(&app_handle), &db, &workspace_id, &session_id,
+                        &next_seq, "system", &message,
                     );
                     break;
                 }
-                Err(mpsc::RecvTimeoutError::Timeout) => flush_pending(&mut pending),
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    if !persist_queue.is_empty() {
+                        persist_output_chunks(&db, &session_id, &persist_queue);
+                        persist_queue.clear();
+                        last_persist = std::time::Instant::now();
+                    }
+                }
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
-                    flush_pending(&mut pending);
+                    emit_and_queue(&mut display_pending, &mut persist_queue);
+                    persist_output_chunks(&db, &session_id, &persist_queue);
+                    persist_queue.clear();
                     break;
                 }
             }

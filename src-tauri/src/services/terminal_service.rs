@@ -22,7 +22,7 @@ mod launch;
 mod output;
 mod prompts;
 mod queue;
-mod runtime;
+pub(crate) mod runtime;
 mod tmux;
 
 const RETAINED_OUTPUT_CHUNKS_ON_CLOSE: u32 = 5000;
@@ -180,6 +180,7 @@ fn spawn_active_terminal(
         last_output_at_secs,
         last_output_at_millis,
         reader,
+        state.ws_connections.clone(),
     );
     spawn_terminal_monitor(
         state.clone(),

@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, AtomicU64};
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
 
 use portable_pty::{ChildKiller, MasterPty};
 use tauri::AppHandle;
@@ -20,6 +20,8 @@ pub type PendingCommandRegistry = Arc<Mutex<HashMap<String, String>>>;
 pub type CoordinatorStepRegistry = Arc<Mutex<HashSet<String>>>;
 pub type SchedulerJobRegistry = Arc<Mutex<HashSet<String>>>;
 pub type RepoIntelligenceRegistry = Arc<Mutex<HashSet<String>>>;
+/// Maps session_id to a list of WS writer channels for live terminal output.
+pub type WsConnectionRegistry = Arc<Mutex<HashMap<String, Vec<mpsc::SyncSender<Vec<u8>>>>>>;
 
 pub struct ActiveTerminal {
     pub session_id: String,
@@ -59,6 +61,12 @@ pub struct AppState {
     pub scheduler_job_inflight: SchedulerJobRegistry,
     /// Single-flight key set for per-repo intelligence refresh jobs (`repo_id`).
     pub repo_intelligence_inflight: RepoIntelligenceRegistry,
+    /// Port the local WebSocket server is listening on for terminal I/O.
+    pub ws_port: Arc<Mutex<u16>>,
+    /// Auth token for WebSocket connections.
+    pub ws_token: Arc<Mutex<String>>,
+    /// Active WebSocket writer channels per terminal session.
+    pub ws_connections: WsConnectionRegistry,
 }
 
 impl AppState {
@@ -116,6 +124,9 @@ impl AppState {
             coordinator_step_inflight: Arc::new(Mutex::new(HashSet::new())),
             scheduler_job_inflight: Arc::new(Mutex::new(HashSet::new())),
             repo_intelligence_inflight: Arc::new(Mutex::new(HashSet::new())),
+            ws_port: Arc::new(Mutex::new(0)),
+            ws_token: Arc::new(Mutex::new(String::new())),
+            ws_connections: Arc::new(Mutex::new(HashMap::new())),
         };
         let _ =
             settings_repository::ensure_default_value(&state.db, "notifications_min_level", "info");
