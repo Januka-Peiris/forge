@@ -136,9 +136,6 @@ export function WorkspaceHeader({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem disabled={busy} onSelect={() => onCreateTerminal('shell', 'shell', 'Shell')}>
-                New shell tab
-              </DropdownMenuItem>
               {activeProviderIds.has('codex') && (
                 <DropdownMenuItem disabled={busy} onSelect={() => onCreateTerminal('agent', 'codex', 'Codex')}>
                   New Codex tab

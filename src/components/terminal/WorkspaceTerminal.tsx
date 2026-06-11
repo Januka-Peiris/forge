@@ -1092,7 +1092,6 @@ export function WorkspaceTerminal({
               activeProviderIds={activeProviders.activeProviderSet}
               onStartClaude={() => void createTerminal('agent', 'claude_code', 'Claude', undefined, claudeLaunchExtraArgs(composerSettings))}
               onStartCodex={() => void createTerminal('agent', 'codex', 'Codex')}
-              onStartShell={() => void createTerminal('shell', 'shell', 'Shell')}
             />
           ) : focusedSession ? (
             <TileLayout
