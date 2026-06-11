@@ -175,6 +175,14 @@ export function TerminalPane({
     searchAddonRef.current = searchAddon;
     lastRenderedSeqRef.current = -1;
 
+    terminal.attachCustomWheelEventHandler((event) => {
+      if (terminal.buffer.active.type === 'alternate') {
+        terminal.scrollLines(event.deltaY > 0 ? 3 : -3);
+        return false;
+      }
+      return true;
+    });
+
     const disposable = readOnly
       ? { dispose: () => undefined }
       : terminal.onData((data) => onDataRef.current(data));
