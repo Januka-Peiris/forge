@@ -184,6 +184,32 @@ fn shell_single_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 
+/// Returns the `-c credential.helper=...` args that route git authentication
+/// through `gh auth git-credential`. Resolves the full path to `gh` so the
+/// helper works even when the Tauri app inherits a minimal PATH (e.g. when
+/// launched from Finder).
+pub fn git_credential_args() -> Vec<String> {
+    let gh_path = find_gh_path().unwrap_or_else(|| "gh".to_string());
+    vec![
+        "-c".to_string(),
+        "credential.helper=".to_string(),
+        "-c".to_string(),
+        format!("credential.helper=!{gh_path} auth git-credential"),
+    ]
+}
+
+fn find_gh_path() -> Option<String> {
+    if let Ok(Some(path)) = find_binary("gh") {
+        return Some(path.to_string_lossy().to_string());
+    }
+    for candidate in ["/opt/homebrew/bin/gh", "/usr/local/bin/gh"] {
+        if std::path::Path::new(candidate).is_file() {
+            return Some(candidate.to_string());
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

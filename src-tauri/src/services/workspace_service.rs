@@ -239,7 +239,7 @@ pub fn pull_workspace_branch(state: &AppState, workspace_id: &str) -> Result<Str
 
 fn run_git(root: &Path, args: &[&str]) -> Result<String, String> {
     let output = Command::new("git")
-        .args(["-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential"])
+        .args(super::environment_service::git_credential_args())
         .arg("-C")
         .arg(root)
         .args(args)
