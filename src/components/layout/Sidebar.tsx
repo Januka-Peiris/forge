@@ -59,7 +59,6 @@ interface SidebarProps {
   repositories: DiscoveredRepository[];
   workspaces: Workspace[];
   workspaceAttention: Record<string, WorkspaceAttention>;
-  conflictingWorkspaceIds: Set<string>;
   archivedWorkspaceIds: string[];
   repositoryRelationships?: RepositoryRelationship[];
   selectedWorkspaceId: string | null;
@@ -92,7 +91,6 @@ export function Sidebar({
   repositories,
   workspaces,
   workspaceAttention,
-  conflictingWorkspaceIds,
   archivedWorkspaceIds,
   repositoryRelationships = [],
   selectedWorkspaceId,
@@ -557,7 +555,6 @@ export function Sidebar({
                         const isSelected = workspace.id === selectedWorkspaceId;
                         const isHovered = hoveredId === workspace.id;
                         const attention = workspaceAttention[workspace.id];
-                        const hasConflict = conflictingWorkspaceIds.has(workspace.id);
                         const isArchived = archivedSet.has(workspace.id);
                         const totals = workspaceChangeTotals[workspace.id] ?? { additions: 0, deletions: 0 };
 
@@ -602,19 +599,10 @@ export function Sidebar({
                               </button>
                             }
                             suffix={
-                              (attention?.unreadCount || hasConflict) ? (
-                                <div className="flex items-center gap-1">
-                                  {!!attention?.unreadCount && (
-                                    <span className="shrink-0 rounded-full bg-mn-orange px-1.5 py-0.5 text-[10px] font-bold text-white shadow-amber-glow">
-                                      {attention.unreadCount > 99 ? '99+' : attention.unreadCount}
-                                    </span>
-                                  )}
-                                  {hasConflict && (
-                                    <span className="shrink-0 rounded-full border border-mn-red/30 bg-mn-red/15 px-1.5 py-0.5 text-[10px] font-bold text-mn-red">
-                                      conflict
-                                    </span>
-                                  )}
-                                </div>
+                              attention?.unreadCount ? (
+                                <span className="shrink-0 rounded-full bg-mn-orange px-1.5 py-0.5 text-[10px] font-bold text-white shadow-amber-glow">
+                                  {attention.unreadCount > 99 ? '99+' : attention.unreadCount}
+                                </span>
                               ) : null
                             }
                             actions={

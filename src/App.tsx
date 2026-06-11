@@ -165,7 +165,6 @@ export default function App() {
   }, [modalOpen, refreshRepositories]);
 
   const {
-    conflictingWorkspaceIds,
     scheduleAttentionLoad,
     scheduleMarkAttentionRead,
     workspaceAttention,
@@ -449,7 +448,6 @@ export default function App() {
           workspaces={workspaces}
           archivedWorkspaceIds={archivedWorkspaceIds}
           workspaceAttention={workspaceAttention}
-          conflictingWorkspaceIds={conflictingWorkspaceIds}
           selectedWorkspaceId={selectedId}
           onSelectWorkspace={setSelectedId}
           onArchiveWorkspace={(workspaceId) => archiveWorkspace(workspaceId)}
