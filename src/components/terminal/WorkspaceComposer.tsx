@@ -311,7 +311,7 @@ export function WorkspaceComposer({
     const buffer = await file.arrayBuffer();
     const bytes = Array.from(new Uint8Array(buffer));
     const path = await saveWorkspacePastedImage(workspaceId, file.name || 'pasted-image.png', bytes);
-    appendTextToPrompt(`![pasted image](${path})`);
+    appendTextToPrompt(`[Read and analyze the image at: ${path}]`);
     setAttachments((current) => [
       ...current,
       {
@@ -356,7 +356,7 @@ export function WorkspaceComposer({
     ]);
 
     if (kind === 'image') {
-      appendTextToPrompt(`![${file.name || 'attached image'}](${path})`);
+      appendTextToPrompt(`[Read and analyze the image at: ${path}]`);
       return;
     }
 

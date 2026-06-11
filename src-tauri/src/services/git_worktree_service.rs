@@ -72,10 +72,45 @@ pub fn create_mnemonic_worktree(
         )?;
     }
 
+    ensure_forge_gitignored(repo_path);
+
     Ok(CreatedWorktree {
         path: worktree_path.to_string_lossy().to_string(),
         branch,
     })
+}
+
+/// Public entry point for callers outside this module (e.g. external worktree workspaces).
+pub fn ensure_forge_gitignored_at(repo_path: &Path) {
+    ensure_forge_gitignored(repo_path);
+}
+
+/// Ensures `.forge/` is listed in the repository root `.gitignore` so
+/// Mnemonic's per-repo config directory never shows up as untracked.
+/// Silently does nothing if already present or if the file cannot be written.
+fn ensure_forge_gitignored(repo_path: &Path) {
+    let gitignore = repo_path.join(".gitignore");
+    let content = fs::read_to_string(&gitignore).unwrap_or_default();
+    let already_ignored = content.lines().any(|line| {
+        let trimmed = line.trim();
+        trimmed == ".forge/" || trimmed == ".forge" || trimmed == "/.forge/" || trimmed == "/.forge"
+    });
+    if already_ignored {
+        return;
+    }
+    let entry = if content.ends_with('\n') || content.is_empty() {
+        ".forge/\n".to_string()
+    } else {
+        "\n.forge/\n".to_string()
+    };
+    let _ = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&gitignore)
+        .and_then(|mut file| {
+            use std::io::Write;
+            file.write_all(entry.as_bytes())
+        });
 }
 
 pub fn remove_mnemonic_worktree(repo_path: &str, worktree_path: &str) -> Result<(), String> {
