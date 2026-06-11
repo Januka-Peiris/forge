@@ -171,7 +171,7 @@ export default function App() {
   } = useWorkspaceAttentionState(selectedId, view);
 
 
-  const { attentionToasts, dismissAttentionToast } = useAppNotifications({
+  useAppNotifications({
     selectedWorkspaceId: selectedId,
     view,
     workspaces,
@@ -405,7 +405,6 @@ export default function App() {
 
   const isReviewView = view === 'reviews';
   const showInspector = view === 'workspaces' || view === 'files';
-  const effectiveSidebarWidth = sidebarCollapsed ? collapsedRailWidth : sidebarWidth;
 
   return (
     <div className="h-[100dvh] flex flex-col overflow-hidden bg-mn-bg text-mn-text antialiased selection:bg-mn-cyan/25">
@@ -526,28 +525,6 @@ export default function App() {
         </Suspense>
       )}
 
-      {attentionToasts.length > 0 && (
-        <div className="pointer-events-none fixed z-50 flex w-[320px] flex-col gap-2" style={{ left: `${effectiveSidebarWidth + 16}px`, bottom: '200px' }}>
-          {attentionToasts.map((toast) => (
-            <button
-              key={toast.id}
-              onClick={() => {
-                setView('workspaces');
-                setSelectedId(toast.workspaceId);
-                dismissAttentionToast(toast.id);
-              }}
-              className="pointer-events-auto rounded-xl border border-mn-blue/25 bg-mn-bg/95 px-3 py-2 text-left shadow-xl shadow-black/30 backdrop-blur hover:bg-mn-surface"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-ui-label font-bold text-mn-blue">New workspace output</span>
-                <span className="text-ui-caption text-mn-muted">Open</span>
-              </div>
-              <p className="mt-1 truncate text-ui-label font-semibold text-mn-text">{toast.workspaceName}</p>
-              <p className="mt-0.5 truncate text-ui-label text-mn-muted">{toast.text}</p>
-            </button>
-          ))}
-        </div>
-      )}
 
       {deepLinkNotice && (
         <div className="fixed right-4 top-4 z-50 max-w-[420px] rounded-xl border border-mn-blue/25 bg-mn-bg/95 px-4 py-3 text-ui-label font-semibold text-mn-text shadow-xl shadow-black/30 backdrop-blur">

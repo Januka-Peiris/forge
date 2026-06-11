@@ -38,8 +38,8 @@ function classifyDiffLine(line: string): DiffLineType {
 function lineClasses(type: DiffLineType): string {
   if (type === 'file_header') return 'bg-mn-blue/5 text-mn-blue/80';
   if (type === 'hunk_header') return 'bg-mn-surface-overlay text-mn-muted';
-  if (type === 'addition') return 'bg-mn-cyan/10 text-mn-cyan';
-  if (type === 'deletion') return 'bg-mn-red/10 text-mn-red';
+  if (type === 'addition') return 'bg-green-500/10 text-green-400';
+  if (type === 'deletion') return 'bg-red-500/10 text-red-400';
   return 'text-mn-text/85';
 }
 
