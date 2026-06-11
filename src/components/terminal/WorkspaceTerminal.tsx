@@ -254,10 +254,11 @@ export function WorkspaceTerminal({
     // failed sends, which made action errors vanish before they could render.
     // Errors are cleared at the start of the next user action instead.
     try {
-      const [visible, history] = await Promise.all([
+      const [rawVisible, history] = await Promise.all([
         listWorkspaceVisibleTerminalSessions(workspaceId),
         listWorkspaceTerminalSessions(workspaceId),
       ]);
+      const visible = rawVisible.filter((s) => s.title !== 'Inspector Shell');
       const desiredFocusId = preferredFocusId ?? focusedIdRef.current;
       const nextFocusedId = desiredFocusId && visible.some((session) => session.id === desiredFocusId)
         ? desiredFocusId
