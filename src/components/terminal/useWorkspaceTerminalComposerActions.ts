@@ -1,4 +1,4 @@
-import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
+import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback, useRef } from 'react';
 import { createWorkspacePr } from '../../lib/tauri-api/pr-draft';
 import { refreshWorkspacePrComments } from '../../lib/tauri-api/review-cockpit';
 import { queueWorkspaceAgentPrompt, writeWorkspaceTerminalSessionInput } from '../../lib/tauri-api/terminal';
@@ -60,19 +60,57 @@ export function useWorkspaceTerminalComposerActions({
     ? focusedSession.id
     : null;
 
-  const cycleAgentMode = () => {
-    // For a live agent TUI, forward a real Shift+Tab (CSI Z) so the agent
-    // cycles its own permission mode. The TUI footer is the source of truth:
-    // the mode watcher mirrors it back via mn://agent-mode-changed, so local
-    // state is not flipped here.
-    if (focusedRunningAgentSessionId) {
-      void writeWorkspaceTerminalSessionInput(focusedRunningAgentSessionId, '\x1b[Z')
-        .catch((err) => setActionError(err));
+  const latestRef = useRef({
+    workspaceId,
+    focusedSession,
+    selectedProfileId,
+    activePromptProvider,
+    composerSettings,
+    mnemonicConfig,
+    focusedRunningAgentSessionId,
+    refreshSessions,
+    refreshWorkbenchState,
+    refreshReadiness,
+    refreshCoordinatorStatus,
+    startRunCommand,
+    resumeClaudeSession,
+    setReviewCockpit,
+    setComposerSettings,
+    setBusy,
+    setError,
+    setActionError,
+    onCoordinatorInfo,
+  });
+  latestRef.current = {
+    workspaceId,
+    focusedSession,
+    selectedProfileId,
+    activePromptProvider,
+    composerSettings,
+    mnemonicConfig,
+    focusedRunningAgentSessionId,
+    refreshSessions,
+    refreshWorkbenchState,
+    refreshReadiness,
+    refreshCoordinatorStatus,
+    startRunCommand,
+    resumeClaudeSession,
+    setReviewCockpit,
+    setComposerSettings,
+    setBusy,
+    setError,
+    setActionError,
+    onCoordinatorInfo,
+  };
+
+  const cycleAgentMode = useCallback(() => {
+    const ctx = latestRef.current;
+    if (ctx.focusedRunningAgentSessionId) {
+      void writeWorkspaceTerminalSessionInput(ctx.focusedRunningAgentSessionId, '\x1b[Z')
+        .catch((err) => ctx.setActionError(err));
       return;
     }
-    // No live session: cycle the launch mode used for --permission-mode on
-    // the next session spawn.
-    setComposerSettings((current) => {
+    ctx.setComposerSettings((current) => {
       const next = current.selectedTaskMode === 'Act'
         ? 'Accept Edits'
         : current.selectedTaskMode === 'Accept Edits'
@@ -80,142 +118,134 @@ export function useWorkspaceTerminalComposerActions({
           : 'Act';
       return { ...current, selectedTaskMode: next };
     });
-  };
+  }, []);
 
-  /**
-   * Update the selected model. If a Claude session is live, also switch it
-   * in-place by typing "/model <id>" into the TUI; otherwise the selection
-   * applies via --model on the next session spawn.
-   */
-  const changeModel = (model: string) => {
+  const changeModel = useCallback((model: string) => {
+    const ctx = latestRef.current;
     if (
-      focusedRunningAgentSessionId
-      && activePromptProvider === 'claude_code'
-      && model !== composerSettings.selectedModel
+      ctx.focusedRunningAgentSessionId
+      && ctx.activePromptProvider === 'claude_code'
+      && model !== ctx.composerSettings.selectedModel
     ) {
-      const sessionId = focusedRunningAgentSessionId;
+      const sessionId = ctx.focusedRunningAgentSessionId;
       void (async () => {
         try {
           await writeWorkspaceTerminalSessionInput(sessionId, `/model ${model}`);
-          // Enter as a separate write so the TUI treats it as submit.
           await new Promise((resolve) => setTimeout(resolve, 250));
           await writeWorkspaceTerminalSessionInput(sessionId, '\r');
         } catch (err) {
-          setActionError(err);
+          ctx.setActionError(err);
         }
       })();
     }
-    setComposerSettings((current) => ({ ...current, selectedModel: model }));
-  };
+    ctx.setComposerSettings((current) => ({ ...current, selectedModel: model }));
+  }, []);
 
-  const handleWorkbenchAction = async (action: AgentChatNextAction) => {
+  const handleWorkbenchAction = useCallback(async (action: AgentChatNextAction) => {
+    const ctx = latestRef.current;
     switch (action.kind) {
       case 'review_diff':
-        await refreshWorkbenchState();
+        await ctx.refreshWorkbenchState();
         return;
       case 'run_tests':
-        if (mnemonicConfig?.run[0]) void startRunCommand(0);
+        if (ctx.mnemonicConfig?.run[0]) void ctx.startRunCommand(0);
         return;
       case 'create_pr':
-        if (workspaceId) {
-          setBusy(true);
-          setError(null);
+        if (ctx.workspaceId) {
+          ctx.setBusy(true);
+          ctx.setError(null);
           try {
-            await createWorkspacePr(workspaceId);
-            await refreshWorkbenchState();
-            await refreshReadiness();
+            await createWorkspacePr(ctx.workspaceId);
+            await ctx.refreshWorkbenchState();
+            await ctx.refreshReadiness();
           } catch (err) {
-            setActionError(err);
+            ctx.setActionError(err);
           } finally {
-            setBusy(false);
+            ctx.setBusy(false);
           }
         }
         return;
       case 'refresh_comments':
-        if (workspaceId) {
-          const cockpit = await refreshWorkspacePrComments(workspaceId).catch((err) => {
-            setActionError(err);
+        if (ctx.workspaceId) {
+          const cockpit = await refreshWorkspacePrComments(ctx.workspaceId).catch((err) => {
+            ctx.setActionError(err);
             return null;
           });
-          if (cockpit) setReviewCockpit(cockpit);
+          if (cockpit) ctx.setReviewCockpit(cockpit);
         }
         return;
       default:
         return;
     }
-  };
+  }, []);
 
-  const sendPrompt = (text: string) => {
-    if (!workspaceId || !text.trim()) return;
-    // Plan mode is real now: new sessions get --permission-mode plan, running
-    // sessions are toggled via a forwarded Shift+Tab. No prompt-text prefix.
+  const sendPrompt = useCallback((text: string) => {
+    const ctx = latestRef.current;
+    if (!ctx.workspaceId || !text.trim()) return;
     const effectivePrompt = text.trim();
 
     const work = async () => {
-      setBusy(true);
-      setError(null);
+      const c = latestRef.current;
+      c.setBusy(true);
+      c.setError(null);
       try {
-        // Coordinator path - intentionally kept (uses SDK credits)
-        if (composerSettings.promptMode === 'coordinator') {
-          const brainProfileId = composerSettings.coordinatorBrainProfileId.trim();
-          const coderProfileId = composerSettings.coordinatorCoderProfileId.trim();
+        if (c.composerSettings.promptMode === 'coordinator') {
+          const brainProfileId = c.composerSettings.coordinatorBrainProfileId.trim();
+          const coderProfileId = c.composerSettings.coordinatorCoderProfileId.trim();
           await stepWorkspaceCoordinator({
-            workspaceId,
+            workspaceId: c.workspaceId!,
             instruction: effectivePrompt,
-            brainProvider: composerSettings.coordinatorBrainProvider || null,
-            coderProvider: composerSettings.coordinatorCoderProvider || null,
+            brainProvider: c.composerSettings.coordinatorBrainProvider || null,
+            coderProvider: c.composerSettings.coordinatorCoderProvider || null,
             brainProfileId: brainProfileId.length > 0 ? brainProfileId : null,
             coderProfileId: coderProfileId.length > 0 ? coderProfileId : null,
-            brainModel: composerSettings.coordinatorBrainModel || null,
-            coderModel: composerSettings.coordinatorCoderModel || null,
-            brainReasoning: composerSettings.coordinatorBrainReasoning || null,
-            coderReasoning: composerSettings.coordinatorCoderReasoning || null,
+            brainModel: c.composerSettings.coordinatorBrainModel || null,
+            coderModel: c.composerSettings.coordinatorCoderModel || null,
+            brainReasoning: c.composerSettings.coordinatorBrainReasoning || null,
+            coderReasoning: c.composerSettings.coordinatorCoderReasoning || null,
           });
-          refreshCoordinatorStatus().catch(() => undefined);
+          c.refreshCoordinatorStatus().catch(() => undefined);
           return;
         }
-        // Terminal path - interactive claude, subscription-safe
-        let targetSession = focusedSession;
+        let targetSession = c.focusedSession;
         const shouldAutoResumeClaude = Boolean(
-          focusedSession
-            && focusedSession.status !== 'running'
-            && focusedSession.claudeSessionId
-            && focusedSession.terminalKind === 'agent'
-            && (focusedSession.profile === 'claude_code' || focusedSession.command.includes('claude')),
+          c.focusedSession
+            && c.focusedSession.status !== 'running'
+            && c.focusedSession.claudeSessionId
+            && c.focusedSession.terminalKind === 'agent'
+            && (c.focusedSession.profile === 'claude_code' || c.focusedSession.command.includes('claude')),
         );
-        if (shouldAutoResumeClaude && focusedSession) {
-          targetSession = await resumeClaudeSession(focusedSession);
+        if (shouldAutoResumeClaude && c.focusedSession) {
+          targetSession = await c.resumeClaudeSession(c.focusedSession);
         }
-        const terminalProfileId = targetSession?.terminalKind === 'agent' ? targetSession.profile : selectedProfileId;
-        // Prompts always dispatch immediately: the agent TUI (Claude Code,
-        // Codex) natively queues input submitted while it is mid-turn, so
-        // there is no app-level queueing or interrupt-before-send.
+        const terminalProfileId = targetSession?.terminalKind === 'agent' ? targetSession.profile : c.selectedProfileId;
         await queueWorkspaceAgentPrompt({
-          workspaceId,
+          workspaceId: c.workspaceId!,
           sessionId: targetSession?.status === 'running' ? targetSession.id : undefined,
           prompt: effectivePrompt,
           profileId: terminalProfileId,
-          extraArgs: activePromptProvider === 'claude_code' ? claudeLaunchExtraArgs(composerSettings) : undefined,
+          extraArgs: c.activePromptProvider === 'claude_code' ? claudeLaunchExtraArgs(c.composerSettings) : undefined,
         });
       } catch (err) {
+        const c2 = latestRef.current;
         const message = formatSessionError(err);
         if (message.startsWith('COORDINATOR_STEP_IN_PROGRESS:')) {
-          onCoordinatorInfo?.('Coordinator is already stepping. Waiting for current step to finish.');
-          refreshCoordinatorStatus().catch(() => undefined);
+          c2.onCoordinatorInfo?.('Coordinator is already stepping. Waiting for current step to finish.');
+          c2.refreshCoordinatorStatus().catch(() => undefined);
           return;
         }
-        setActionError(err);
+        c2.setActionError(err);
       } finally {
-        setBusy(false);
+        latestRef.current.setBusy(false);
       }
-      // Post-send refreshes run in background, don't block next send
-      refreshSessions(true).catch(() => undefined);
-      refreshCoordinatorStatus().catch(() => undefined);
+      const c3 = latestRef.current;
+      c3.refreshSessions(true).catch(() => undefined);
+      c3.refreshCoordinatorStatus().catch(() => undefined);
     };
 
     promptSendChainRef.current = promptSendChainRef.current.catch(() => undefined).then(work);
     void promptSendChainRef.current;
-  };
+  }, [promptSendChainRef]);
 
   return {
     cycleAgentMode,

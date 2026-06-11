@@ -68,6 +68,7 @@ import { FederatedTaskCockpit } from '../federation/FederatedTaskCockpit';
 import { readWorkspaceFile, writeWorkspaceFile } from '../../lib/tauri-api/workspace-file-tree';
 import type { TileLeaf } from '../../types/tile-layout';
 
+const noop = () => undefined;
 const DEFAULT_CLAUDE_MODEL = 'claude-opus-4-6[1m]';
 const DEFAULT_CODEX_MODEL = 'gpt-5.4';
 
@@ -786,6 +787,12 @@ export function WorkspaceTerminal({
     ? agentModeBySessionId[focusedSession.id] ?? null
     : null;
 
+  const interruptRef = useRef(interruptFocusedAgent);
+  interruptRef.current = interruptFocusedAgent;
+  const stableInterruptFocusedAgent = useCallback(() => {
+    void interruptRef.current();
+  }, []);
+
   const handleComposerSettingsChange = useCallback((patch: Partial<ComposerSettings>) => {
     const { selectedModel, ...rest } = patch;
     if (typeof selectedModel === 'string') changeModel(selectedModel);
@@ -950,11 +957,15 @@ export function WorkspaceTerminal({
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [focusedSession, closeTerminal]);
 
-  const renderTileLeaf = (leaf: TileLeaf, focused: boolean) => {
+  const tileLeafRef = useRef({ visibleSessions, outputs, workspaceHealth, stopTerminal, closeTerminal, resumeClaudeSession, setActionError });
+  tileLeafRef.current = { visibleSessions, outputs, workspaceHealth, stopTerminal, closeTerminal, resumeClaudeSession, setActionError };
+
+  const renderTileLeaf = useCallback((leaf: TileLeaf, focused: boolean) => {
+    const ctx = tileLeafRef.current;
     let session: TerminalSession | null = null;
     if (leaf.content.kind === 'terminal') {
       const sessionId = leaf.content.sessionId;
-      session = visibleSessions.find((item) => item.id === sessionId) ?? null;
+      session = ctx.visibleSessions.find((item) => item.id === sessionId) ?? null;
     }
 
     if (!session) {
@@ -968,21 +979,21 @@ export function WorkspaceTerminal({
     }
 
     return (
-      <TerminalContextMenu onKillSession={() => void closeTerminal(session.id)}>
+      <TerminalContextMenu onKillSession={() => void tileLeafRef.current.closeTerminal(session.id)}>
         <div className="relative flex min-h-0 flex-1">
           <TerminalPane
             key={session.id}
             session={session}
-            chunks={outputs[session.id] ?? []}
+            chunks={ctx.outputs[session.id] ?? []}
             focused={focused}
-            stuckSince={workspaceHealth?.terminals.find((t) => t.sessionId === session.id)?.stuckSince ?? null}
-            onFocus={() => undefined}
-            onStop={() => void stopTerminal(session.id)}
-            onClose={() => void closeTerminal(session.id)}
-            onResumeClaude={() => void resumeClaudeSession(session)}
+            stuckSince={ctx.workspaceHealth?.terminals.find((t) => t.sessionId === session.id)?.stuckSince ?? null}
+            onFocus={noop}
+            onStop={() => void tileLeafRef.current.stopTerminal(session.id)}
+            onClose={() => void tileLeafRef.current.closeTerminal(session.id)}
+            onResumeClaude={() => void tileLeafRef.current.resumeClaudeSession(session)}
             onData={(data) => {
               if (session.status !== 'running') return;
-              void writeWorkspaceTerminalSessionInput(session.id, data).catch(setActionError);
+              void writeWorkspaceTerminalSessionInput(session.id, data).catch(tileLeafRef.current.setActionError);
             }}
             onResize={(cols, rows) => {
               if (session.status !== 'running') return;
@@ -992,7 +1003,7 @@ export function WorkspaceTerminal({
         </div>
       </TerminalContextMenu>
     );
-  };
+  }, []);
 
   if (!workspace) {
     return (
@@ -1141,7 +1152,7 @@ export function WorkspaceTerminal({
           onCycleAgentMode={cycleAgentMode}
           onAnswerDecision={handleAnswerDecision}
           onAnswerDecisionWithText={handleAnswerDecisionWithText}
-          onInterrupt={() => void interruptFocusedAgent()}
+          onInterrupt={stableInterruptFocusedAgent}
         />
       )}
     </div>

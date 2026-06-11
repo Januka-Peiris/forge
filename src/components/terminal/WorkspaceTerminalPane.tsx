@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, RotateCcw, Search, Square, X } from 'lucide-react';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon, type ISearchOptions, type ISearchResultChangeEvent } from '@xterm/addon-search';
@@ -53,7 +53,7 @@ function formatTerminalTimestamp(value?: string): string {
   return Number.isNaN(date.getTime()) ? 'a previous run' : date.toLocaleString();
 }
 
-export function TerminalPane({
+export const TerminalPane = memo(function TerminalPane({
   session,
   chunks,
   focused,
@@ -524,11 +524,11 @@ export function TerminalPane({
           </Button>
         </div>
       )}
-      <div ref={containerRef} className={`${compact ? 'min-h-[80px]' : 'min-h-[180px]'} flex-1 overflow-hidden p-2 ${showScrollback ? 'hidden' : ''}`} />
+      <div ref={containerRef} className={`${compact ? 'min-h-[80px]' : 'min-h-[180px]'} flex-1 p-2 ${showScrollback ? 'hidden' : ''}`} />
       {showScrollback && (
         <div
           ref={scrollbackRef}
-          className={`${compact ? 'min-h-[80px]' : 'min-h-[180px]'} flex-1 overflow-y-auto bg-[#0a0a0a] p-2 font-mono text-[12px] leading-[1.15] text-[#d7dce5]`}
+          className={`${compact ? 'min-h-[80px]' : 'min-h-[180px]'} terminal-scrollbar flex-1 overflow-y-auto bg-[#0a0a0a] p-2 font-mono text-[12px] leading-[1.15] text-[#d7dce5]`}
         >
           <div className="sticky top-0 z-10 mb-2 flex items-center justify-between rounded border border-mn-border/50 bg-mn-surface/90 px-2 py-1 backdrop-blur">
             <span className="text-[11px] text-mn-muted">Scrollback - {scrollbackLines.length} lines</span>
@@ -562,4 +562,4 @@ export function TerminalPane({
       {chunks.length === 0 && <div className="pointer-events-none absolute hidden">Waiting for terminal output...</div>}
     </section>
   );
-}
+});

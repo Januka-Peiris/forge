@@ -80,4 +80,43 @@
   * {
     border-color: hsl(var(--border));
   }
+
+  /* Thin styled scrollbar for terminal panes and scrollback */
+  .terminal-scrollbar::-webkit-scrollbar {
+    width: 8px;
+  }
+  .terminal-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .terminal-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(74, 154, 181, 0.35);
+    border-radius: 4px;
+    border: 1px solid transparent;
+    background-clip: padding-box;
+  }
+  .terminal-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(74, 154, 181, 0.55);
+  }
+  .terminal-scrollbar::-webkit-scrollbar-thumb:active {
+    background: rgba(74, 154, 181, 0.7);
+  }
+
+  /* xterm.js internal scrollbar override */
+  .xterm-scroll-area + .xterm-decoration-container ~ .xterm-helper-textarea,
+  .xterm .xterm-viewport::-webkit-scrollbar {
+    width: 8px;
+  }
+  .xterm .xterm-viewport::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .xterm .xterm-viewport::-webkit-scrollbar-thumb {
+    background: rgba(74, 154, 181, 0.35);
+    border-radius: 4px;
+  }
+  .xterm .xterm-viewport::-webkit-scrollbar-thumb:hover {
+    background: rgba(74, 154, 181, 0.55);
+  }
+  .xterm .xterm-viewport::-webkit-scrollbar-thumb:active {
+    background: rgba(74, 154, 181, 0.7);
+  }
 }
