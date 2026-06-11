@@ -218,7 +218,7 @@ export const TerminalPane = memo(function TerminalPane({
         terminal.scrollLines(e.deltaY > 0 ? lines : -lines);
       }
     };
-    containerRef.current.addEventListener('wheel', wheelHandler, { passive: false });
+    containerRef.current.addEventListener('wheel', wheelHandler, { passive: false, capture: true });
 
     const disposable = readOnly
       ? { dispose: () => undefined }
@@ -334,7 +334,7 @@ export const TerminalPane = memo(function TerminalPane({
       scrollDisposable.dispose();
       bufferChangeDisposable.dispose();
       observer.disconnect();
-      containerRef.current?.removeEventListener('wheel', wheelHandler);
+      containerRef.current?.removeEventListener('wheel', wheelHandler, { capture: true });
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onVisible);
       window.removeEventListener('mn:composer-scroll', onComposerScroll);
