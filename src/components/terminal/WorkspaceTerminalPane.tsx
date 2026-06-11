@@ -206,16 +206,16 @@ export const TerminalPane = memo(function TerminalPane({
       }
     });
 
-    // In normal buffer, xterm.js handles scrollback natively.
-    // In alternate buffer (Claude's TUI), scrolling up shows the
-    // scrollback overlay with pre-TUI content (like native terminals).
     const wheelHandler = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
       if (terminal.buffer.active.type === 'alternate') {
-        e.preventDefault();
-        e.stopPropagation();
         if (e.deltaY < 0) {
           setShowScrollback(true);
         }
+      } else {
+        const lines = Math.max(1, Math.ceil(Math.abs(e.deltaY) / 30));
+        terminal.scrollLines(e.deltaY > 0 ? lines : -lines);
       }
     };
     containerRef.current.addEventListener('wheel', wheelHandler, { passive: false });
