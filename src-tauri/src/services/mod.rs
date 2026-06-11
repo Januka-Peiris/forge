@@ -31,6 +31,7 @@ pub mod conflict_detection_service;
 pub mod orchestrator_service;
 // pub mod rebase_service;
 pub mod terminal_service;
+pub mod terminal_ws_server;
 pub mod workspace_attention_service;
 pub mod workspace_cleanup_service;
 pub mod workspace_file_tree_service;

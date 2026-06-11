@@ -20,6 +20,7 @@ use commands::{
 };
 use services::{
     coordinator_service, orchestrator_service, repo_intelligence_service,
+    terminal_ws_server,
 };
 use state::AppState;
 use tauri::Manager;
@@ -73,6 +74,16 @@ pub fn run() {
             }
 
             // rebase_service::start_auto_rebase_loop(state.clone());
+            match terminal_ws_server::start_ws_server(state.clone()) {
+                Ok((port, token)) => {
+                    if let Ok(mut p) = state.ws_port.lock() { *p = port; }
+                    if let Ok(mut t) = state.ws_token.lock() { *t = token; }
+                }
+                Err(e) => {
+                    log::warn!(target: "mnemonic_lib", "Failed to start terminal WS server: {e}");
+                }
+            }
+
             orchestrator_service::start_orchestrator_loop(state.clone());
             repo_intelligence_service::start_repo_intelligence_loop(state.clone());
             app.manage(state);
@@ -236,6 +247,7 @@ pub fn run() {
             orchestrator_commands::schedule_workspace_scheduler_job_now,
             workspaces::set_workspace_cost_limit,
             terminal::search_terminal_output,
+            terminal::get_terminal_ws_info,
             workspace_templates::list_workspace_templates,
             workspace_templates::create_workspace_template,
             workspace_templates::delete_workspace_template,

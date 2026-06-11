@@ -9,7 +9,7 @@ pub fn insert_output_chunk(db: &Database, chunk: &TerminalOutputChunk) -> Result
     insert_output_chunks(db, std::slice::from_ref(chunk))
 }
 
-fn insert_output_chunks(db: &Database, chunks: &[TerminalOutputChunk]) -> Result<(), String> {
+pub fn insert_output_chunks(db: &Database, chunks: &[TerminalOutputChunk]) -> Result<(), String> {
     if chunks.is_empty() {
         return Ok(());
     }

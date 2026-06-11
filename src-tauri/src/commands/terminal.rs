@@ -324,6 +324,20 @@ pub fn check_shell_command_safety(
     Ok(crate::services::command_safety_service::check_command_safety(&command))
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalWsInfo {
+    pub port: u16,
+    pub token: String,
+}
+
+#[tauri::command]
+pub fn get_terminal_ws_info(state: State<'_, AppState>) -> Result<TerminalWsInfo, String> {
+    let port = *state.ws_port.lock().map_err(|_| "WS port lock poisoned")?;
+    let token = state.ws_token.lock().map_err(|_| "WS token lock poisoned")?.clone();
+    Ok(TerminalWsInfo { port, token })
+}
+
 #[tauri::command]
 pub fn search_terminal_output(
     state: State<'_, AppState>,
