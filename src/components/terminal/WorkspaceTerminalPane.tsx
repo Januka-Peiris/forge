@@ -93,6 +93,10 @@ export function TerminalPane({
     resultCount: 0,
   });
   const [isScrolledUp, setIsScrolledUp] = useState(false);
+  const [, setIsAltBuffer] = useState(false);
+  const [scrollbackLines, setScrollbackLines] = useState<string[]>([]);
+  const [showScrollback, setShowScrollback] = useState(false);
+  const scrollbackRef = useRef<HTMLDivElement | null>(null);
 
   const searchOptions: ISearchOptions = useMemo(() => ({
     caseSensitive,
@@ -175,7 +179,33 @@ export function TerminalPane({
     searchAddonRef.current = searchAddon;
     lastRenderedSeqRef.current = -1;
 
+    const snapshotNormalBuffer = () => {
+      const buf = terminal.buffer.normal;
+      const lines: string[] = [];
+      for (let i = 0; i < buf.length; i++) {
+        const line = buf.getLine(i);
+        if (line) lines.push(line.translateToString(true));
+      }
+      return lines;
+    };
+
+    const bufferChangeDisposable = terminal.buffer.onBufferChange((buf) => {
+      const alt = buf.type === 'alternate';
+      setIsAltBuffer(alt);
+      if (alt) {
+        setScrollbackLines(snapshotNormalBuffer());
+      } else {
+        setShowScrollback(false);
+      }
+    });
+
     const wheelHandler = (e: WheelEvent) => {
+      if (terminal.buffer.active.type === 'alternate') {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowScrollback(true);
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       const lines = Math.max(1, Math.ceil(Math.abs(e.deltaY) / 30));
@@ -283,6 +313,7 @@ export function TerminalPane({
       disposable.dispose();
       searchDisposable.dispose();
       scrollDisposable.dispose();
+      bufferChangeDisposable.dispose();
       observer.disconnect();
       containerRef.current?.removeEventListener('wheel', wheelHandler);
       document.removeEventListener('visibilitychange', onVisible);
@@ -343,6 +374,12 @@ export function TerminalPane({
   useEffect(() => {
     if (focused && !readOnly) terminalRef.current?.focus();
   }, [focused, readOnly]);
+
+  useEffect(() => {
+    if (showScrollback && scrollbackRef.current) {
+      scrollbackRef.current.scrollTop = scrollbackRef.current.scrollHeight;
+    }
+  }, [showScrollback]);
 
   const title = session.title || PROFILE_LABELS[session.profile as TerminalProfile] || session.profile;
   const restored = readOnly && chunks.length > 0;
@@ -487,8 +524,27 @@ export function TerminalPane({
           </Button>
         </div>
       )}
-      <div ref={containerRef} className={`${compact ? 'min-h-[80px]' : 'min-h-[180px]'} flex-1 overflow-hidden p-2`} />
-      {isScrolledUp && (
+      <div ref={containerRef} className={`${compact ? 'min-h-[80px]' : 'min-h-[180px]'} flex-1 overflow-hidden p-2 ${showScrollback ? 'hidden' : ''}`} />
+      {showScrollback && (
+        <div
+          ref={scrollbackRef}
+          className={`${compact ? 'min-h-[80px]' : 'min-h-[180px]'} flex-1 overflow-y-auto bg-[#0a0a0a] p-2 font-mono text-[12px] leading-[1.15] text-[#d7dce5]`}
+        >
+          <div className="sticky top-0 z-10 mb-2 flex items-center justify-between rounded border border-mn-border/50 bg-mn-surface/90 px-2 py-1 backdrop-blur">
+            <span className="text-[11px] text-mn-muted">Scrollback - {scrollbackLines.length} lines</span>
+            <button
+              onClick={() => setShowScrollback(false)}
+              className="text-[11px] text-mn-cyan hover:text-mn-text"
+            >
+              Back to terminal
+            </button>
+          </div>
+          {scrollbackLines.map((line, i) => (
+            <div key={i} className="whitespace-pre">{line || ' '}</div>
+          ))}
+        </div>
+      )}
+      {isScrolledUp && !showScrollback && (
         <Button
           variant="ghost"
           size="xs"
