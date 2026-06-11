@@ -175,13 +175,13 @@ export function TerminalPane({
     searchAddonRef.current = searchAddon;
     lastRenderedSeqRef.current = -1;
 
-    terminal.attachCustomWheelEventHandler((event) => {
-      if (terminal.buffer.active.type === 'alternate') {
-        terminal.scrollLines(event.deltaY > 0 ? 3 : -3);
-        return false;
-      }
-      return true;
-    });
+    const wheelHandler = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const lines = Math.max(1, Math.ceil(Math.abs(e.deltaY) / 30));
+      terminal.scrollLines(e.deltaY > 0 ? lines : -lines);
+    };
+    containerRef.current.addEventListener('wheel', wheelHandler, { passive: false });
 
     const disposable = readOnly
       ? { dispose: () => undefined }
@@ -284,6 +284,7 @@ export function TerminalPane({
       searchDisposable.dispose();
       scrollDisposable.dispose();
       observer.disconnect();
+      containerRef.current?.removeEventListener('wheel', wheelHandler);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onVisible);
       window.removeEventListener('mn:composer-scroll', onComposerScroll);
