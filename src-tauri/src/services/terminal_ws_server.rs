@@ -2,15 +2,16 @@ use std::io::Write;
 use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc;
 use std::thread;
+use std::time::Duration;
 
 use tungstenite::protocol::Message;
-use tungstenite::WebSocket;
 use tungstenite::http::Response as HttpResponse;
 
 use crate::services::terminal_service;
 use crate::state::AppState;
 
-const WS_WRITE_CHANNEL_BOUND: usize = 256;
+const WS_WRITE_CHANNEL_BOUND: usize = 512;
+const READ_TIMEOUT: Duration = Duration::from_millis(1);
 
 pub fn start_ws_server(state: AppState) -> Result<(u16, String), String> {
     let token = generate_token();
@@ -75,11 +76,7 @@ fn handle_connection(
         Ok(response)
     };
 
-    let write_stream = stream
-        .try_clone()
-        .map_err(|e| format!("Failed to clone TcpStream: {e}"))?;
-
-    let mut read_ws = tungstenite::accept_hdr(stream, callback)
+    let mut ws = tungstenite::accept_hdr(stream, callback)
         .map_err(|e| format!("WS handshake failed: {e}"))?;
 
     let (session_id, token) = parsed
@@ -89,12 +86,12 @@ fn handle_connection(
         .ok_or_else(|| "Failed to parse WS request".to_string())?;
 
     if token != expected_token {
-        let _ = read_ws.close(None);
+        let _ = ws.close(None);
         return Err("Invalid token".to_string());
     }
 
     if session_id.is_empty() {
-        let _ = read_ws.close(None);
+        let _ = ws.close(None);
         return Err("Missing session_id".to_string());
     }
 
@@ -103,7 +100,6 @@ fn handle_connection(
 
     let (tx, rx) = mpsc::sync_channel::<Vec<u8>>(WS_WRITE_CHANNEL_BOUND);
 
-    // Register this connection's sender in the WS connections registry.
     {
         let mut conns = state
             .ws_connections
@@ -112,68 +108,71 @@ fn handle_connection(
         conns.entry(session_id.clone()).or_default().push(tx.clone());
     }
 
-    // Writer thread: drains the channel and sends binary WS frames.
-    let writer_session_id = session_id.clone();
-    let ws_conns_for_cleanup = state.ws_connections.clone();
-    let writer_handle = thread::spawn(move || {
-        let mut write_ws = WebSocket::from_raw_socket(write_stream, tungstenite::protocol::Role::Server, None);
-        for bytes in rx {
-            if write_ws.send(Message::Binary(bytes)).is_err() {
-                break;
-            }
-        }
-        let _ = write_ws.close(None);
-        // Cleanup: remove this sender from the registry.
-        // (The tx is already dropped when the channel disconnects.)
-        if let Ok(mut conns) = ws_conns_for_cleanup.lock() {
-            if let Some(senders) = conns.get_mut(&writer_session_id) {
-                senders.retain(|s| !s.send(Vec::new()).is_err());
-                if senders.is_empty() {
-                    conns.remove(&writer_session_id);
-                }
-            }
-        }
-    });
+    log::info!(target: "mnemonic_lib", "WS connected for session {session_id}");
 
-    // Reader loop: reads WS frames and writes to PTY.
+    // Set a short read timeout so we can interleave reading input from
+    // the browser and writing PTY output back, all in one thread.
+    ws.get_mut()
+        .set_read_timeout(Some(READ_TIMEOUT))
+        .map_err(|e| format!("Failed to set read timeout: {e}"))?;
+
     loop {
-        let msg = match read_ws.read() {
-            Ok(m) => m,
-            Err(_) => break,
-        };
-        match msg {
-            Message::Binary(data) => {
+        // Send any pending PTY output to the browser.
+        let mut sent_any = false;
+        while let Ok(bytes) = rx.try_recv() {
+            if bytes.is_empty() {
+                continue;
+            }
+            if ws.send(Message::Binary(bytes)).is_err() {
+                cleanup_ws_connection(state, &session_id);
+                return Ok(());
+            }
+            sent_any = true;
+        }
+        if sent_any {
+            if ws.flush().is_err() {
+                cleanup_ws_connection(state, &session_id);
+                return Ok(());
+            }
+        }
+
+        // Read input from the browser.
+        match ws.read() {
+            Ok(Message::Binary(data)) => {
                 if let Ok(mut writer) = active.writer.lock() {
                     let _ = writer.write_all(&data);
                     let _ = writer.flush();
                 }
             }
-            Message::Text(text) => {
+            Ok(Message::Text(text)) => {
                 handle_control_message(&text, state, &session_id);
             }
-            Message::Close(_) => break,
-            Message::Ping(data) => {
-                let _ = read_ws.send(Message::Pong(data));
+            Ok(Message::Close(_)) => break,
+            Ok(Message::Ping(data)) => {
+                let _ = ws.send(Message::Pong(data));
             }
-            _ => {}
+            Ok(_) => {}
+            Err(tungstenite::Error::Io(ref e))
+                if e.kind() == std::io::ErrorKind::WouldBlock
+                    || e.kind() == std::io::ErrorKind::TimedOut => {}
+            Err(_) => break,
         }
     }
 
-    // Clean up: remove sender from registry and signal writer to stop.
-    drop(tx);
-    {
-        if let Ok(mut conns) = state.ws_connections.lock() {
-            if let Some(senders) = conns.get_mut(&session_id) {
-                senders.retain(|s| s.send(Vec::new()).is_ok());
-                if senders.is_empty() {
-                    conns.remove(&session_id);
-                }
-            }
-        }
-    }
-    let _ = writer_handle.join();
-
+    cleanup_ws_connection(state, &session_id);
+    log::info!(target: "mnemonic_lib", "WS disconnected for session {session_id}");
     Ok(())
+}
+
+fn cleanup_ws_connection(state: &AppState, session_id: &str) {
+    if let Ok(mut conns) = state.ws_connections.lock() {
+        if let Some(senders) = conns.get_mut(session_id) {
+            senders.retain(|s| s.try_send(Vec::new()).is_ok());
+            if senders.is_empty() {
+                conns.remove(session_id);
+            }
+        }
+    }
 }
 
 fn handle_control_message(text: &str, state: &AppState, session_id: &str) {
