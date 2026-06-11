@@ -63,6 +63,7 @@ export function TerminalPane({
   onResumeClaude,
   onData,
   onResize,
+  compact = false,
 }: {
   session: TerminalSession;
   chunks: TerminalOutputChunk[];
@@ -74,6 +75,7 @@ export function TerminalPane({
   onResumeClaude?: () => void;
   onData: (data: string) => void;
   onResize: (cols: number, rows: number) => void;
+  compact?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -381,16 +383,18 @@ export function TerminalPane({
               <RotateCcw className="h-3 w-3" /> Resume Claude
             </Button>
           )}
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={(event) => {
-              event.stopPropagation();
-              onClose();
-            }}
-          >
-            <X className="h-3 w-3" /> Close
-          </Button>
+          {!compact && (
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={(event) => {
+                event.stopPropagation();
+                onClose();
+              }}
+            >
+              <X className="h-3 w-3" /> Close
+            </Button>
+          )}
         </div>
       </div>
       {restored && (
@@ -466,7 +470,7 @@ export function TerminalPane({
           </Button>
         </div>
       )}
-      <div ref={containerRef} className="min-h-[180px] flex-1 overflow-hidden p-2" />
+      <div ref={containerRef} className={`${compact ? 'min-h-[80px]' : 'min-h-[180px]'} flex-1 overflow-hidden p-2`} />
       {isScrolledUp && (
         <Button
           variant="ghost"

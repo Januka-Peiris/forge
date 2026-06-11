@@ -543,6 +543,14 @@ pub fn run(connection: &Connection) -> Result<(), String> {
 
             CREATE INDEX IF NOT EXISTS idx_coordination_artifacts_target
                 ON coordination_artifacts(target_workspace_id);
+
+            CREATE TABLE IF NOT EXISTS repository_settings (
+                repository_id TEXT NOT NULL,
+                key TEXT NOT NULL,
+                value TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (repository_id, key)
+            );
             "#,
         )
         .map_err(|err| format!("Failed to run SQLite migrations: {err}"))?;

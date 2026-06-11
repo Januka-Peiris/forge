@@ -258,6 +258,117 @@ fn sanitize_path_part(input: &str) -> String {
     }
 }
 
+pub fn copy_files_from_repo_root(
+    repo_path: &str,
+    worktree_path: &str,
+    file_list: &[String],
+) -> Result<Vec<String>, String> {
+    let repo_root = fs::canonicalize(Path::new(repo_path))
+        .map_err(|err| format!("Cannot resolve repo root {repo_path}: {err}"))?;
+    let worktree_root = Path::new(worktree_path);
+    let mut copied = Vec::new();
+
+    for entry in file_list {
+        let trimmed = entry.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let source = repo_root.join(trimmed);
+        if !source.exists() {
+            log::debug!(
+                target: "mnemonic_lib",
+                "copy_files_from_repo_root: source does not exist, skipping: {}",
+                source.display()
+            );
+            continue;
+        }
+
+        if source.is_symlink() {
+            log::debug!(
+                target: "mnemonic_lib",
+                "copy_files_from_repo_root: skipping symlink: {}",
+                source.display()
+            );
+            continue;
+        }
+
+        if let Ok(canonical) = fs::canonicalize(&source) {
+            if !canonical.starts_with(&repo_root) {
+                log::warn!(
+                    target: "mnemonic_lib",
+                    "copy_files_from_repo_root: path escapes repo root, skipping: {}",
+                    trimmed
+                );
+                continue;
+            }
+        }
+
+        let dest = worktree_root.join(trimmed);
+        if source.is_file() {
+            if let Some(parent) = dest.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            match fs::copy(&source, &dest) {
+                Ok(_) => copied.push(trimmed.to_string()),
+                Err(err) => {
+                    log::warn!(
+                        target: "mnemonic_lib",
+                        "copy_files_from_repo_root: failed to copy {}: {err}",
+                        trimmed
+                    );
+                }
+            }
+        } else if source.is_dir() {
+            match copy_dir_recursive(&source, &dest) {
+                Ok(_) => copied.push(trimmed.to_string()),
+                Err(err) => {
+                    log::warn!(
+                        target: "mnemonic_lib",
+                        "copy_files_from_repo_root: failed to copy directory {}: {err}",
+                        trimmed
+                    );
+                }
+            }
+        }
+    }
+
+    Ok(copied)
+}
+
+fn copy_dir_recursive(source: &Path, dest: &Path) -> Result<(), String> {
+    fs::create_dir_all(dest)
+        .map_err(|err| format!("Failed to create directory {}: {err}", dest.display()))?;
+
+    let entries = fs::read_dir(source)
+        .map_err(|err| format!("Failed to read directory {}: {err}", source.display()))?;
+
+    for entry in entries {
+        let entry =
+            entry.map_err(|err| format!("Failed to read entry in {}: {err}", source.display()))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|err| format!("Failed to get file type: {err}"))?;
+
+        if file_type.is_symlink() {
+            continue;
+        }
+
+        let src_path = entry.path();
+        let dst_path = dest.join(entry.file_name());
+
+        if file_type.is_dir() {
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else if file_type.is_file() {
+            fs::copy(&src_path, &dst_path).map_err(|err| {
+                format!("Failed to copy {}: {err}", src_path.display())
+            })?;
+        }
+    }
+
+    Ok(())
+}
+
 fn path_arg(path: &Path) -> String {
     path.to_string_lossy().to_string()
 }

@@ -6,7 +6,8 @@ use crate::models::{
     WorkspaceDetail, WorkspaceSummary,
 };
 use crate::repositories::{
-    activity_repository, repository_repository, settings_repository, workspace_repository,
+    activity_repository, repository_repository, repository_settings_repository,
+    settings_repository, workspace_repository,
 };
 use crate::services::{
     git_worktree_service, pr_draft_service, repo_scanner_service, terminal_service,
@@ -93,6 +94,45 @@ pub(super) fn create_workspace(
         return Err(
             "Repository selection is required to create a real branch workspace".to_string(),
         );
+    }
+
+    if worktree_managed_by_forge {
+        if let Some(repository_id) = selected_repo.as_ref().map(|r| r.id.as_str()) {
+            if let Ok(Some(init_files_raw)) =
+                repository_settings_repository::get_value(&state.db, repository_id, "workspace_init_files")
+            {
+                let file_list: Vec<String> = init_files_raw
+                    .lines()
+                    .map(|l| l.trim().to_string())
+                    .filter(|l| !l.is_empty())
+                    .collect();
+                if !file_list.is_empty() {
+                    if let Some(repo_path) = selected_repo.as_ref().map(|r| r.path.as_str()) {
+                        match git_worktree_service::copy_files_from_repo_root(
+                            repo_path,
+                            &worktree_path,
+                            &file_list,
+                        ) {
+                            Ok(copied) if !copied.is_empty() => {
+                                log::info!(
+                                    target: "mnemonic_lib",
+                                    "Copied {} init file(s) from repo root into worktree: {:?}",
+                                    copied.len(),
+                                    copied
+                                );
+                            }
+                            Ok(_) => {}
+                            Err(err) => {
+                                log::warn!(
+                                    target: "mnemonic_lib",
+                                    "Failed to copy init files into worktree: {err}"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     let current_task = if input.task_prompt.trim().is_empty() {
@@ -238,6 +278,58 @@ pub(super) fn create_workspace(
                 "Automatic setup is disabled. Run setup manually from the workspace commands panel.",
             ),
         );
+    }
+
+    if detail.summary.worktree_managed_by_forge {
+        if let Some(repository_id) = detail.summary.repository_id.as_deref() {
+            if let Ok(Some(setup_script)) =
+                repository_settings_repository::get_value(&state.db, repository_id, "setup_script")
+            {
+                let script = setup_script.trim().to_string();
+                if !script.is_empty() {
+                    use crate::models::CreateWorkspaceTerminalInput;
+                    match terminal_service::create_workspace_terminal(
+                        state,
+                        CreateWorkspaceTerminalInput {
+                            workspace_id: detail.summary.id.clone(),
+                            kind: "run".to_string(),
+                            profile: "shell".to_string(),
+                            profile_id: Some("shell".to_string()),
+                            title: Some("Repo setup".to_string()),
+                            command: Some("sh".to_string()),
+                            args: Some(vec!["-c".to_string(), script]),
+                            extra_args: None,
+                            resume_claude_session_id: None,
+                            cols: None,
+                            rows: None,
+                        },
+                    ) {
+                        Ok(_session) => {
+                            let _ = activity_repository::record(
+                                &state.db,
+                                &detail.summary.id,
+                                &detail.summary.repo,
+                                Some(&detail.summary.branch),
+                                "Repository setup script launched",
+                                "info",
+                                Some("Running per-repo setup script from app settings"),
+                            );
+                        }
+                        Err(err) => {
+                            let _ = activity_repository::record(
+                                &state.db,
+                                &detail.summary.id,
+                                &detail.summary.repo,
+                                Some(&detail.summary.branch),
+                                "Repository setup script failed",
+                                "warning",
+                                Some(&err),
+                            );
+                        }
+                    }
+                }
+            }
+        }
     }
 
     if detail.summary.run_tests_on_create {

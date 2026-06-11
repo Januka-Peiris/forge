@@ -1,14 +1,28 @@
-import { useCallback, useEffect, useMemo, useState, type ComponentType } from 'react';
-import { ClipboardCheck, FolderTree, Gauge, Play, RefreshCw, Wrench, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { ClipboardCheck, FolderTree, Gauge, Play, RefreshCw, TerminalSquare, Wrench, X } from 'lucide-react';
 import type { MnemonicWorkspaceConfig, Workspace, WorkspaceReadiness, WorkspaceReviewCockpit } from '../../types';
 import { getWorkspaceMnemonicConfig, runWorkspaceSetup, startWorkspaceRunCommand, stopWorkspaceRunCommands } from '../../lib/tauri-api/workspace-scripts';
 import { getWorkspaceReadiness } from '../../lib/tauri-api/workspace-readiness';
 import { getWorkspaceReviewCockpit, syncWorkspacePrThreads } from '../../lib/tauri-api/review-cockpit';
 import { WorkspaceFilesPanel } from '../terminal/WorkspaceFilesPanel';
+import { TerminalPane } from '../terminal/WorkspaceTerminalPane';
 import { PrChecksSection } from './PrChecksSection';
+import { useInspectorTerminal } from './useInspectorTerminal';
 import { Button } from '../ui/button';
 
 type InspectorTab = 'changes' | 'checks' | 'review' | 'files';
+
+const SPLIT_RATIO_KEY = 'mn:inspector-split-ratio';
+const MIN_RATIO = 0.2;
+const MAX_RATIO = 0.8;
+const DEFAULT_RATIO = 0.5;
+
+function loadSplitRatio(): number {
+  const raw = window.localStorage.getItem(SPLIT_RATIO_KEY);
+  if (!raw) return DEFAULT_RATIO;
+  const parsed = Number.parseFloat(raw);
+  return Number.isFinite(parsed) ? Math.max(MIN_RATIO, Math.min(MAX_RATIO, parsed)) : DEFAULT_RATIO;
+}
 
 interface WorkspaceInspectorRailProps {
   workspace: Workspace | null;
@@ -38,7 +52,40 @@ export function WorkspaceInspectorRail({
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
   const [sourceWarnings, setSourceWarnings] = useState<string[]>([]);
+  const [splitRatio, setSplitRatio] = useState(loadSplitRatio);
+  const [terminalFocused, setTerminalFocused] = useState(false);
+  const splitContainerRef = useRef<HTMLDivElement | null>(null);
   const workspaceId = workspace?.id ?? null;
+
+  const inspectorTerminal = useInspectorTerminal(workspaceId, isOpen);
+
+  const saveSplitRatio = useCallback((ratio: number) => {
+    const clamped = Math.max(MIN_RATIO, Math.min(MAX_RATIO, ratio));
+    setSplitRatio(clamped);
+    window.localStorage.setItem(SPLIT_RATIO_KEY, String(clamped));
+  }, []);
+
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const container = splitContainerRef.current;
+    if (!container) return;
+
+    const onMove = (moveEvent: MouseEvent) => {
+      const rect = container.getBoundingClientRect();
+      const ratio = (moveEvent.clientY - rect.top) / rect.height;
+      saveSplitRatio(ratio);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [saveSplitRatio]);
 
   const refresh = useCallback(async () => {
     if (!workspaceId) return;
@@ -94,8 +141,6 @@ export function WorkspaceInspectorRail({
     };
   }, [workspaceId, isOpen, refresh]);
 
-  // Live changed files from the cockpit fetch (refresh button + 5s poll);
-  // the cached workspace summary only bridges the gap while loading.
   const changedFiles = useMemo(() => {
     if (review) {
       return review.files.map((entry) => ({
@@ -153,126 +198,161 @@ export function WorkspaceInspectorRail({
           </div>
         )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
-          {!workspace && <p className="text-xs text-mn-muted">Select a workspace to inspect.</p>}
+        <div ref={splitContainerRef} className="min-h-0 flex-1 flex flex-col">
+          {/* Top half: tab content */}
+          <div className="overflow-y-auto p-3" style={{ flex: splitRatio }}>
+            {!workspace && <p className="text-xs text-mn-muted">Select a workspace to inspect.</p>}
 
-          {workspace && activeTab === 'changes' && (
-            <div className="space-y-3">
-              <div className="rounded-lg border border-mn-border bg-mn-card/60 p-2.5 text-xs text-mn-muted">
-                <p>
-                  <span className="font-semibold text-mn-text">{changedFiles.length}</span> file(s) changed ·{' '}
-                  <span className="text-mn-green">+{diffTotals.additions}</span> / <span className="text-mn-red">-{diffTotals.deletions}</span>
-                </p>
+            {workspace && activeTab === 'changes' && (
+              <div className="space-y-3">
+                <div className="rounded-lg border border-mn-border bg-mn-card/60 p-2.5 text-xs text-mn-muted">
+                  <p>
+                    <span className="font-semibold text-mn-text">{changedFiles.length}</span> file(s) changed ·{' '}
+                    <span className="text-mn-green">+{diffTotals.additions}</span> / <span className="text-mn-red">-{diffTotals.deletions}</span>
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  {changedFiles.length === 0 && <p className="text-xs text-mn-muted">No changed files.</p>}
+                  {changedFiles.map((file) => (
+                    <button
+                      key={file.path}
+                      type="button"
+                      onClick={() => onOpenReviewFile(file.path)}
+                      className="flex w-full items-center justify-between rounded border border-mn-border/70 bg-mn-card/50 px-2 py-1.5 text-left text-xs hover:bg-mn-surface-overlay"
+                    >
+                      <span className="truncate font-mono text-mn-text">{file.path}</span>
+                      <span className="ml-2 shrink-0 font-mono text-mn-muted">+{file.additions} -{file.deletions}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="space-y-1">
-                {changedFiles.length === 0 && <p className="text-xs text-mn-muted">No changed files.</p>}
-                {changedFiles.map((file) => (
-                  <button
-                    key={file.path}
-                    type="button"
-                    onClick={() => onOpenReviewFile(file.path)}
-                    className="flex w-full items-center justify-between rounded border border-mn-border/70 bg-mn-card/50 px-2 py-1.5 text-left text-xs hover:bg-mn-surface-overlay"
-                  >
-                    <span className="truncate font-mono text-mn-text">{file.path}</span>
-                    <span className="ml-2 shrink-0 font-mono text-mn-muted">+{file.additions} -{file.deletions}</span>
-                  </button>
-                ))}
+            )}
+
+            {workspace && activeTab === 'checks' && (
+              <div className="space-y-3">
+                <PrChecksSection workspaceId={workspace.id} />
+
+                <p className="text-[10px] font-bold uppercase tracking-widest text-mn-dim">Local checks</p>
+                <div className="rounded-lg border border-mn-border bg-mn-card/60 p-2.5 text-xs text-mn-muted space-y-1">
+                  <p>Status: <span className="font-semibold text-mn-text">{readiness?.status ?? 'unknown'}</span></p>
+                  <p>Tests: <span className="font-semibold text-mn-text">{readiness?.testStatus ?? 'unknown'}</span></p>
+                  <p>Summary: {readiness?.summary ?? 'No readiness summary yet.'}</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Button variant="outline" size="xs" onClick={() => {
+                    if (!workspaceId) return;
+                    runWorkspaceSetup(workspaceId)
+                      .then((sessions) => setActionMessage(sessions.length ? `Started ${sessions.length} setup terminal(s).` : 'No setup commands configured.'))
+                      .catch((err) => setActionMessage(err instanceof Error ? err.message : String(err)))
+                      .finally(() => void refresh());
+                  }}>
+                    <Wrench className="h-3.5 w-3.5" /> Run setup
+                  </Button>
+
+                  {(config?.run ?? []).length === 0 && <p className="text-xs text-mn-muted">No run commands configured.</p>}
+                  {(config?.run ?? []).map((command, index) => (
+                    <div key={`${command}-${index}`} className="rounded border border-mn-border/70 bg-mn-card/50 p-2">
+                      <p className="truncate text-xs font-mono text-mn-text" title={command}>{command}</p>
+                      <div className="mt-1.5 flex gap-1.5">
+                        <Button variant="ghost" size="xs" onClick={() => {
+                          if (!workspaceId) return;
+                          startWorkspaceRunCommand(workspaceId, index)
+                            .then(() => setActionMessage(`Started check ${index + 1}.`))
+                            .catch((err) => setActionMessage(err instanceof Error ? err.message : String(err)))
+                            .finally(() => void refresh());
+                        }}>
+                          <Play className="h-3.5 w-3.5" /> Run
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+
+                  <Button variant="ghost" size="xs" onClick={() => {
+                    if (!workspaceId) return;
+                    stopWorkspaceRunCommands(workspaceId)
+                      .then((sessions) => setActionMessage(`Stopped ${sessions.length} run terminal(s).`))
+                      .catch((err) => setActionMessage(err instanceof Error ? err.message : String(err)))
+                      .finally(() => void refresh());
+                  }}>
+                    Stop running checks
+                  </Button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {workspace && activeTab === 'checks' && (
-            <div className="space-y-3">
-              <PrChecksSection workspaceId={workspace.id} />
+            {workspace && activeTab === 'review' && (
+              <div className="space-y-3">
+                <div className="rounded-lg border border-mn-border bg-mn-card/60 p-2.5 text-xs text-mn-muted space-y-1">
+                  <p>Reviewed files: <span className="font-semibold text-mn-text">{readiness?.reviewedFiles ?? 0}</span></p>
+                  <p>PR comments: <span className="font-semibold text-mn-text">{review?.prComments.length ?? 0}</span></p>
+                </div>
 
-              <p className="text-[10px] font-bold uppercase tracking-widest text-mn-dim">Local checks</p>
-              <div className="rounded-lg border border-mn-border bg-mn-card/60 p-2.5 text-xs text-mn-muted space-y-1">
-                <p>Status: <span className="font-semibold text-mn-text">{readiness?.status ?? 'unknown'}</span></p>
-                <p>Tests: <span className="font-semibold text-mn-text">{readiness?.testStatus ?? 'unknown'}</span></p>
-                <p>Summary: {readiness?.summary ?? 'No readiness summary yet.'}</p>
-              </div>
-
-              <div className="space-y-2">
                 <Button variant="outline" size="xs" onClick={() => {
                   if (!workspaceId) return;
-                  runWorkspaceSetup(workspaceId)
-                    .then((sessions) => setActionMessage(sessions.length ? `Started ${sessions.length} setup terminal(s).` : 'No setup commands configured.'))
-                    .catch((err) => setActionMessage(err instanceof Error ? err.message : String(err)))
-                    .finally(() => void refresh());
+                  syncWorkspacePrThreads(workspaceId)
+                    .then((cockpit) => {
+                      setReview(cockpit);
+                      setActionMessage('Refreshed GitHub review threads.');
+                    })
+                    .catch((err) => setActionMessage(err instanceof Error ? err.message : String(err)));
                 }}>
-                  <Wrench className="h-3.5 w-3.5" /> Run setup
+                  <RefreshCw className="h-3.5 w-3.5" /> Refresh threads
                 </Button>
 
-                {(config?.run ?? []).length === 0 && <p className="text-xs text-mn-muted">No run commands configured.</p>}
-                {(config?.run ?? []).map((command, index) => (
-                  <div key={`${command}-${index}`} className="rounded border border-mn-border/70 bg-mn-card/50 p-2">
-                    <p className="truncate text-xs font-mono text-mn-text" title={command}>{command}</p>
-                    <div className="mt-1.5 flex gap-1.5">
-                      <Button variant="ghost" size="xs" onClick={() => {
-                        if (!workspaceId) return;
-                        startWorkspaceRunCommand(workspaceId, index)
-                          .then(() => setActionMessage(`Started check ${index + 1}.`))
-                          .catch((err) => setActionMessage(err instanceof Error ? err.message : String(err)))
-                          .finally(() => void refresh());
-                      }}>
-                        <Play className="h-3.5 w-3.5" /> Run
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-
-                <Button variant="ghost" size="xs" onClick={() => {
-                  if (!workspaceId) return;
-                  stopWorkspaceRunCommands(workspaceId)
-                    .then((sessions) => setActionMessage(`Stopped ${sessions.length} run terminal(s).`))
-                    .catch((err) => setActionMessage(err instanceof Error ? err.message : String(err)))
-                    .finally(() => void refresh());
-                }}>
-                  Stop running checks
-                </Button>
+                <div className="space-y-1">
+                  {review?.prComments.slice(0, 12).map((comment) => (
+                    <button
+                      key={comment.commentId}
+                      type="button"
+                      onClick={() => comment.path ? onOpenReviewFile(comment.path) : undefined}
+                      className="w-full rounded border border-mn-border/70 bg-mn-card/50 px-2 py-1.5 text-left hover:bg-mn-surface-overlay"
+                    >
+                      <p className="truncate text-xs font-semibold text-mn-text">{comment.author}</p>
+                      <p className="truncate text-xs text-mn-muted">{comment.path ?? 'general'} · {comment.threadResolved ? 'resolved' : 'open'}</p>
+                    </button>
+                  ))}
+                  {!review || review.prComments.length === 0 ? <p className="text-xs text-mn-muted">No PR comments cached.</p> : null}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {workspace && activeTab === 'review' && (
-            <div className="space-y-3">
-              <div className="rounded-lg border border-mn-border bg-mn-card/60 p-2.5 text-xs text-mn-muted space-y-1">
-                <p>Reviewed files: <span className="font-semibold text-mn-text">{readiness?.reviewedFiles ?? 0}</span></p>
-                <p>PR comments: <span className="font-semibold text-mn-text">{review?.prComments.length ?? 0}</span></p>
+            {workspace && activeTab === 'files' && (
+              <WorkspaceFilesPanel workspaceId={workspace.id} onFileSelect={onOpenFile} />
+            )}
+          </div>
+
+          {/* Resize handle */}
+          <div
+            onMouseDown={handleDragStart}
+            className="h-1.5 shrink-0 cursor-row-resize border-y border-mn-border/60 bg-mn-surface hover:bg-mn-cyan/20 transition-colors"
+          />
+
+          {/* Bottom half: persistent terminal */}
+          <div className="overflow-hidden" style={{ flex: 1 - splitRatio }}>
+            {inspectorTerminal.session ? (
+              <TerminalPane
+                session={inspectorTerminal.session}
+                chunks={inspectorTerminal.chunks}
+                focused={terminalFocused}
+                onFocus={() => setTerminalFocused(true)}
+                onStop={inspectorTerminal.onStop}
+                onClose={() => {}}
+                onData={inspectorTerminal.onData}
+                onResize={inspectorTerminal.onResize}
+                compact
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center">
+                <div className="text-center">
+                  <TerminalSquare className="mx-auto h-5 w-5 text-mn-dim" />
+                  <p className="mt-1.5 text-[11px] text-mn-muted">
+                    {workspace ? 'Starting shell...' : 'Select a workspace'}
+                  </p>
+                </div>
               </div>
-
-              <Button variant="outline" size="xs" onClick={() => {
-                if (!workspaceId) return;
-                syncWorkspacePrThreads(workspaceId)
-                  .then((cockpit) => {
-                    setReview(cockpit);
-                    setActionMessage('Refreshed GitHub review threads.');
-                  })
-                  .catch((err) => setActionMessage(err instanceof Error ? err.message : String(err)));
-              }}>
-                <RefreshCw className="h-3.5 w-3.5" /> Refresh threads
-              </Button>
-
-              <div className="space-y-1">
-                {review?.prComments.slice(0, 12).map((comment) => (
-                  <button
-                    key={comment.commentId}
-                    type="button"
-                    onClick={() => comment.path ? onOpenReviewFile(comment.path) : undefined}
-                    className="w-full rounded border border-mn-border/70 bg-mn-card/50 px-2 py-1.5 text-left hover:bg-mn-surface-overlay"
-                  >
-                    <p className="truncate text-xs font-semibold text-mn-text">{comment.author}</p>
-                    <p className="truncate text-xs text-mn-muted">{comment.path ?? 'general'} · {comment.threadResolved ? 'resolved' : 'open'}</p>
-                  </button>
-                ))}
-                {!review || review.prComments.length === 0 ? <p className="text-xs text-mn-muted">No PR comments cached.</p> : null}
-              </div>
-            </div>
-          )}
-
-          {workspace && activeTab === 'files' && (
-            <WorkspaceFilesPanel workspaceId={workspace.id} onFileSelect={onOpenFile} />
-          )}
+            )}
+          </div>
         </div>
       </div>
     </aside>
