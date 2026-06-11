@@ -206,7 +206,16 @@ export const TerminalPane = memo(function TerminalPane({
       }
     });
 
-    // xterm.js handles scroll natively. No custom wheel handler needed.
+    // In normal buffer, xterm.js handles scrollback natively.
+    // In alternate buffer (Claude's TUI), block wheel events so xterm.js
+    // doesn't convert them into arrow key sequences.
+    const wheelHandler = (e: WheelEvent) => {
+      if (terminal.buffer.active.type === 'alternate') {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    containerRef.current.addEventListener('wheel', wheelHandler, { passive: false });
 
     const disposable = readOnly
       ? { dispose: () => undefined }
@@ -322,7 +331,7 @@ export const TerminalPane = memo(function TerminalPane({
       scrollDisposable.dispose();
       bufferChangeDisposable.dispose();
       observer.disconnect();
-      // wheelHandler removed: xterm.js handles scroll natively.
+      containerRef.current?.removeEventListener('wheel', wheelHandler);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onVisible);
       window.removeEventListener('mn:composer-scroll', onComposerScroll);
