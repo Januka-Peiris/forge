@@ -1010,8 +1010,6 @@ export function WorkspaceTerminal({
         dockOverflowSessions={dockOverflowSessions}
         busy={busy}
         error={error}
-        creatingPr={creatingPr}
-        onCreatePr={handleCreatePr}
         focusedSession={focusedSession}
         agentProfiles={agentProfiles}
         activeProviderIds={activeProviders.activeProviderSet}
