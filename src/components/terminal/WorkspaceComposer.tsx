@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { FileText, HelpCircle, Image, Link2, ListChecks, Paperclip, X, Zap } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -132,7 +132,7 @@ interface WorkspaceComposerProps {
   onInterrupt: () => void;
 }
 
-export function WorkspaceComposer({
+export const WorkspaceComposer = memo(function WorkspaceComposer({
   workspaceId,
   canInterrupt,
   promptTemplateWarning,
@@ -180,10 +180,9 @@ export function WorkspaceComposer({
 
   useEffect(() => {
     if (activeDraftKeyRef.current === draftKey) return;
-    COMPOSER_DRAFTS.set(activeDraftKeyRef.current, promptInput);
     activeDraftKeyRef.current = draftKey;
     setPromptInput(COMPOSER_DRAFTS.get(draftKey) ?? '');
-  }, [draftKey, promptInput]);
+  }, [draftKey]);
 
   useEffect(() => {
     window.localStorage.setItem(AGENT_COMPOSER_HEIGHT_KEY, String(composerHeight));
@@ -215,14 +214,14 @@ export function WorkspaceComposer({
     })),
   [promptTemplates]);
 
-  const slashQuery = promptInput.trimStart().startsWith('/')
-    ? promptInput.trimStart().slice(1).toLowerCase()
-    : null;
-  const slashMatches = slashQuery === null
-    ? []
-    : templateOptions
-      .filter((option) => option.title.toLowerCase().includes(slashQuery))
+  const slashMatches = useMemo(() => {
+    const trimmed = promptInput.trimStart();
+    if (!trimmed.startsWith('/')) return [];
+    const query = trimmed.slice(1).toLowerCase();
+    return templateOptions
+      .filter((option) => option.title.toLowerCase().includes(query))
       .slice(0, 7);
+  }, [promptInput, templateOptions]);
 
   const startComposerResize = (event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -701,4 +700,4 @@ export function WorkspaceComposer({
       </div>
     </div>
   );
-}
+});

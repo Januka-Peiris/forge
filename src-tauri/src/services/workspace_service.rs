@@ -239,9 +239,11 @@ pub fn pull_workspace_branch(state: &AppState, workspace_id: &str) -> Result<Str
 
 fn run_git(root: &Path, args: &[&str]) -> Result<String, String> {
     let output = Command::new("git")
+        .args(["-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential"])
         .arg("-C")
         .arg(root)
         .args(args)
+        .env("GIT_TERMINAL_PROMPT", "0")
         .output()
         .map_err(|err| format!("Failed to run git {}: {err}", args.join(" ")))?;
     if output.status.success() {

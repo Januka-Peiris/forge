@@ -58,7 +58,9 @@ fn run_rebase_pass(state: &AppState) -> Result<(), String> {
         };
 
         let fetch_ok = std::process::Command::new("git")
+            .args(["-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential"])
             .args(["fetch", "origin"])
+            .env("GIT_TERMINAL_PROMPT", "0")
             .current_dir(&detail.worktree_path)
             .output()
             .map(|out| out.status.success())

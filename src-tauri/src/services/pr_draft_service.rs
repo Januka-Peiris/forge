@@ -143,6 +143,21 @@ fn run_in_dir(dir: &str, program: &str, args: &[&str]) -> Result<String, String>
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
+fn run_git_authed(dir: &str, args: &[&str]) -> Result<String, String> {
+    let output = std::process::Command::new("git")
+        .args(["-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential"])
+        .args(args)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .current_dir(dir)
+        .output()
+        .map_err(|e| format!("Failed to run git: {e}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("git {} failed: {}", args.join(" "), stderr.trim()));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
 fn workspace_work_dir(state: &AppState, workspace_id: &str) -> Result<String, String> {
     let workspace = workspace_repository::get_detail(&state.db, workspace_id)?
         .ok_or_else(|| format!("Workspace {workspace_id} not found"))?;
@@ -183,7 +198,7 @@ pub fn ship_workspace_pr(
     if branch == "HEAD" {
         return Err("Workspace is on a detached HEAD; check out a branch first.".to_string());
     }
-    run_in_dir(&work_dir, "git", &["push", "-u", "origin", &branch])?;
+    run_git_authed(&work_dir, &["push", "-u", "origin", &branch])?;
 
     match create_workspace_pr(state, workspace_id) {
         Ok(result) => Ok(result),

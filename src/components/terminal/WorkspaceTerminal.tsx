@@ -785,6 +785,14 @@ export function WorkspaceTerminal({
     ? agentModeBySessionId[focusedSession.id] ?? null
     : null;
 
+  const handleComposerSettingsChange = useCallback((patch: Partial<ComposerSettings>) => {
+    const { selectedModel, ...rest } = patch;
+    if (typeof selectedModel === 'string') changeModel(selectedModel);
+    if (Object.keys(rest).length > 0) {
+      setComposerSettings((current) => ({ ...current, ...rest }));
+    }
+  }, [changeModel]);
+
   /** Optimistic dismiss; the backend's resolved event is the authoritative clear. */
   const handleAnswerDecision = useCallback((sessionId: string, key: string, label: string) => {
     answerWorkspaceTerminalDecision(sessionId, key, label)
@@ -1128,15 +1136,7 @@ export function WorkspaceTerminal({
           settings={composerSettings}
           liveAgentMode={liveAgentMode}
           pendingDecision={pendingDecision}
-          onSettingsChange={(patch) => {
-            // Model changes go through changeModel so a live Claude session
-            // is switched in-place via /model.
-            const { selectedModel, ...rest } = patch;
-            if (typeof selectedModel === 'string') changeModel(selectedModel);
-            if (Object.keys(rest).length > 0) {
-              setComposerSettings((current) => ({ ...current, ...rest }));
-            }
-          }}
+          onSettingsChange={handleComposerSettingsChange}
           onSend={sendPrompt}
           onCycleAgentMode={cycleAgentMode}
           onAnswerDecision={handleAnswerDecision}
