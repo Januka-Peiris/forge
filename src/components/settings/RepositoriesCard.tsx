@@ -169,18 +169,6 @@ function RepoCard({
           </button>
         </div>
       </div>
-      {repo.worktrees.length > 0 && (
-        <div className="mt-2 border-t border-mn-border/40 pt-2 space-y-0.5">
-          {repo.worktrees.map((worktree) => (
-            <div key={worktree.id} className="flex items-center gap-2 text-[11px]">
-              <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${worktree.isDirty ? 'bg-mn-yellow' : 'bg-mn-cyan'}`} />
-              <span className="font-mono text-mn-text">{worktree.branch ?? 'detached'}</span>
-              <span className="text-mn-muted font-mono truncate">{worktree.path}</span>
-              <span className="ml-auto text-mn-muted font-mono shrink-0">{worktree.head?.slice(0, 7) ?? ''}</span>
-            </div>
-          ))}
-        </div>
-      )}
       {settingsOpen && (
         <RepoSettingsPanel repositoryId={repo.id} />
       )}

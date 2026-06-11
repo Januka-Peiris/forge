@@ -2,7 +2,6 @@ import {
   Copy,
   ExternalLink,
   GitBranch,
-  GitPullRequest,
   HelpCircle,
   MoreHorizontal,
   PlugZap,
@@ -41,8 +40,6 @@ interface WorkspaceHeaderProps {
   agentProfiles: AgentProfile[];
   activeProviderIds: ReadonlySet<AgentProviderId>;
   onOpenInCursor?: () => void;
-  creatingPr: boolean;
-  onCreatePr: () => void;
   onCreateTerminal: (kind: 'agent' | 'shell', profile: TerminalProfile, title?: string, profileId?: string) => void;
   onCopyFocusedOutput: () => void;
   onInterruptFocusedAgent: () => void;
@@ -61,8 +58,6 @@ export function WorkspaceHeader({
   agentProfiles,
   activeProviderIds,
   onOpenInCursor,
-  creatingPr,
-  onCreatePr,
   onCreateTerminal,
   onCopyFocusedOutput,
   onInterruptFocusedAgent,
@@ -120,18 +115,6 @@ export function WorkspaceHeader({
               </div>
             </PopoverContent>
           </Popover>
-
-          <Button
-            variant="outline"
-            size="xs"
-            disabled={busy || creatingPr}
-            onClick={onCreatePr}
-            title="Commit, push, and open a PR. With a live agent session the agent does it (better PR text); otherwise it runs git + gh directly."
-            className="h-7 px-2 text-[11px] border-mn-border text-mn-text/80 hover:bg-white/5"
-          >
-            <GitPullRequest className="h-3 w-3" />
-            <span className="hidden sm:inline">{creatingPr ? 'Creating PR…' : 'Create PR'}</span>
-          </Button>
 
           {activeProviderIds.has('claude_code') && (
             <Button

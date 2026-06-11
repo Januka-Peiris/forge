@@ -9,6 +9,7 @@ import {
   Plus,
   Search,
   Settings,
+  Settings2,
   SlidersHorizontal,
   Archive,
   ArchiveRestore,
@@ -38,6 +39,7 @@ import {
 import { Tooltip } from '../ui/tooltip';
 import { Popover, PopoverTrigger, PopoverContent } from '../ui/popover';
 import { WorkspaceListItem } from '../workspaces/WorkspaceListItem';
+import { RepoSettingsModal } from '../settings/RepoSettingsModal';
 import { deriveCompanionWarnings } from '../../lib/federation';
 
 export type NavView = 'workspaces' | 'files' | 'reviews' | 'federation' | 'settings' | 'memory';
@@ -127,6 +129,7 @@ export function Sidebar({
     y: number;
     workspace: Workspace;
   } | null>(null);
+  const [repoSettingsModal, setRepoSettingsModal] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     window.localStorage.setItem(WORKSPACE_FILTER_KEY, filter);
@@ -502,19 +505,34 @@ export function Sidebar({
                   </p>
                   <span className="text-ui-caption text-mn-muted/35">({repo.workspaces.length})</span>
                   {hoveredRepoId === repo.id && !repo.id.startsWith('name:') && (
-                    <Tooltip content="Remove Repository" side="top">
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onRemoveRepository(repo.id);
-                        }}
-                        className="text-mn-muted hover:bg-mn-red/15 hover:text-mn-red"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </Tooltip>
+                    <>
+                      <Tooltip content="Repo Settings" side="top">
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRepoSettingsModal({ id: repo.id, name: repo.name });
+                          }}
+                          className="text-mn-muted hover:bg-white/10 hover:text-mn-text"
+                        >
+                          <Settings2 className="w-3 h-3" />
+                        </Button>
+                      </Tooltip>
+                      <Tooltip content="Remove Repository" side="top">
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRemoveRepository(repo.id);
+                          }}
+                          className="text-mn-muted hover:bg-mn-red/15 hover:text-mn-red"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </Tooltip>
+                    </>
                   )}
                   <Tooltip content="New Workspace" side="top">
                     <Button
@@ -771,6 +789,14 @@ export function Sidebar({
       <div className="shrink-0 flex items-center gap-0.5 px-3 py-2 border-t border-mn-border/40">
         {secondaryNav.map(renderNavBtn)}
       </div>
+
+      {repoSettingsModal && (
+        <RepoSettingsModal
+          repositoryId={repoSettingsModal.id}
+          repositoryName={repoSettingsModal.name}
+          onClose={() => setRepoSettingsModal(null)}
+        />
+      )}
     </aside>
   );
 }

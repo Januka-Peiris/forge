@@ -14,12 +14,12 @@
     --card-foreground: 0 0% 94%;
     --popover: 224 22% 8%;
     --popover-foreground: 0 0% 94%;
-    --primary: 195 100% 50%;
-    --primary-foreground: 195 100% 98%;
-    --secondary: 24 94% 53%;
-    --secondary-foreground: 24 100% 98%;
-    --tertiary: 271 81% 56%;
-    --tertiary-foreground: 271 100% 98%;
+    --primary: 200 55% 45%;
+    --primary-foreground: 200 30% 96%;
+    --secondary: 24 60% 48%;
+    --secondary-foreground: 24 40% 96%;
+    --tertiary: 271 45% 50%;
+    --tertiary-foreground: 271 30% 96%;
     --muted: 224 18% 12%;
     --muted-foreground: 220 10% 52%;
     --accent: 224 18% 12%;
@@ -28,7 +28,7 @@
     --destructive-foreground: 0 0% 100%;
     --border: 224 18% 16%;
     --input: 224 18% 16%;
-    --ring: 195 100% 50%;
+    --ring: 200 55% 45%;
     --radius: 0.72rem;
     --radius-panel: 0.92rem;
     --radius-button: 0.78rem;
@@ -52,7 +52,7 @@
     background: linear-gradient(
       to bottom,
       transparent,
-      rgba(0, 212, 255, 0.03) 50%,
+      rgba(70, 150, 180, 0.03) 50%,
       transparent
     );
     background-size: 100% 200%;

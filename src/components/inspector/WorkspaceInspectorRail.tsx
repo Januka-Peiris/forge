@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
-import { ClipboardCheck, FolderTree, Gauge, Play, RefreshCw, TerminalSquare, Wrench, X } from 'lucide-react';
+import { ClipboardCheck, FolderTree, Gauge, GitPullRequest, Play, RefreshCw, TerminalSquare, Wrench, X } from 'lucide-react';
 import type { MnemonicWorkspaceConfig, Workspace, WorkspaceReadiness, WorkspaceReviewCockpit } from '../../types';
 import { getWorkspaceMnemonicConfig, runWorkspaceSetup, startWorkspaceRunCommand, stopWorkspaceRunCommands } from '../../lib/tauri-api/workspace-scripts';
 import { getWorkspaceReadiness } from '../../lib/tauri-api/workspace-readiness';
@@ -9,6 +9,8 @@ import { TerminalPane } from '../terminal/WorkspaceTerminalPane';
 import { PrChecksSection } from './PrChecksSection';
 import { useInspectorTerminal } from './useInspectorTerminal';
 import { Button } from '../ui/button';
+import { Tooltip } from '../ui/tooltip';
+import { shipWorkspacePr } from '../../lib/tauri-api/pr-draft';
 
 type InspectorTab = 'changes' | 'checks' | 'review' | 'files';
 
@@ -54,6 +56,7 @@ export function WorkspaceInspectorRail({
   const [sourceWarnings, setSourceWarnings] = useState<string[]>([]);
   const [splitRatio, setSplitRatio] = useState(loadSplitRatio);
   const [terminalFocused, setTerminalFocused] = useState(false);
+  const [creatingPr, setCreatingPr] = useState(false);
   const splitContainerRef = useRef<HTMLDivElement | null>(null);
   const workspaceId = workspace?.id ?? null;
 
@@ -117,6 +120,20 @@ export function WorkspaceInspectorRail({
     }
   }, [workspaceId]);
 
+  const handleCreatePr = useCallback(() => {
+    if (!workspaceId) return;
+    setCreatingPr(true);
+    setActionMessage(null);
+    shipWorkspacePr(workspaceId)
+      .then((result) => {
+        setActionMessage(`PR #${result.prNumber} created`);
+        window.dispatchEvent(new CustomEvent('mn:refresh-workspaces'));
+        void refresh();
+      })
+      .catch((err) => setActionMessage(err instanceof Error ? err.message : String(err)))
+      .finally(() => setCreatingPr(false));
+  }, [workspaceId, refresh]);
+
   useEffect(() => {
     setConfig(null);
     setReadiness(null);
@@ -172,6 +189,20 @@ export function WorkspaceInspectorRail({
         <div className="flex items-center justify-between border-b border-mn-border px-3 py-2">
           <p className="text-xs font-semibold uppercase tracking-widest text-mn-muted">Inspector</p>
           <div className="flex items-center gap-1">
+            {workspace && (
+              <Tooltip content="Commit, push, and open a PR" side="bottom">
+                <Button
+                  variant="outline"
+                  size="xs"
+                  disabled={creatingPr || !workspaceId}
+                  onClick={handleCreatePr}
+                  className="h-6 px-2 text-[10px] border-mn-border text-mn-text/80 hover:bg-white/5"
+                >
+                  <GitPullRequest className="h-3 w-3" />
+                  {creatingPr ? 'Creating...' : 'Create PR'}
+                </Button>
+              </Tooltip>
+            )}
             <Button variant="ghost" size="icon-xs" onClick={() => void refresh()} title="Refresh inspector">
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
             </Button>
@@ -325,8 +356,10 @@ export function WorkspaceInspectorRail({
           {/* Resize handle */}
           <div
             onMouseDown={handleDragStart}
-            className="h-1.5 shrink-0 cursor-row-resize border-y border-mn-border/60 bg-mn-surface hover:bg-mn-cyan/20 transition-colors"
-          />
+            className="group relative h-2 shrink-0 cursor-row-resize border-y border-mn-border/60 bg-mn-surface hover:bg-primary/15 transition-colors"
+          >
+            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 mx-auto w-8 h-0.5 rounded-full bg-mn-muted/30 group-hover:bg-primary/50 transition-colors" />
+          </div>
 
           {/* Bottom half: persistent terminal */}
           <div className="overflow-hidden" style={{ flex: 1 - splitRatio }}>

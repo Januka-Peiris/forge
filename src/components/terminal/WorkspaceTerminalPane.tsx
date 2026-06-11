@@ -13,12 +13,12 @@ import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 
 const SEARCH_DECORATIONS: ISearchOptions['decorations'] = {
-  matchBackground: '#F97316',
-  matchBorder: '#FB923C',
-  matchOverviewRuler: '#F97316',
-  activeMatchBackground: '#00D4FF',
-  activeMatchBorder: '#66E5FF',
-  activeMatchColorOverviewRuler: '#00D4FF',
+  matchBackground: '#c47a3a',
+  matchBorder: '#d49560',
+  matchOverviewRuler: '#c47a3a',
+  activeMatchBackground: '#4a9ab5',
+  activeMatchBorder: '#6db3ca',
+  activeMatchColorOverviewRuler: '#4a9ab5',
 };
 
 function sessionBadgeVariant(session: TerminalSession): 'warning' | 'success' | 'destructive' | 'muted' {
@@ -158,8 +158,8 @@ export function TerminalPane({
       theme: {
         background: '#0a0a0a',
         foreground: '#d7dce5',
-        cursor: '#00D4FF',
-        selectionBackground: '#00D4FF40',
+        cursor: '#4a9ab5',
+        selectionBackground: '#4a9ab540',
       },
     });
     const fitAddon = new FitAddon();
