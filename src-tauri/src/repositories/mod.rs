@@ -12,6 +12,7 @@ pub mod pr_draft_repository;
 pub mod repo_intelligence_repository;
 pub mod repository_relationship_repository;
 pub mod repository_repository;
+pub mod repository_settings_repository;
 pub mod review_cockpit_repository;
 pub mod review_summary_repository;
 pub mod settings_repository;

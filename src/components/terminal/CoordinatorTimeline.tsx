@@ -173,7 +173,7 @@ export function CoordinatorTimeline({
   const [visibleResultCount, setVisibleResultCount] = useState(10);
   const [viewState, setViewState] = useState<TimelineViewState>(() => {
     const raw = window.localStorage.getItem(stateKey(workspaceId));
-    return raw === 'expanded' || raw === 'collapsed' || raw === 'hidden' ? raw : 'collapsed';
+    return raw === 'expanded' || raw === 'collapsed' || raw === 'hidden' ? raw : 'hidden';
   });
   const workers = useMemo(() => status?.workers ?? [], [status]);
   const recentActions = useMemo(() => status?.recentActions ?? [], [status]);
