@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { FileText, HelpCircle, Image, Link2, ListChecks, Paperclip, X, Zap } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -170,13 +170,15 @@ export const WorkspaceComposer = memo(function WorkspaceComposer({
     setDecisionBusy(false);
   }, [pendingDecision]);
 
-  const updatePromptInput = (next: string | ((current: string) => string)) => {
+  const updatePromptInput = useCallback((next: string | ((current: string) => string)) => {
     setPromptInput((current) => {
       const value = typeof next === 'function' ? next(current) : next;
       COMPOSER_DRAFTS.set(activeDraftKeyRef.current, value);
       return value;
     });
-  };
+  }, []);
+
+  const deferredPromptInput = useDeferredValue(promptInput);
 
   useEffect(() => {
     if (activeDraftKeyRef.current === draftKey) return;
@@ -201,9 +203,9 @@ export const WorkspaceComposer = memo(function WorkspaceComposer({
   }, [onCycleAgentMode]);
 
   const promptMeter = useMemo(() => {
-    if (!promptInput.trim()) return null;
-    return { sessionEstTokens: roughTokenEstimateFromChars(promptInput.length) };
-  }, [promptInput]);
+    if (!deferredPromptInput.trim()) return null;
+    return { sessionEstTokens: roughTokenEstimateFromChars(deferredPromptInput.length) };
+  }, [deferredPromptInput]);
 
   const templateOptions = useMemo(() =>
     promptTemplates.map((template) => ({
@@ -215,13 +217,13 @@ export const WorkspaceComposer = memo(function WorkspaceComposer({
   [promptTemplates]);
 
   const slashMatches = useMemo(() => {
-    const trimmed = promptInput.trimStart();
+    const trimmed = deferredPromptInput.trimStart();
     if (!trimmed.startsWith('/')) return [];
     const query = trimmed.slice(1).toLowerCase();
     return templateOptions
       .filter((option) => option.title.toLowerCase().includes(query))
       .slice(0, 7);
-  }, [promptInput, templateOptions]);
+  }, [deferredPromptInput, templateOptions]);
 
   const startComposerResize = (event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();

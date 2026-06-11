@@ -198,7 +198,7 @@ pub fn git_credential_args() -> Vec<String> {
     ]
 }
 
-fn find_gh_path() -> Option<String> {
+pub fn find_gh_path() -> Option<String> {
     if let Ok(Some(path)) = find_binary("gh") {
         return Some(path.to_string_lossy().to_string());
     }

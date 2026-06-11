@@ -6,7 +6,7 @@ use crate::models::{WorkspacePrCheck, WorkspacePrDraft, WorkspacePrResult, Works
 use crate::repositories::{
     activity_repository, agent_run_repository, pr_draft_repository, workspace_repository,
 };
-use crate::services::{git_review_service, hook_service, review_summary_service};
+use crate::services::{environment_service, git_review_service, hook_service, review_summary_service};
 use crate::state::AppState;
 
 pub fn get_workspace_pr_draft(
@@ -130,6 +130,10 @@ Workspace task: {}",
     Ok(draft)
 }
 
+fn gh_binary() -> String {
+    environment_service::find_gh_path().unwrap_or_else(|| "gh".to_string())
+}
+
 fn run_in_dir(dir: &str, program: &str, args: &[&str]) -> Result<String, String> {
     let output = std::process::Command::new(program)
         .args(args)
@@ -204,7 +208,7 @@ pub fn ship_workspace_pr(
         Ok(result) => Ok(result),
         Err(err) if err.contains("already exists") => {
             // Branch already has an open PR; the push above updated it.
-            let pr_url = run_in_dir(&work_dir, "gh", &["pr", "view", "--json", "url", "--jq", ".url"])?;
+            let pr_url = run_in_dir(&work_dir, &gh_binary(), &["pr", "view", "--json", "url", "--jq", ".url"])?;
             let pr_number = pr_url
                 .rsplit('/')
                 .next()
@@ -276,7 +280,7 @@ pub fn create_workspace_pr(
             .ok_or_else(|| "Workspace has no worktree path".to_string())?
     };
 
-    let output = std::process::Command::new("gh")
+    let output = std::process::Command::new(gh_binary())
         .args(["pr", "create", "--title", &draft.title, "--body", &body])
         .current_dir(&work_dir)
         .output()
@@ -337,7 +341,7 @@ pub fn get_workspace_pr_status(
             .ok_or_else(|| "Workspace has no worktree path".to_string())?
     };
 
-    let output = std::process::Command::new("gh")
+    let output = std::process::Command::new(gh_binary())
         .args([
             "pr",
             "view",
