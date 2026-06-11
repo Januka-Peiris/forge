@@ -599,7 +599,7 @@ export function Sidebar({
                               </button>
                             }
                             suffix={
-                              attention?.unreadCount ? (
+                              !isSelected && attention?.unreadCount ? (
                                 <span className="shrink-0 h-2 w-2 rounded-full bg-mn-orange/60" />
                               ) : null
                             }

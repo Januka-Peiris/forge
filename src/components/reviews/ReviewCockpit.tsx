@@ -9,7 +9,6 @@ import {
   GitPullRequest,
   MessageSquare,
   RefreshCw,
-  Send,
   ShieldCheck,
   Wrench,
   XCircle,
@@ -670,17 +669,10 @@ export function ReviewCockpit({
 
                   {/* PR comments list */}
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-mn-border bg-mn-card/70">
-            <div className="shrink-0 flex items-center justify-between gap-2 border-b border-mn-border px-3 py-2">
+            <div className="shrink-0 flex items-center gap-2 border-b border-mn-border px-3 py-2">
               <p className="text-ui-caption font-bold uppercase tracking-wider text-mn-muted">
                 PR comments
               </p>
-              <button
-                disabled={busy}
-                onClick={() => void sendPrompt('prepare_pr_summary')}
-                className="flex items-center gap-1 rounded-md border border-mn-blue/20 bg-mn-blue/10 px-2.5 py-1 text-ui-caption font-semibold text-mn-blue hover:bg-mn-blue/15 disabled:opacity-50"
-              >
-                <Send className="h-3 w-3" /> PR summary
-              </button>
             </div>
 
             <div className="shrink-0 border-b border-mn-border/60 px-3 py-2 text-ui-caption text-mn-muted">

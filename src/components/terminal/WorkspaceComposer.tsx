@@ -636,9 +636,17 @@ export const WorkspaceComposer = memo(function WorkspaceComposer({
                 }}
                 rows={5}
                 placeholder={pendingDecision
-                  ? 'Or type a custom reply and press Enter…'
-                  : 'Send instruction to agent (Enter to send, Shift+Enter for newline)…'}
+                  ? 'Or type a custom reply and press Enter...'
+                  : 'Send instruction to agent (Enter to send, Shift+Enter for newline)...'}
                 className={`h-full min-h-0 w-full flex-1 resize-none overflow-y-auto bg-mn-bg px-3 py-2 text-sm leading-relaxed text-mn-text placeholder:text-mn-muted focus:outline-none ${pendingDecision ? 'border-0' : 'rounded-chat border border-mn-border focus:border-mn-cyan/40'}`}
+                onWheel={(e) => {
+                  const ta = e.currentTarget;
+                  const atTop = ta.scrollTop === 0 && e.deltaY < 0;
+                  const atBottom = ta.scrollTop + ta.clientHeight >= ta.scrollHeight - 1 && e.deltaY > 0;
+                  if (atTop || atBottom) {
+                    window.dispatchEvent(new CustomEvent('mn:composer-scroll', { detail: { deltaY: e.deltaY } }));
+                  }
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Escape') { e.currentTarget.blur(); return; }
                   if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); onCycleAgentMode(); return; }

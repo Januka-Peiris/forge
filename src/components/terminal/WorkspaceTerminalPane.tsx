@@ -185,6 +185,13 @@ export function TerminalPane({
       const buffer = terminal.buffer.active;
       setIsScrolledUp(buffer.viewportY < buffer.baseY);
     });
+    const onComposerScroll = (e: Event) => {
+      const delta = (e as CustomEvent).detail?.deltaY;
+      if (typeof delta === 'number') {
+        terminal.scrollLines(delta > 0 ? 3 : -3);
+      }
+    };
+    window.addEventListener('mn:composer-scroll', onComposerScroll);
     terminal.attachCustomKeyEventHandler((event) => {
       if (event.type !== 'keydown') return true;
 
@@ -271,6 +278,7 @@ export function TerminalPane({
       observer.disconnect();
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onVisible);
+      window.removeEventListener('mn:composer-scroll', onComposerScroll);
       window.clearTimeout(fitRetryTimer);
       terminal.dispose();
       terminalRef.current = null;
