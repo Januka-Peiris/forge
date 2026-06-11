@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Bot, Cpu, Plus, Trash2 } from 'lucide-react';
+import { Bot, Plus, Trash2 } from 'lucide-react';
 
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -13,43 +13,34 @@ import {
   saveAppAgentProfiles,
 } from '../../lib/tauri-api/agent-profiles';
 import { getSetting, setSetting } from '../../lib/tauri-api/settings';
-import { checkEnvironment } from '../../lib/tauri-api/environment';
-import { diagnoseLocalLlmProfile, listLocalLlmModels } from '../../lib/tauri-api/local-llms';
 import { getStoredAgentProfileId, setStoredAgentProfileId } from '../../lib/hooks/useAgentProfile';
 import { formatCommandPreview, parseCommandArgs } from '../../lib/shell-args';
 import { isAgentProfileActive, type AgentProviderId } from '../../lib/active-agent-providers';
 
-import type { AgentProfile, LocalLlmModel, LocalLlmProfileDiagnostic } from '../../types';
+import type { AgentProfile } from '../../types';
 
 const DEFAULT_PROFILE_IDS = new Set(['shell']);
 
 export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: ReadonlySet<AgentProviderId> }) {
   const [effectiveProfiles, setEffectiveProfiles] = useState<AgentProfile[]>([]);
   const [appProfiles, setAppProfiles] = useState<AgentProfile[]>([]);
-  const [ollamaModels, setOllamaModels] = useState<LocalLlmModel[]>([]);
-  const [ollamaStatus, setOllamaStatus] = useState<'ok' | 'missing' | 'unknown'>('unknown');
   const [defaultProfileId, setDefaultProfileId] = useState(() => getStoredAgentProfileId());
   const [coordinatorBrainProfileId, setCoordinatorBrainProfileId] = useState<string>('');
   const [coordinatorCoderProfileId, setCoordinatorCoderProfileId] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [diagnostics, setDiagnostics] = useState<Record<string, LocalLlmProfileDiagnostic>>({});
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
-  const [label, setLabel] = useState('Ollama Qwen Coder');
-  const [provider, setProvider] = useState('ollama');
-  const [model, setModel] = useState('qwen2.5-coder');
-  const [command, setCommand] = useState('ollama');
-  const [argsText, setArgsText] = useState('run qwen2.5-coder');
-  const [endpoint, setEndpoint] = useState('http://localhost:11434');
+  const [label, setLabel] = useState('OpenAI GPT');
+  const [provider, setProvider] = useState('openai');
+  const [model, setModel] = useState('gpt-5.4');
+  const [command, setCommand] = useState('openai');
+  const [argsText, setArgsText] = useState('');
+  const [endpoint, setEndpoint] = useState('https://api.openai.com/v1');
 
   const refresh = useCallback(async () => {
-    const [effective, app, env, modelsResult] = await Promise.all([
+    const [effective, app] = await Promise.all([
       listWorkspaceAgentProfiles(null),
       listAppAgentProfiles(),
-      checkEnvironment().catch(() => []),
-      listLocalLlmModels('ollama')
-        .then((models) => ({ models, error: null as string | null }))
-        .catch((err) => ({ models: [] as LocalLlmModel[], error: err instanceof Error ? err.message : String(err) })),
     ]);
     setEffectiveProfiles(effective);
     setAppProfiles(app);
@@ -57,12 +48,6 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
       const fallback = agentProfilesForPromptPicker(effective)[0]?.id ?? '';
       setDefaultProfileId(fallback);
       setStoredAgentProfileId(fallback);
-    }
-    setOllamaModels(modelsResult.models);
-    const ollama = env.find((item) => item.binary === 'ollama');
-    setOllamaStatus((ollama?.status as 'ok' | 'missing' | undefined) ?? 'unknown');
-    if (modelsResult.error && ollama?.status === 'ok') {
-      setMessage(modelsResult.error);
     }
     const [savedBrain, savedCoder] = await Promise.all([
       getSetting('coordinator_default_brain_profile_id').catch(() => null),
@@ -83,24 +68,24 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
     setSaving(true);
     setMessage(null);
     try {
-      const id = editingProfileId ?? uniqueProfileId(slug(label || model || provider || 'local'), appProfiles);
+      const id = editingProfileId ?? uniqueProfileId(slug(label || model || provider || 'profile'), appProfiles);
       const isOpenAi = provider === 'openai';
       const nextProfile: AgentProfile = {
         id,
         label: label.trim() || id,
-        agent: isOpenAi ? 'openai' : (provider.trim() || 'local'),
-        command: command.trim() || (provider === 'ollama' ? 'ollama' : isOpenAi ? 'openai' : ''),
+        agent: isOpenAi ? 'openai' : (provider.trim() || 'custom'),
+        command: command.trim() || (isOpenAi ? 'openai' : ''),
         args: isOpenAi ? [] : parseCommandArgs(argsText),
         model: model.trim() || (isOpenAi ? 'gpt-5.4' : null),
         reasoning: null,
         mode: 'act',
-        provider: provider.trim() || (isOpenAi ? 'openai' : 'local'),
+        provider: provider.trim() || (isOpenAi ? 'openai' : 'custom'),
         endpoint: endpoint.trim() || (isOpenAi ? 'https://api.openai.com/v1' : null),
-        local: !isOpenAi,
-        description: isOpenAi ? 'OpenAI API profile for coordinator planning' : `Local ${provider} profile`,
+        local: false,
+        description: isOpenAi ? 'OpenAI API profile for coordinator planning' : `Custom ${provider} profile`,
         skills: [],
         templates: [],
-        rolePreference: isOpenAi ? 'brain' : 'coder',
+        rolePreference: 'brain',
         coordinatorEligible: true,
       };
       const saved = await saveAppAgentProfiles([
@@ -130,16 +115,6 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
       setMessage(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
-    }
-  };
-
-  const testProfile = async (profile: AgentProfile) => {
-    setMessage(null);
-    try {
-      const diagnostic = await diagnoseLocalLlmProfile(profile);
-      setDiagnostics((current) => ({ ...current, [profile.id]: diagnostic }));
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -188,12 +163,12 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
 
   const resetProfileForm = () => {
     setEditingProfileId(null);
-    setLabel('Ollama Qwen Coder');
-    setProvider('ollama');
-    setModel('qwen2.5-coder');
-    setCommand('ollama');
-    setArgsText('run qwen2.5-coder');
-    setEndpoint('http://localhost:11434');
+    setLabel('OpenAI GPT');
+    setProvider('openai');
+    setModel('gpt-5.4');
+    setCommand('openai');
+    setArgsText('');
+    setEndpoint('https://api.openai.com/v1');
   };
 
   const appProfileIds = new Set(appProfiles.map((profile) => profile.id));
@@ -203,14 +178,9 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
 
   return (
     <div className="rounded-xl border border-mn-border bg-mn-card p-4">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-[14px] font-bold text-mn-text">Agent Profiles & Local LLMs</h2>
-          <p className="mt-0.5 text-[11px] text-mn-muted">Configure inspectable CLI-backed agents. Repo `.forge/config.json` profiles can still override these.</p>
-        </div>
-        <span className={`rounded-full border px-2 py-0.5 text-[10px] ${ollamaStatus === 'ok' ? 'border-mn-cyan/30 text-mn-cyan' : 'border-mn-border text-mn-muted'}`}>
-          Ollama {ollamaStatus}
-        </span>
+      <div className="mb-4">
+        <h2 className="text-[14px] font-bold text-mn-text">Agent Profiles</h2>
+        <p className="mt-0.5 text-[11px] text-mn-muted">Configure inspectable CLI-backed agents. Repo `.forge/config.json` profiles can still override these.</p>
       </div>
 
       <div className="mb-4 rounded-lg border border-mn-border/70 bg-black/10 p-3">
@@ -231,7 +201,7 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
             <SelectContent>
               {selectableProfiles.map((profile) => (
                 <SelectItem key={profile.id} value={profile.id}>
-                  {profile.label}{profile.local ? ' · local' : ''}
+                  {profile.label}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -289,16 +259,14 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
       <div className="grid gap-2 md:grid-cols-2">
         {activeEffectiveProfiles.map((profile) => {
           const source = appProfileIds.has(profile.id) ? 'app' : DEFAULT_PROFILE_IDS.has(profile.id) ? 'built-in' : 'repo';
-          const diagnostic = diagnostics[profile.id];
           return (
             <div key={profile.id} className="rounded-lg border border-mn-border/70 bg-mn-surface/50 p-3">
               <div className="flex items-start gap-2">
-                {profile.local ? <Cpu className="mt-0.5 h-3.5 w-3.5 text-mn-cyan" /> : <Bot className="mt-0.5 h-3.5 w-3.5 text-mn-orange" />}
+                <Bot className="mt-0.5 h-3.5 w-3.5 text-mn-orange" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <p className="truncate text-[12px] font-semibold text-mn-text">{profile.label}</p>
                     <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-mn-muted">{source}</span>
-                    {profile.local && <span className="rounded bg-mn-cyan/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-mn-cyan">local</span>}
                   </div>
                   <p className="mt-0.5 truncate font-mono text-[10px] text-mn-muted">
                     {formatCommandPreview(profile.command, profile.args)}
@@ -308,22 +276,15 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  {profile.local && (
-                    <Button variant="ghost" size="xs" disabled={saving} onClick={() => void testProfile(profile)} title="Test profile">
-                      Test
-                    </Button>
-                  )}
                   {source === 'app' && (
                     <Button variant="ghost" size="xs" disabled={saving} onClick={() => loadProfileIntoForm(profile, 'edit')} title="Edit app profile">
                       Edit
                     </Button>
                   )}
-                  {(profile.local || profile.agent === 'openai') && (
-                    <Button variant="ghost" size="xs" disabled={saving} onClick={() => void copyProfileJson(profile)} title="Copy .forge/config.json snippet">
-                      Copy
-                    </Button>
-                  )}
-                  {(profile.local || profile.agent === 'openai') && source !== 'app' && (
+                  <Button variant="ghost" size="xs" disabled={saving} onClick={() => void copyProfileJson(profile)} title="Copy .forge/config.json snippet">
+                    Copy
+                  </Button>
+                  {source !== 'app' && (
                     <Button variant="ghost" size="xs" disabled={saving} onClick={() => loadProfileIntoForm(profile, 'template')} title="Use as template">
                       Use
                     </Button>
@@ -335,25 +296,6 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
                   )}
                 </div>
               </div>
-              {diagnostic && (
-                <div className="mt-2 rounded border border-mn-border/50 bg-black/15 p-2">
-                  <p className={`text-[11px] font-semibold ${diagnostic.status === 'ok' ? 'text-mn-cyan' : diagnostic.status === 'error' ? 'text-mn-red' : 'text-mn-yellow'}`}>
-                    {diagnostic.summary}
-                  </p>
-                  <p className="mt-0.5 truncate font-mono text-[10px] text-mn-muted">{diagnostic.commandPreview}</p>
-                  <div className="mt-1 space-y-0.5">
-                    {diagnostic.checks.map((check) => (
-                      <p key={check.name} className="text-[10px] text-mn-muted">
-                        <span className={check.status === 'ok' ? 'text-mn-cyan' : check.status === 'error' ? 'text-mn-red' : 'text-mn-yellow'}>
-                          {check.name}: {check.status}
-                        </span>
-                        {' · '}
-                        {check.message}
-                      </p>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           );
         })}
@@ -370,7 +312,7 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
             {editingProfileId ? 'Edit app-level profile' : 'Add app-level profile'}
           </p>
           <p className="text-[11px] text-mn-muted">
-            {editingProfileId ? `Editing ${editingProfileId}.` : 'Saved for all workspaces. Use local providers for terminal-driven agents and OpenAI for coordinator planning.'}
+            {editingProfileId ? `Editing ${editingProfileId}.` : 'Saved for all workspaces. Use OpenAI for coordinator planning or add custom API-compatible providers.'}
           </p>
         </div>
         <div className="grid gap-2 md:grid-cols-2">
@@ -381,13 +323,7 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
               value={provider}
               onValueChange={(value) => {
                 setProvider(value);
-                if (value === 'ollama') {
-                  setCommand('ollama');
-                  setEndpoint('http://localhost:11434');
-                  setArgsText(`run ${model || 'llama3.2'}`);
-                } else if (value === 'lm-studio') {
-                  setEndpoint('http://localhost:1234/v1');
-                } else if (value === 'openai') {
+                if (value === 'openai') {
                   setCommand('openai');
                   setEndpoint('https://api.openai.com/v1');
                   setModel('gpt-5.4');
@@ -398,55 +334,23 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="openai">OpenAI API</SelectItem>
-                <SelectItem value="ollama">Ollama</SelectItem>
-                <SelectItem value="lm-studio">LM Studio</SelectItem>
-                <SelectItem value="llama.cpp">llama.cpp</SelectItem>
-                <SelectItem value="openai-compatible">OpenAI-compatible local</SelectItem>
+                <SelectItem value="openai-compatible">OpenAI-compatible API</SelectItem>
                 <SelectItem value="custom">Custom CLI</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          {provider === 'ollama' && (
-            <div>
-              <label className="mb-1 block text-[11px] font-semibold text-mn-text">Installed Ollama model</label>
-              <Select
-                value={ollamaModels.some((item) => item.name === model) ? model : ''}
-                onValueChange={(value) => {
-                  setModel(value);
-                  setArgsText(`run ${value}`);
-                  if (!label.trim() || label.startsWith('Ollama ')) {
-                    setLabel(`Ollama ${value}`);
-                  }
-                }}
-              >
-                <SelectTrigger><SelectValue placeholder={ollamaModels.length ? 'Choose installed model…' : 'No models discovered'} /></SelectTrigger>
-                <SelectContent>
-                  {ollamaModels.map((item) => (
-                    <SelectItem key={item.name} value={item.name}>
-                      {item.name}{item.size ? ` · ${item.size}` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-          <LabeledInput label="Model" value={model} onChange={(value) => { setModel(value); if (provider === 'ollama') setArgsText(`run ${value || 'llama3.2'}`); }} placeholder={provider === 'openai' ? 'gpt-5.4' : 'qwen2.5-coder'} />
-          <LabeledInput label="Endpoint metadata" value={endpoint} onChange={setEndpoint} />
-          <LabeledInput label="Command" value={command} onChange={setCommand} placeholder={provider === 'openai' ? 'openai' : 'ollama'} />
-          <LabeledInput label="Args" value={argsText} onChange={setArgsText} placeholder={provider === 'openai' ? '(unused for OpenAI API)' : 'run qwen2.5-coder'} />
+          <LabeledInput label="Model" value={model} onChange={setModel} placeholder={provider === 'openai' ? 'gpt-5.4' : 'model-name'} />
+          <LabeledInput label="Endpoint" value={endpoint} onChange={setEndpoint} />
+          <LabeledInput label="Command" value={command} onChange={setCommand} placeholder={provider === 'openai' ? 'openai' : 'command'} />
+          <LabeledInput label="Args" value={argsText} onChange={setArgsText} placeholder={provider === 'openai' ? '(unused for OpenAI API)' : 'arg1 arg2'} />
         </div>
         <div className="mt-3 flex items-center justify-between gap-3">
           <p className="text-[11px] text-mn-muted">
             {provider === 'openai'
               ? <>Requires <span className="font-mono text-mn-text/80">OPENAI_API_KEY</span> in the Mnemonic app environment.</>
-              : provider === 'ollama' && ollamaModels.length > 0
-              ? `${ollamaModels.length} Ollama model(s) discovered.`
-              : <>Tip: for Ollama run <span className="font-mono text-mn-text/80">ollama pull {model || 'llama3.2'}</span> first. Args support single/double quotes.</>}
+              : 'Configure a custom API-compatible provider.'}
           </p>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="secondary" onClick={() => void refresh()} disabled={saving}>
-              Refresh models
-            </Button>
             {editingProfileId && (
               <Button size="sm" variant="secondary" onClick={resetProfileForm} disabled={saving}>
                 Cancel edit
@@ -454,7 +358,7 @@ export function AgentProfilesCard({ activeProviderIds }: { activeProviderIds: Re
             )}
             <Button size="sm" onClick={() => void saveProfile()} disabled={saving}>
               <Plus className="h-3.5 w-3.5" />
-              {saving ? 'Saving…' : editingProfileId ? 'Update profile' : 'Save profile'}
+              {saving ? 'Saving...' : editingProfileId ? 'Update profile' : 'Save profile'}
             </Button>
           </div>
         </div>
@@ -474,7 +378,7 @@ function LabeledInput({ label, value, onChange, placeholder }: { label: string; 
 }
 
 function slug(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'local';
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'profile';
 }
 
 function uniqueProfileId(base: string, profiles: AgentProfile[]): string {

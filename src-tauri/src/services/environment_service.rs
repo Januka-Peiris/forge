@@ -36,12 +36,12 @@ const DEPENDENCIES: &[Dependency] = &[
         fix: "brew install gh",
         optional: true,
     },
-    Dependency {
-        name: "Ollama",
-        binary: "ollama",
-        fix: "Install Ollama from https://ollama.com or use a custom local profile command",
-        optional: true,
-    },
+    // Dependency {
+    //     name: "Ollama",
+    //     binary: "ollama",
+    //     fix: "Install Ollama from https://ollama.com or use a custom local profile command",
+    //     optional: true,
+    // },
 ];
 
 pub fn check_environment() -> Vec<EnvironmentCheckItem> {

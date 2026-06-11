@@ -635,7 +635,7 @@ export function SettingsView({
 
         <SettingsGroup
           title="Agents"
-          description="Profiles, coordinator roles, and local model options."
+          description="Profiles and coordinator role defaults."
           meta="1 panel"
         >
           <AgentProfilesCard activeProviderIds={activeProviders.activeProviderSet} />

@@ -600,9 +600,7 @@ export function Sidebar({
                             }
                             suffix={
                               attention?.unreadCount ? (
-                                <span className="shrink-0 rounded-full bg-mn-orange px-1.5 py-0.5 text-[10px] font-bold text-white shadow-amber-glow">
-                                  {attention.unreadCount > 99 ? '99+' : attention.unreadCount}
-                                </span>
+                                <span className="shrink-0 h-2 w-2 rounded-full bg-mn-orange/60" />
                               ) : null
                             }
                             actions={

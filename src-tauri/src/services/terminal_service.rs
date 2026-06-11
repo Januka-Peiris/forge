@@ -11,7 +11,7 @@ use crate::models::{
     TerminalOutputResponse, TerminalSession, TerminalSessionState,
 };
 use crate::repositories::settings_repository;
-use crate::repositories::{activity_repository, agent_memory_repository, terminal_repository};
+use crate::repositories::{activity_repository, agent_memory_repository, terminal_repository, workspace_repository};
 use crate::services::{agent_profile_service, command_safety_service, task_lifecycle_service};
 use crate::state::{ActiveTerminal, AppState};
 use tauri::Emitter;
@@ -75,6 +75,32 @@ fn agent_effective_model(
                 None
             }
         })
+}
+
+fn shell_friendly_cwd(real_cwd: &Path, workspace_id: &str, db: &crate::db::Database) -> PathBuf {
+    let workspace = match workspace_repository::get_detail(db, workspace_id) {
+        Ok(Some(w)) => w,
+        _ => return real_cwd.to_path_buf(),
+    };
+    let label = workspace.summary.name.trim().to_string();
+    if label.is_empty() {
+        return real_cwd.to_path_buf();
+    }
+    let sanitized: String = label
+        .chars()
+        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' { c } else { '-' })
+        .collect();
+    let link_dir = std::env::temp_dir().join("mnemonic-shells");
+    let _ = std::fs::create_dir_all(&link_dir);
+    let link_path = link_dir.join(&sanitized);
+    if link_path.symlink_metadata().is_ok() {
+        let _ = std::fs::remove_file(&link_path);
+    }
+    #[cfg(unix)]
+    if std::os::unix::fs::symlink(real_cwd, &link_path).is_ok() {
+        return link_path;
+    }
+    real_cwd.to_path_buf()
 }
 
 fn spawn_active_terminal(
@@ -275,7 +301,7 @@ pub fn create_workspace_terminal(
     state: &AppState,
     input: CreateWorkspaceTerminalInput,
 ) -> Result<TerminalSession, String> {
-    let cwd = workspace_root_path(state, &input.workspace_id)?;
+    let real_cwd = workspace_root_path(state, &input.workspace_id)?;
     let resolved_profile = agent_profile_service::resolve_agent_profile(
         state,
         Some(&input.workspace_id),
@@ -284,6 +310,11 @@ pub fn create_workspace_terminal(
     )?;
     let effective_model = agent_effective_model(state, &resolved_profile);
     let kind = normalize_terminal_kind(&input.kind, &resolved_profile.agent);
+    let cwd = if kind == "shell" {
+        shell_friendly_cwd(&real_cwd, &input.workspace_id, &state.db)
+    } else {
+        real_cwd
+    };
     let session_role = if kind == "shell" || kind == "utility" || kind == "run" {
         "utility"
     } else {
