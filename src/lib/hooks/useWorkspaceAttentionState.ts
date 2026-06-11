@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { listWorkspaceAttention, markWorkspaceAttentionRead } from '../tauri-api/workspace-attention';
-import { getWorkspaceConflicts } from '../tauri-api/workspace-health';
 import { mnWarn } from '../mn-log';
 import type { WorkspaceAttention } from '../../types';
 
 export function useWorkspaceAttentionState(selectedWorkspaceId: string | null, view: string) {
   const [workspaceAttention, setWorkspaceAttention] = useState<Record<string, WorkspaceAttention>>({});
-  const [conflictingWorkspaceIds, setConflictingWorkspaceIds] = useState<Set<string>>(new Set());
   const attentionRefreshTimerRef = useRef<number | null>(null);
   const markReadTimerRef = useRef<Record<string, number>>({});
 
@@ -16,12 +14,6 @@ export function useWorkspaceAttentionState(selectedWorkspaceId: string | null, v
       setWorkspaceAttention(Object.fromEntries(rows.map((row) => [row.workspaceId, row])));
     } catch (err) {
       mnWarn('attention', 'load failed', { err });
-    }
-    try {
-      const result = await getWorkspaceConflicts();
-      setConflictingWorkspaceIds(new Set(result.conflictingWorkspaceIds));
-    } catch {
-      // non-fatal
     }
   }, []);
 
@@ -61,7 +53,6 @@ export function useWorkspaceAttentionState(selectedWorkspaceId: string | null, v
   }, [scheduleMarkAttentionRead, selectedWorkspaceId, view]);
 
   return {
-    conflictingWorkspaceIds,
     loadAttention,
     scheduleAttentionLoad,
     scheduleMarkAttentionRead,

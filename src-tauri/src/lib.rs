@@ -72,7 +72,7 @@ pub fn run() {
                 log::warn!(target: "mnemonic_lib", "Failed to reconcile active coordinator runs on startup: {error}");
             }
 
-            rebase_service::start_auto_rebase_loop(state.clone());
+            // rebase_service::start_auto_rebase_loop(state.clone());
             orchestrator_service::start_orchestrator_loop(state.clone());
             repo_intelligence_service::start_repo_intelligence_loop(state.clone());
             app.manage(state);
