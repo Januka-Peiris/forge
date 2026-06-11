@@ -145,7 +145,7 @@ fn run_in_dir(dir: &str, program: &str, args: &[&str]) -> Result<String, String>
 
 fn run_git_authed(dir: &str, args: &[&str]) -> Result<String, String> {
     let output = std::process::Command::new("git")
-        .args(["-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential"])
+        .args(super::environment_service::git_credential_args())
         .args(args)
         .env("GIT_TERMINAL_PROMPT", "0")
         .current_dir(dir)

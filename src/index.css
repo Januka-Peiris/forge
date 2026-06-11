@@ -84,9 +84,11 @@
   /* Thin styled scrollbar for terminal panes and scrollback */
   .terminal-scrollbar::-webkit-scrollbar {
     width: 8px;
+    -webkit-appearance: none;
   }
   .terminal-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
   }
   .terminal-scrollbar::-webkit-scrollbar-thumb {
     background: rgba(74, 154, 181, 0.35);
@@ -101,17 +103,22 @@
     background: rgba(74, 154, 181, 0.7);
   }
 
-  /* xterm.js internal scrollbar override */
-  .xterm-scroll-area + .xterm-decoration-container ~ .xterm-helper-textarea,
+  /* xterm.js internal scrollbar - always visible */
+  .xterm .xterm-viewport {
+    overflow-y: scroll !important;
+  }
   .xterm .xterm-viewport::-webkit-scrollbar {
     width: 8px;
+    -webkit-appearance: none;
   }
   .xterm .xterm-viewport::-webkit-scrollbar-track {
-    background: transparent;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
   }
   .xterm .xterm-viewport::-webkit-scrollbar-thumb {
     background: rgba(74, 154, 181, 0.35);
     border-radius: 4px;
+    min-height: 30px;
   }
   .xterm .xterm-viewport::-webkit-scrollbar-thumb:hover {
     background: rgba(74, 154, 181, 0.55);
