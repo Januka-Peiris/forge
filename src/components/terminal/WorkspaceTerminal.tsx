@@ -543,20 +543,15 @@ export function WorkspaceTerminal({
       void refreshAgentContext();
       void refreshAgentProfiles();
       void refreshModelSettings();
-      void refreshSessions(false);
+      void refreshSessions(true);
       void refreshWorkbenchState();
       void refreshCoordinatorStatus();
-      const outputTimer = window.setTimeout(() => {
-        if (document.hidden) return;
-        void refreshSessions(true);
-      }, 250);
       const healthTimer = window.setTimeout(() => {
         if (document.hidden) return;
         void refreshHealth();
         void refreshReadiness();
       }, 1500);
       return () => {
-        window.clearTimeout(outputTimer);
         window.clearTimeout(healthTimer);
       };
     }

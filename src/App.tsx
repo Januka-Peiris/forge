@@ -529,7 +529,7 @@ export default function App() {
       )}
 
       {attentionToasts.length > 0 && (
-        <div className="pointer-events-none fixed bottom-4 z-50 flex w-[360px] flex-col gap-2" style={{ left: `${effectiveSidebarWidth + 16}px` }}>
+        <div className="pointer-events-none fixed z-50 flex w-[320px] flex-col gap-2" style={{ left: `${effectiveSidebarWidth + 16}px`, bottom: '200px' }}>
           {attentionToasts.map((toast) => (
             <button
               key={toast.id}

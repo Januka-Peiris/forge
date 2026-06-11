@@ -643,8 +643,8 @@ pub fn approve_workspace_terminal_command(
 }
 
 /// Answers a decision dialog surfaced in chat by pressing its option key in
-/// the terminal. Claude Code's numbered dialogs act on the digit immediately,
-/// so no Enter is sent.
+/// the terminal and then sending Enter. Claude Code's newer menu-style
+/// dialogs require Enter to confirm the selection after typing the digit.
 pub fn answer_workspace_terminal_decision(
     state: &AppState,
     session_id: &str,
@@ -666,6 +666,8 @@ pub fn answer_workspace_terminal_decision(
         let _ = attach_tmux_terminal(state, &session, None, None)?;
     }
     pty_write_raw(state, session_id, option_key)?;
+    std::thread::sleep(std::time::Duration::from_millis(150));
+    pty_write_raw(state, session_id, "\r")?;
     append_log_line(
         state,
         &session.workspace_id,

@@ -71,6 +71,9 @@ pub(super) fn create_workspace(
         worktree_path = worktree.path.clone();
         worktree_managed_by_forge = false;
         workspace_source = "external_worktree".to_string();
+        if let Some(repo) = &selected_repo {
+            git_worktree_service::ensure_forge_gitignored_at(std::path::Path::new(&repo.path));
+        }
     } else if let Some(repo) = &selected_repo {
         let managed_workspaces_root = settings_repository::get_managed_workspaces_root(&state.db)?;
         let created = git_worktree_service::create_mnemonic_worktree(
