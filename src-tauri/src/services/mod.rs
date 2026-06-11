@@ -14,7 +14,7 @@ pub mod workspace_service;
 
 pub mod git_review_service;
 pub mod git_worktree_service;
-pub mod local_llm_service;
+// pub mod local_llm_service;
 pub mod merge_readiness_service;
 pub mod pr_draft_service;
 pub mod prompt_template_service;
@@ -29,7 +29,7 @@ pub mod worktree_discovery_service;
 
 pub mod conflict_detection_service;
 pub mod orchestrator_service;
-pub mod rebase_service;
+// pub mod rebase_service;
 pub mod terminal_service;
 pub mod workspace_attention_service;
 pub mod workspace_cleanup_service;

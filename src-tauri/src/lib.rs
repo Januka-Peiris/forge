@@ -19,7 +19,7 @@ use commands::{
     workspace_templates, workspaces,
 };
 use services::{
-    coordinator_service, orchestrator_service, rebase_service, repo_intelligence_service,
+    coordinator_service, orchestrator_service, repo_intelligence_service,
 };
 use state::AppState;
 use tauri::Manager;
