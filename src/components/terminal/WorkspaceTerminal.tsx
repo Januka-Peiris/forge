@@ -69,6 +69,14 @@ import { readWorkspaceFile, writeWorkspaceFile } from '../../lib/tauri-api/works
 import type { TileLeaf } from '../../types/tile-layout';
 
 const noop = () => undefined;
+
+function sessionsChanged(prev: TerminalSession[], next: TerminalSession[]): boolean {
+  if (prev.length !== next.length) return true;
+  for (let i = 0; i < prev.length; i++) {
+    if (prev[i].id !== next[i].id || prev[i].status !== next[i].status || prev[i].title !== next[i].title) return true;
+  }
+  return false;
+}
 const DEFAULT_CLAUDE_MODEL = 'claude-opus-4-6[1m]';
 const DEFAULT_CODEX_MODEL = 'gpt-5.4';
 
@@ -263,9 +271,6 @@ export function WorkspaceTerminal({
   }, [allSessions, visibleSessions]);
   const refreshSessions = useCallback(async (fetchOutput = false, preferredFocusId?: string | null) => {
     if (!workspaceId) return;
-    // Do NOT clear `error` here: this runs on every poll tick and right after
-    // failed sends, which made action errors vanish before they could render.
-    // Errors are cleared at the start of the next user action instead.
     try {
       const [rawVisible, history] = await Promise.all([
         listWorkspaceVisibleTerminalSessions(workspaceId),
@@ -276,10 +281,10 @@ export function WorkspaceTerminal({
       const nextFocusedId = desiredFocusId && visible.some((session) => session.id === desiredFocusId)
         ? desiredFocusId
         : visible[0]?.id ?? null;
-      setVisibleSessions(visible);
-      setAllSessions(history);
+      setVisibleSessions((prev) => sessionsChanged(prev, visible) ? visible : prev);
+      setAllSessions((prev) => sessionsChanged(prev, history) ? history : prev);
       focusedIdRef.current = nextFocusedId;
-      setFocusedId(nextFocusedId);
+      setFocusedId((prev) => prev === nextFocusedId ? prev : nextFocusedId);
 
       if (fetchOutput) {
         await Promise.all(visible.map(async (session) => {
@@ -352,21 +357,23 @@ export function WorkspaceTerminal({
   const refreshHealth = useCallback(async () => {
     if (!workspaceId) return;
     try {
-      setWorkspaceHealth(await getWorkspaceHealth(workspaceId));
+      const health = await getWorkspaceHealth(workspaceId);
+      setWorkspaceHealth((prev) => JSON.stringify(prev) === JSON.stringify(health) ? prev : health);
     } catch (err) {
       mnWarn('workspace-health', 'load error', { err });
-      setWorkspaceHealth(null);
-      setWorkspaceReadiness(null);
+      setWorkspaceHealth((prev) => prev === null ? prev : null);
+      setWorkspaceReadiness((prev) => prev === null ? prev : null);
     }
   }, [workspaceId]);
 
   const refreshReadiness = useCallback(async () => {
     if (!workspaceId) return;
     try {
-      setWorkspaceReadiness(await getWorkspaceReadiness(workspaceId));
+      const readiness = await getWorkspaceReadiness(workspaceId);
+      setWorkspaceReadiness((prev) => JSON.stringify(prev) === JSON.stringify(readiness) ? prev : readiness);
     } catch (err) {
       mnWarn('workspace-readiness', 'load error', { err });
-      setWorkspaceReadiness(null);
+      setWorkspaceReadiness((prev) => prev === null ? prev : null);
     }
   }, [workspaceId]);
 
@@ -377,12 +384,12 @@ export function WorkspaceTerminal({
         getWorkspaceChangedFiles(workspaceId).catch(() => []),
         getWorkspaceReviewCockpit(workspaceId, null).catch(() => null),
       ]);
-      setChangedFiles(files);
-      setReviewCockpit(cockpit);
+      setChangedFiles((prev) => JSON.stringify(prev) === JSON.stringify(files) ? prev : files);
+      setReviewCockpit((prev) => JSON.stringify(prev) === JSON.stringify(cockpit) ? prev : cockpit);
     } catch (err) {
       mnWarn('agent-workbench', 'load error', { err });
-      setChangedFiles([]);
-      setReviewCockpit(null);
+      setChangedFiles((prev) => prev.length === 0 ? prev : []);
+      setReviewCockpit((prev) => prev === null ? prev : null);
     }
   }, [workspaceId]);
 
@@ -415,9 +422,10 @@ export function WorkspaceTerminal({
   const refreshCoordinatorStatus = useCallback(async () => {
     if (!workspaceId) return;
     try {
-      setCoordinatorStatus(await getWorkspaceCoordinatorStatus(workspaceId));
+      const status = await getWorkspaceCoordinatorStatus(workspaceId);
+      setCoordinatorStatus((prev) => JSON.stringify(prev) === JSON.stringify(status) ? prev : status);
     } catch {
-      setCoordinatorStatus(null);
+      setCoordinatorStatus((prev) => prev === null ? prev : null);
     }
   }, [workspaceId]);
 
