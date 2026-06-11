@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { OUTPUT_RETENTION_CHUNKS, type OutputMap } from './workspace-terminal-constants';
 import type { TerminalOutputChunk } from '../../types';
 
@@ -124,7 +124,7 @@ export function useWorkspaceTerminalOutput() {
     }
   }, []);
 
-  const store: TerminalOutputStore = { subscribe, getSessionChunks, getOutputs };
+  const store: TerminalOutputStore = useMemo(() => ({ subscribe, getSessionChunks, getOutputs }), [subscribe, getSessionChunks, getOutputs]);
 
   return {
     outputStore: store,
