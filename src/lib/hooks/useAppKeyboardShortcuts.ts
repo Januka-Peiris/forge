@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { Workspace } from '../../types';
 
 interface UseAppKeyboardShortcutsInput {
@@ -31,6 +31,10 @@ function cycleWorkspaceAgentMode(): void {
   window.dispatchEvent(new CustomEvent('mn:toggle-plan-mode'));
 }
 
+function toggleRawTerminalMode(): void {
+  window.dispatchEvent(new CustomEvent('mn:toggle-raw-terminal'));
+}
+
 export function useAppKeyboardShortcuts({
   commandPaletteOpen,
   displayedWorkspaces,
@@ -45,6 +49,17 @@ export function useAppKeyboardShortcuts({
   onToggleCommandPalette,
   onToggleInspector,
 }: UseAppKeyboardShortcutsInput) {
+  const rawModeRef = useRef(false);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      rawModeRef.current = (e as CustomEvent).detail === true;
+    };
+    rawModeRef.current = window.localStorage.getItem('mn:raw-terminal-mode') === 'true';
+    window.addEventListener('mn:raw-terminal-mode-changed', handler);
+    return () => window.removeEventListener('mn:raw-terminal-mode-changed', handler);
+  }, []);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
@@ -93,6 +108,14 @@ export function useAppKeyboardShortcuts({
         return;
       }
 
+      if (meta && event.shiftKey && key === 't') {
+        if (!selectedWorkspaceId) return;
+        event.preventDefault();
+        onSetWorkspacesView();
+        toggleRawTerminalMode();
+        return;
+      }
+
       if (event.key === 'Tab' && event.shiftKey && !meta && !event.altKey) {
         if (editableTarget) return;
         if (!selectedWorkspaceId) return;
@@ -104,7 +127,7 @@ export function useAppKeyboardShortcuts({
 
       if (editableTarget || meta || event.altKey || event.shiftKey) return;
 
-      if (event.key === '/') {
+      if (event.key === '/' && !rawModeRef.current) {
         if (!selectedWorkspaceId) return;
         event.preventDefault();
         onSetWorkspacesView();

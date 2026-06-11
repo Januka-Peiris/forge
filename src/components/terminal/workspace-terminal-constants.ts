@@ -10,6 +10,7 @@ export const PROFILE_LABELS: Record<TerminalProfile, string> = {
 
 export const OUTPUT_RETENTION_CHUNKS = 5000;
 
+export const RAW_TERMINAL_MODE_KEY = 'mn:raw-terminal-mode';
 export const AGENT_COMPOSER_HEIGHT_KEY = 'mn:agent-composer-height';
 export const AGENT_COMPOSER_SETTINGS_KEY = 'mn:agent-composer-settings';
 export const AGENT_COMPOSER_DEFAULT_PX = 160;
