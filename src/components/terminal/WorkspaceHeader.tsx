@@ -6,6 +6,7 @@ import {
   MoreHorizontal,
   PlugZap,
   Square,
+  Terminal,
   X,
 } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -39,6 +40,8 @@ interface WorkspaceHeaderProps {
   focusedSession: TerminalSession | null;
   agentProfiles: AgentProfile[];
   activeProviderIds: ReadonlySet<AgentProviderId>;
+  rawTerminalMode?: boolean;
+  onToggleRawTerminalMode?: () => void;
   onOpenInCursor?: () => void;
   onCreateTerminal: (kind: 'agent' | 'shell', profile: TerminalProfile, title?: string, profileId?: string) => void;
   onCopyFocusedOutput: () => void;
@@ -57,6 +60,8 @@ export function WorkspaceHeader({
   focusedSession,
   agentProfiles,
   activeProviderIds,
+  rawTerminalMode,
+  onToggleRawTerminalMode,
   onOpenInCursor,
   onCreateTerminal,
   onCopyFocusedOutput,
@@ -81,11 +86,27 @@ export function WorkspaceHeader({
               <span className="truncate font-mono text-mn-text/80">{workspace.branch}</span>
               <span className="shrink-0 text-mn-border/40">/</span>
               <h1 className="min-w-0 truncate font-bold text-mn-cyan">{workspace.name}</h1>
+              {rawTerminalMode && (
+                <span className="ml-1.5 shrink-0 rounded bg-mn-yellow/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-mn-yellow">
+                  RAW
+                </span>
+              )}
             </div>
           </Tooltip>
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
+          <Tooltip content={rawTerminalMode ? 'Exit raw terminal (Cmd+Shift+T)' : 'Raw terminal mode (Cmd+Shift+T)'} side="bottom">
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className={`h-7 w-7 ${rawTerminalMode ? 'text-mn-yellow' : 'text-mn-muted hover:text-mn-text'}`}
+              onClick={onToggleRawTerminalMode}
+            >
+              <Terminal className="h-3.5 w-3.5" />
+            </Button>
+          </Tooltip>
+
           <Popover>
             <PopoverTrigger asChild>
               <Button

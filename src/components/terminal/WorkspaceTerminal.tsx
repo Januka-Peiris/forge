@@ -55,7 +55,7 @@ import { useSyncedRef } from '../../lib/hooks/useSyncedRef';
 import { useActiveAgentProviders } from '../../lib/hooks/useActiveAgentProviders';
 import { providerForAgentProfile, type AgentProviderId } from '../../lib/active-agent-providers';
 import { useWorkspaceTerminalOutput, useSessionChunks, type TerminalOutputStore } from './useWorkspaceTerminalOutput';
-import { SHIP_PR_PROMPT } from './workspace-terminal-constants';
+import { RAW_TERMINAL_MODE_KEY, SHIP_PR_PROMPT } from './workspace-terminal-constants';
 import { WorkspaceTerminalEmptyState } from './WorkspaceTerminalEmptyState';
 import { WorkspaceContextFooter } from './WorkspaceContextFooter';
 import { CoordinatorTimeline } from './CoordinatorTimeline';
@@ -128,6 +128,24 @@ function loadComposerSettings(): ComposerSettings {
   return { ...COMPOSER_SETTINGS_DEFAULTS };
 }
 
+function loadRawTerminalMode(): boolean {
+  return window.localStorage.getItem(RAW_TERMINAL_MODE_KEY) === 'true';
+}
+
+function rawModeExtraArgs(composerSettings: ComposerSettings): string[] {
+  const args = claudeLaunchExtraArgs(composerSettings) ?? [];
+  const filtered: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--permission-mode') {
+      i++;
+      continue;
+    }
+    filtered.push(args[i]);
+  }
+  filtered.push('--dangerously-skip-permissions');
+  return filtered;
+}
+
 interface WorkspaceTerminalProps {
   workspace: Workspace | null;
   workspaces?: Workspace[];
@@ -187,6 +205,7 @@ export function WorkspaceTerminal({
   const activeProviders = useActiveAgentProviders(agentProfiles);
   const [selectedProfileId, setSelectedProfileId] = useAgentProfile();
   const [composerSettings, setComposerSettings] = useState<ComposerSettings>(loadComposerSettings);
+  const [rawTerminalMode, setRawTerminalMode] = useState(loadRawTerminalMode);
   const [providerModelDefaults, setProviderModelDefaults] = useState({
     claude: DEFAULT_CLAUDE_MODEL,
     codex: DEFAULT_CODEX_MODEL,
@@ -237,6 +256,21 @@ export function WorkspaceTerminal({
     setCoordinatorToast(message);
     window.setTimeout(() => setCoordinatorToast((current) => (current === message ? null : current)), 4200);
   }, []);
+
+  const toggleRawTerminalMode = useCallback(() => {
+    setRawTerminalMode((prev) => {
+      const next = !prev;
+      window.localStorage.setItem(RAW_TERMINAL_MODE_KEY, next ? 'true' : 'false');
+      window.dispatchEvent(new CustomEvent('mn:raw-terminal-mode-changed', { detail: next }));
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    const handler = () => toggleRawTerminalMode();
+    window.addEventListener('mn:toggle-raw-terminal', handler);
+    return () => window.removeEventListener('mn:toggle-raw-terminal', handler);
+  }, [toggleRawTerminalMode]);
 
   const focusedSession = useMemo(
     () => visibleSessions.find((session) => session.id === focusedId) ?? visibleSessions[0] ?? null,
@@ -801,6 +835,12 @@ export function WorkspaceTerminal({
     promptSendChainRef,
   });
 
+  useEffect(() => {
+    if (!rawTerminalMode) return;
+    const handler = () => cycleAgentMode();
+    window.addEventListener('mn:toggle-plan-mode', handler);
+    return () => window.removeEventListener('mn:toggle-plan-mode', handler);
+  }, [rawTerminalMode, cycleAgentMode]);
 
   /** Permission mode of the focused live agent TUI, mirrored from its footer. */
   const liveAgentMode = focusedSession?.status === 'running'
@@ -1053,13 +1093,17 @@ export function WorkspaceTerminal({
         focusedSession={focusedSession}
         agentProfiles={agentProfiles}
         activeProviderIds={activeProviders.activeProviderSet}
+        rawTerminalMode={rawTerminalMode}
+        onToggleRawTerminalMode={toggleRawTerminalMode}
         onOpenInCursor={onOpenInCursor}
         onCreateTerminal={(kind, profile, title, profileId) => void createTerminal(
           kind,
           profile,
           title,
           profileId,
-          kind === 'agent' && profile === 'claude_code' ? claudeLaunchExtraArgs(composerSettings) : undefined,
+          kind === 'agent' && profile === 'claude_code'
+            ? (rawTerminalMode ? rawModeExtraArgs(composerSettings) : claudeLaunchExtraArgs(composerSettings))
+            : undefined,
         )}
         onCopyFocusedOutput={() => void copyFocusedOutput()}
         onInterruptFocusedAgent={() => void interruptFocusedAgent()}
@@ -1067,54 +1111,58 @@ export function WorkspaceTerminal({
         onAttachTerminal={(session) => void attachTerminal(session)}
         onSetError={setError}
       />
-      <FederatedTaskCockpit
-        workspace={workspace}
-        workspaces={workspaces}
-        repositories={repositories}
-        relationships={repositoryRelationships}
-        onSelectWorkspace={onSelectWorkspace ?? (() => undefined)}
-        onCreateWorkspaceForRepo={onCreateWorkspaceForRepo}
-      />
-      {coordinatorToast && (
+      {!rawTerminalMode && (
+        <FederatedTaskCockpit
+          workspace={workspace}
+          workspaces={workspaces}
+          repositories={repositories}
+          relationships={repositoryRelationships}
+          onSelectWorkspace={onSelectWorkspace ?? (() => undefined)}
+          onCreateWorkspaceForRepo={onCreateWorkspaceForRepo}
+        />
+      )}
+      {!rawTerminalMode && coordinatorToast && (
         <div className="mx-2 mt-2 rounded border border-mn-blue/30 bg-mn-blue/10 px-3 py-1.5 text-xs text-mn-blue">
           {coordinatorToast}
         </div>
       )}
 
-      <CoordinatorTimeline
-        workspaceId={workspace.id}
-        status={coordinatorStatus}
-        agentProfiles={agentProfiles}
-        onRefresh={() => void refreshCoordinatorStatus()}
-        onOpenReviewCockpit={onOpenReviewCockpit}
-        onReviewDiff={handleCoordinatorReviewDiff}
-        onRunTests={handleCoordinatorRunTests}
-        onAskReviewer={handleCoordinatorAskReviewer}
-        onCreatePr={handleCoordinatorCreatePr}
-        canReviewDiff={changedFiles.length > 0}
-        canRunTests={Boolean(mnemonicConfig?.run[0])}
-        canAskReviewer={false}
-        canCreatePr={changedFiles.length > 0 && !workspace.prNumber}
-        hasExistingPr={Boolean(workspace.prNumber)}
-        onReplayAction={async (actionId, promptOverride) => {
-          if (!workspaceId) return;
-          try {
-            const next = await replayWorkspaceCoordinatorAction({
-              workspaceId,
-              actionId,
-              promptOverride: promptOverride ?? null,
-            });
-            setCoordinatorStatus(next);
-          } catch (err) {
-            const message = formatSessionError(err);
-            if (message.startsWith('COORDINATOR_STEP_IN_PROGRESS:')) {
-              showCoordinatorToast('Coordinator is busy. Try replay again after the current step finishes.');
-              return;
+      {!rawTerminalMode && (
+        <CoordinatorTimeline
+          workspaceId={workspace.id}
+          status={coordinatorStatus}
+          agentProfiles={agentProfiles}
+          onRefresh={() => void refreshCoordinatorStatus()}
+          onOpenReviewCockpit={onOpenReviewCockpit}
+          onReviewDiff={handleCoordinatorReviewDiff}
+          onRunTests={handleCoordinatorRunTests}
+          onAskReviewer={handleCoordinatorAskReviewer}
+          onCreatePr={handleCoordinatorCreatePr}
+          canReviewDiff={changedFiles.length > 0}
+          canRunTests={Boolean(mnemonicConfig?.run[0])}
+          canAskReviewer={false}
+          canCreatePr={changedFiles.length > 0 && !workspace.prNumber}
+          hasExistingPr={Boolean(workspace.prNumber)}
+          onReplayAction={async (actionId, promptOverride) => {
+            if (!workspaceId) return;
+            try {
+              const next = await replayWorkspaceCoordinatorAction({
+                workspaceId,
+                actionId,
+                promptOverride: promptOverride ?? null,
+              });
+              setCoordinatorStatus(next);
+            } catch (err) {
+              const message = formatSessionError(err);
+              if (message.startsWith('COORDINATOR_STEP_IN_PROGRESS:')) {
+                showCoordinatorToast('Coordinator is busy. Try replay again after the current step finishes.');
+                return;
+              }
+              throw err;
             }
-            throw err;
-          }
-        }}
-      />
+          }}
+        />
+      )}
 
       <div className="flex min-h-0 flex-1 gap-2 p-2">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
@@ -1122,7 +1170,7 @@ export function WorkspaceTerminal({
             <WorkspaceTerminalEmptyState
               busy={busy}
               activeProviderIds={activeProviders.activeProviderSet}
-              onStartClaude={() => void createTerminal('agent', 'claude_code', 'Claude', undefined, claudeLaunchExtraArgs(composerSettings))}
+              onStartClaude={() => void createTerminal('agent', 'claude_code', 'Claude', undefined, rawTerminalMode ? rawModeExtraArgs(composerSettings) : claudeLaunchExtraArgs(composerSettings))}
               onStartCodex={() => void createTerminal('agent', 'codex', 'Codex')}
             />
           ) : focusedSession ? (
@@ -1154,9 +1202,9 @@ export function WorkspaceTerminal({
 
       </div>
 
-      <WorkspaceContextFooter workspaceId={workspace.id} />
+      {!rawTerminalMode && <WorkspaceContextFooter workspaceId={workspace.id} />}
 
-      {(focusedIsAgent || hasAnyAgentSession) && (
+      {!rawTerminalMode && (focusedIsAgent || hasAnyAgentSession) && (
         <WorkspaceComposer
           workspaceId={workspace.id}
           canInterrupt={focusedSession?.status === 'running' || false}
