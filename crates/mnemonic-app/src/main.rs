@@ -5,6 +5,7 @@ mod menus;
 mod shell;
 mod terminal_canvas;
 mod terminal_tab;
+mod theme;
 
 use std::sync::Arc;
 
@@ -41,6 +42,7 @@ actions!(
         SwitchTerminal7,
         SwitchTerminal8,
         SwitchTerminal9,
+        CycleTheme,
     ]
 );
 

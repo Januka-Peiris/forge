@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use gpui::{
@@ -7,6 +8,7 @@ use gpui::{
     KeyDownEvent, ModifiersChangedEvent, ParentElement, Render, SharedString, Styled, Subscription,
     Window,
 };
+use mnemonic_core::events;
 use mnemonic_core::models::WorkspaceSummary;
 use mnemonic_core::repositories::settings_repository;
 use mnemonic_core::services::workspace_service;
@@ -15,13 +17,14 @@ use terminal::terminal_settings::{AlternateScroll, CursorShape};
 use terminal::{Event as TerminalEvent, Terminal, TerminalBuilder};
 use util::paths::PathStyle;
 
-use crate::core::{initialize_state, GPUI_SELECTED_WORKSPACE_KEY};
+use crate::core::{initialize_state, MnemonicEvent, GPUI_SELECTED_WORKSPACE_KEY};
 use crate::display_settings::TerminalDisplaySettings;
 use crate::shell::{claude_shell, shell_for_login};
 use crate::terminal_canvas::render_terminal_surface;
 use crate::terminal_tab::{TerminalLaunch, TerminalScroll, TerminalTab};
+use crate::theme::MnemonicTheme;
 use crate::{
-    CloseTerminal, CopyTerminal, DecreaseTerminalFontSize, IncreaseTerminalFontSize,
+    CloseTerminal, CopyTerminal, CycleTheme, DecreaseTerminalFontSize, IncreaseTerminalFontSize,
     NewClaudeTerminal, NewTerminal, PasteTerminal, ResetTerminalFontSize, ScrollTerminalLineDown,
     ScrollTerminalLineUp, ScrollTerminalPageDown, ScrollTerminalPageUp, ScrollTerminalToBottom,
     ScrollTerminalToTop, SwitchTerminal1, SwitchTerminal2, SwitchTerminal3, SwitchTerminal4,
@@ -40,6 +43,9 @@ pub(crate) struct MnemonicApp {
     pending_terminal_tasks: Vec<gpui::Task<()>>,
     next_terminal_id: u64,
     terminal_display_settings: TerminalDisplaySettings,
+    theme: MnemonicTheme,
+    last_core_event: Option<String>,
+    _event_bridge_task: Option<gpui::Task<()>>,
     self_test: Option<SelfTestState>,
 }
 
@@ -60,7 +66,7 @@ impl MnemonicApp {
         let focus_handle = cx.focus_handle();
         focus_handle.focus(window, cx);
         match initialize_state() {
-            Ok(state) => {
+            Ok((state, event_receiver)) => {
                 let workspaces = match workspace_service::list_workspaces(&state) {
                     Ok(workspaces) => workspaces,
                     Err(err) => {
@@ -82,6 +88,8 @@ impl MnemonicApp {
                 )
                 .into();
                 let terminal_display_settings = TerminalDisplaySettings::load(Some(&state));
+                let theme = MnemonicTheme::load(Some(&state));
+                let event_bridge_task = Self::spawn_event_bridge(event_receiver, cx);
                 let mut app = Self {
                     state: Some(state),
                     workspaces,
@@ -94,6 +102,9 @@ impl MnemonicApp {
                     pending_terminal_tasks: Vec::new(),
                     next_terminal_id: 1,
                     terminal_display_settings,
+                    theme,
+                    last_core_event: None,
+                    _event_bridge_task: Some(event_bridge_task),
                     self_test: Self::self_test_from_env(),
                 };
                 app.ensure_terminal_for_selection(cx);
@@ -111,9 +122,71 @@ impl MnemonicApp {
                 pending_terminal_tasks: Vec::new(),
                 next_terminal_id: 1,
                 terminal_display_settings: TerminalDisplaySettings::default(),
+                theme: MnemonicTheme::midnight(),
+                last_core_event: None,
+                _event_bridge_task: None,
                 self_test: Self::self_test_from_env(),
             },
         }
+    }
+
+    fn spawn_event_bridge(
+        receiver: mpsc::Receiver<MnemonicEvent>,
+        cx: &mut Context<Self>,
+    ) -> gpui::Task<()> {
+        cx.spawn(async move |this, cx| {
+            let (async_tx, mut async_rx) = futures::channel::mpsc::unbounded();
+            cx.background_executor()
+                .spawn(async move {
+                    while let Ok(event) = receiver.recv() {
+                        if async_tx.unbounded_send(event).is_err() {
+                            break;
+                        }
+                    }
+                })
+                .detach();
+            while let Some(event) = futures::StreamExt::next(&mut async_rx).await {
+                let stop = this
+                    .update(cx, |this, cx| {
+                        this.handle_core_event(event, cx);
+                    })
+                    .is_err();
+                if stop {
+                    break;
+                }
+            }
+        })
+    }
+
+    fn handle_core_event(&mut self, event: MnemonicEvent, cx: &mut Context<Self>) {
+        match event.name.as_str() {
+            events::COMMAND_APPROVAL_REQUIRED => {
+                self.last_core_event = Some("Command approval required".to_string());
+            }
+            events::AGENT_MODE_CHANGED => {
+                self.last_core_event = Some("Agent mode changed".to_string());
+            }
+            events::AGENT_DECISION_REQUIRED => {
+                self.last_core_event = Some("Agent decision required".to_string());
+            }
+            events::AGENT_DECISION_RESOLVED => {
+                self.last_core_event = Some("Agent decision resolved".to_string());
+            }
+            events::COORDINATOR_NOTIFY => {
+                self.last_core_event = Some("Coordinator step".to_string());
+            }
+            events::ORCHESTRATOR_NOTIFY => {
+                self.last_core_event = Some("Orchestrator action".to_string());
+            }
+            events::WORKSPACE_REBASE_CONFLICT => {
+                self.last_core_event = Some("Rebase conflict".to_string());
+            }
+            events::TERMINAL_OUTPUT => {}
+            _ => {
+                log::debug!(target: "mnemonic_app", "unhandled core event: {}", event.name);
+            }
+        }
+        cx.notify();
     }
 
     fn selected_workspace(&self) -> Option<&WorkspaceSummary> {
@@ -479,6 +552,14 @@ impl MnemonicApp {
         cx.notify();
     }
 
+    fn cycle_theme(&mut self, cx: &mut Context<Self>) {
+        self.theme = self.theme.next();
+        if let Err(err) = self.theme.persist(self.state.as_ref()) {
+            log::warn!(target: "mnemonic_app", "failed to persist theme: {err}");
+        }
+        cx.notify();
+    }
+
     fn scroll_active_terminal(&mut self, scroll: TerminalScroll, cx: &mut Context<Self>) {
         let Some(terminal) = self.active_terminal() else {
             return;
@@ -554,15 +635,27 @@ impl Render for MnemonicApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.poll_self_test(cx);
         window.set_window_title(&self.window_title());
+        let theme = self.theme.clone();
+        let t = &theme;
         let selected_workspace_id = self.selected_workspace_id.clone();
+        let sidebar_bg = rgb(t.sidebar_bg);
+        let border = rgb(t.border);
+        let text_primary = rgb(t.text_primary);
+        let text_secondary = rgb(t.text_secondary);
+        let text_muted = rgb(t.text_muted);
+        let text_faint = rgb(t.text_faint);
+        let surface = rgb(t.surface);
+        let surface_selected = rgb(t.surface_selected);
+        let surface_hover = rgb(t.surface_hover);
+        let background = rgb(t.background);
         let sidebar = self.workspaces.iter().fold(
             div()
                 .id("workspace-sidebar")
                 .w(px(320.0))
                 .h_full()
-                .bg(rgb(0x151821))
+                .bg(sidebar_bg)
                 .border_r_1()
-                .border_color(rgb(0x2a2f3a))
+                .border_color(border)
                 .overflow_scroll()
                 .p_3()
                 .flex()
@@ -570,14 +663,14 @@ impl Render for MnemonicApp {
                 .gap_2()
                 .child(
                     div()
-                        .text_color(rgb(0xf2f4f8))
+                        .text_color(text_primary)
                         .text_lg()
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .child("Workspaces"),
                 )
                 .child(
                     div()
-                        .text_color(rgb(0x8f9aaa))
+                        .text_color(text_muted)
                         .text_xs()
                         .mb_2()
                         .child(self.status.clone()),
@@ -591,11 +684,11 @@ impl Render for MnemonicApp {
                         .rounded_md()
                         .p_2()
                         .bg(if selected {
-                            rgb(0x263249)
+                            surface_selected
                         } else {
-                            rgb(0x1b1f2a)
+                            surface
                         })
-                        .hover(|style| style.bg(rgb(0x273043)))
+                        .hover(|style| style.bg(surface_hover))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.selected_workspace_id = Some(id.clone());
                             this.persist_selected_workspace();
@@ -604,18 +697,18 @@ impl Render for MnemonicApp {
                         }))
                         .child(
                             div()
-                                .text_color(rgb(0xf4f7fb))
+                                .text_color(text_primary)
                                 .text_sm()
                                 .font_weight(gpui::FontWeight::MEDIUM)
                                 .child(workspace.name.clone()),
                         )
                         .child(
                             div()
-                                .text_color(rgb(0xa3adbc))
+                                .text_color(text_secondary)
                                 .text_xs()
                                 .child(format!("{} · {}", workspace.repo, workspace.branch)),
                         )
-                        .child(div().text_color(rgb(0x7f8ba0)).text_xs().child(format!(
+                        .child(div().text_color(text_faint).text_xs().child(format!(
                             "{} · {} files",
                             workspace.status,
                             workspace.changed_files.len()
@@ -632,21 +725,21 @@ impl Render for MnemonicApp {
             div()
                 .flex_1()
                 .h_full()
-                .bg(rgb(0x0f1117))
+                .bg(background)
                 .p_5()
                 .flex()
                 .flex_col()
                 .gap_4()
                 .child(
                     div()
-                        .text_color(rgb(0xf4f7fb))
+                        .text_color(text_primary)
                         .text_2xl()
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .child(workspace_name),
                 )
                 .child(
                     div()
-                        .text_color(rgb(0xa3adbc))
+                        .text_color(text_secondary)
                         .text_sm()
                         .child(format!("{} on {}", workspace_repo, workspace_branch)),
                 )
@@ -655,17 +748,46 @@ impl Render for MnemonicApp {
             div()
                 .flex_1()
                 .h_full()
-                .bg(rgb(0x0f1117))
+                .bg(background)
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_color(rgb(0x8793a6))
+                .text_color(text_muted)
                 .child("No workspaces found in the Mnemonic database")
         };
+
+        let status_bar = div()
+            .w_full()
+            .flex()
+            .items_center()
+            .justify_between()
+            .px_3()
+            .py_1()
+            .bg(rgb(t.tab_bar_bg))
+            .border_t_1()
+            .border_color(rgb(t.border))
+            .child(
+                div()
+                    .text_color(rgb(t.text_faint))
+                    .text_xs()
+                    .child(
+                        self.last_core_event
+                            .as_deref()
+                            .unwrap_or("No events")
+                            .to_string(),
+                    ),
+            )
+            .child(
+                div()
+                    .text_color(rgb(t.text_faint))
+                    .text_xs()
+                    .child(format!("Theme: {}", t.name)),
+            );
 
         div()
             .size_full()
             .flex()
+            .flex_col()
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(|this, _: &NewTerminal, _, cx| {
                 this.spawn_terminal_for_selection(TerminalLaunch::Shell, cx);
@@ -692,6 +814,9 @@ impl Render for MnemonicApp {
             }))
             .on_action(cx.listener(|this, _: &ResetTerminalFontSize, _, cx| {
                 this.reset_terminal_font_size(cx);
+            }))
+            .on_action(cx.listener(|this, _: &CycleTheme, _, cx| {
+                this.cycle_theme(cx);
             }))
             .on_action(cx.listener(|this, _: &ScrollTerminalLineUp, _, cx| {
                 this.scroll_active_terminal(TerminalScroll::LineUp, cx);
@@ -722,8 +847,15 @@ impl Render for MnemonicApp {
             .on_action(cx.listener(|this, _: &SwitchTerminal9, _, cx| this.switch_terminal(8, cx)))
             .on_modifiers_changed(cx.listener(Self::on_modifiers_changed))
             .on_key_down(cx.listener(Self::on_terminal_key_down))
-            .child(sidebar)
-            .child(content)
+            .child(
+                div()
+                    .flex_1()
+                    .flex()
+                    .overflow_hidden()
+                    .child(sidebar)
+                    .child(content),
+            )
+            .child(status_bar)
     }
 }
 
@@ -733,11 +865,23 @@ impl MnemonicApp {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
+        let t = &self.theme;
+        let border = rgb(t.border);
+        let terminal_bg = rgb(t.terminal_bg);
+        let tab_bar_bg = rgb(t.tab_bar_bg);
+        let surface = rgb(t.surface);
+        let surface_selected = rgb(t.surface_selected);
+        let text_primary = rgb(t.text_primary);
+        let text_secondary = rgb(t.text_secondary);
+        let text_muted = rgb(t.text_muted);
+        let text_faint = rgb(t.text_faint);
+        let terminal_fg = rgb(t.terminal_fg);
+
         let mut panel = div()
             .rounded_lg()
             .border_1()
-            .border_color(rgb(0x2a2f3a))
-            .bg(rgb(0x05070b))
+            .border_color(border)
+            .bg(terminal_bg)
             .flex_1()
             .overflow_hidden()
             .flex()
@@ -749,17 +893,17 @@ impl MnemonicApp {
                 .items_center()
                 .gap_1()
                 .p_2()
-                .bg(rgb(0x10131a))
+                .bg(tab_bar_bg)
                 .border_b_1()
-                .border_color(rgb(0x2a2f3a))
+                .border_color(border)
                 .child(
                     div()
                         .id("new-shell-tab")
                         .rounded_md()
                         .px_2()
                         .py_1()
-                        .bg(rgb(0x1b1f2a))
-                        .text_color(rgb(0xd7dde8))
+                        .bg(surface)
+                        .text_color(terminal_fg)
                         .text_xs()
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.spawn_terminal_for_selection(TerminalLaunch::Shell, cx);
@@ -773,8 +917,8 @@ impl MnemonicApp {
                         .rounded_md()
                         .px_2()
                         .py_1()
-                        .bg(rgb(0x1b1f2a))
-                        .text_color(rgb(0xd7dde8))
+                        .bg(surface)
+                        .text_color(terminal_fg)
                         .text_xs()
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.spawn_terminal_for_selection(TerminalLaunch::Claude, cx);
@@ -791,14 +935,14 @@ impl MnemonicApp {
                         .px_2()
                         .py_1()
                         .bg(if selected {
-                            rgb(0x263249)
+                            surface_selected
                         } else {
-                            rgb(0x191d27)
+                            tab_bar_bg
                         })
                         .text_color(if selected {
-                            rgb(0xf4f7fb)
+                            text_primary
                         } else {
-                            rgb(0x9aa4b2)
+                            text_muted
                         })
                         .text_xs()
                         .on_click(cx.listener(move |this, _, _, cx| {
@@ -814,9 +958,9 @@ impl MnemonicApp {
                                 .child(
                                     div()
                                         .text_color(if selected {
-                                            rgb(0xa3adbc)
+                                            text_secondary
                                         } else {
-                                            rgb(0x697386)
+                                            text_faint
                                         })
                                         .child(format!("· {}", tab.status)),
                                 ),
@@ -831,7 +975,7 @@ impl MnemonicApp {
                 div()
                     .flex_1()
                     .p_4()
-                    .text_color(rgb(0x8793a6))
+                    .text_color(text_muted)
                     .child("No terminal tab"),
             );
         };
@@ -841,6 +985,7 @@ impl MnemonicApp {
                 terminal,
                 self.focus_handle.clone(),
                 self.terminal_display_settings.clone(),
+                &self.theme,
                 cx,
             ))
         } else {
@@ -848,7 +993,7 @@ impl MnemonicApp {
                 div()
                     .flex_1()
                     .p_4()
-                    .text_color(rgb(0x8793a6))
+                    .text_color(text_muted)
                     .child(tab.status.clone())
                     .child(
                         div()
