@@ -1,0 +1,21 @@
+[package]
+name = "mnemonic-app"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+dirs = "5"
+serde_json = "1"
+log = "0.4"
+env_logger = "0.11"
+image = { workspace = true }
+mnemonic-core = { path = "../mnemonic-core" }
+gpui = { path = "../../vendor/zed/crates/gpui", default-features = false }
+gpui_platform = { path = "../../vendor/zed/crates/gpui_platform", features = ["font-kit"] }
+terminal = { path = "../../vendor/zed/crates/terminal" }
+task = { path = "../../vendor/zed/crates/task" }
+util = { path = "../../vendor/zed/crates/util" }
+release_channel = { path = "../../vendor/zed/crates/release_channel" }
+semver = "1"
+settings = { workspace = true }

@@ -1,28 +1,20 @@
 mod commands;
-mod context;
-mod db;
-mod models;
-mod repositories;
-mod services;
+pub use mnemonic_core::{context, db, models, repositories, services};
 mod state;
 
-use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use commands::{
     activity, agent_context, agent_memory, agent_profiles, checkpoints, coordination_artifacts,
-    coordinator as coordinator_commands, deep_links, environment, git_review,
-    merge_readiness, orchestrator as orchestrator_commands, pr_draft, prompt_templates,
+    coordinator as coordinator_commands, deep_links, environment, git_review, merge_readiness,
+    orchestrator as orchestrator_commands, pr_draft, prompt_templates,
     repositories as repository_commands, repository_relationships, repository_settings,
-    review_cockpit, review_summary,
-    reviews, settings, terminal, workspace_attention, workspace_cleanup, workspace_file_tree,
-    workspace_health, workspace_ports, workspace_readiness, workspace_scripts, workspace_tasks,
-    workspace_templates, workspaces,
+    review_cockpit, review_summary, reviews, settings, terminal, workspace_attention,
+    workspace_cleanup, workspace_file_tree, workspace_health, workspace_ports, workspace_readiness,
+    workspace_scripts, workspace_tasks, workspace_templates, workspaces,
 };
-use services::{
-    coordinator_service, orchestrator_service, repo_intelligence_service,
-    terminal_ws_server,
-};
-use state::AppState;
+use services::app_runtime_service::{self, BackgroundServiceOptions};
+use state::{AppState, TauriEventEmitter};
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -37,55 +29,26 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
-            let state =
-                AppState::initialize(app.handle()).map_err(Box::<dyn std::error::Error>::from)?;
+            let app_handle = app.handle().clone();
+            let data_dir = app
+                .path()
+                .app_data_dir()
+                .map_err(Box::<dyn std::error::Error>::from)?;
+            let cache_dir = app
+                .path()
+                .app_cache_dir()
+                .or_else(|_| app.path().app_data_dir())
+                .map_err(Box::<dyn std::error::Error>::from)?;
+            let state = AppState::initialize(
+                data_dir,
+                cache_dir,
+                Arc::new(TauriEventEmitter::new(app_handle)),
+            )
+            .map_err(Box::<dyn std::error::Error>::from)?;
             log::info!(target: "mnemonic_lib", "SQLite database path: {}", state.db.path().display());
             println!("Mnemonic SQLite database: {}", state.db.path().display());
 
-            // Prune stale rows in a background thread so startup never blocks.
-            // VACUUM is intentionally omitted — it rewrites the entire DB and holds
-            // the connection mutex for seconds, which stalls all other commands.
-            let bg_db = state.db.clone();
-            std::thread::spawn(move || {
-                if let Err(err) = bg_db.prune_old_data() {
-                    log::warn!(target: "mnemonic_lib", "Background prune failed: {err}");
-                }
-            });
-
-            // Restore persisted orchestrator settings.
-            if let Ok(Some(val)) = crate::repositories::orchestrator_repository::load_setting(
-                &state.db,
-                "orchestrator_enabled",
-            ) {
-                state
-                    .orchestrator_enabled
-                    .store(val == "true", Ordering::Relaxed);
-            }
-            if let Ok(Some(model)) = crate::repositories::orchestrator_repository::load_setting(
-                &state.db,
-                "orchestrator_model",
-            ) {
-                if let Ok(mut guard) = state.orchestrator_model.lock() {
-                    *guard = model;
-                }
-            }
-            if let Err(error) = coordinator_service::reconcile_all_active_runs_on_startup(&state) {
-                log::warn!(target: "mnemonic_lib", "Failed to reconcile active coordinator runs on startup: {error}");
-            }
-
-            // rebase_service::start_auto_rebase_loop(state.clone());
-            match terminal_ws_server::start_ws_server(state.clone()) {
-                Ok((port, token)) => {
-                    if let Ok(mut p) = state.ws_port.lock() { *p = port; }
-                    if let Ok(mut t) = state.ws_token.lock() { *t = token; }
-                }
-                Err(e) => {
-                    log::warn!(target: "mnemonic_lib", "Failed to start terminal WS server: {e}");
-                }
-            }
-
-            orchestrator_service::start_orchestrator_loop(state.clone());
-            repo_intelligence_service::start_repo_intelligence_loop(state.clone());
+            app_runtime_service::start_background_services(&state, BackgroundServiceOptions::tauri_v2())?;
             app.manage(state);
             Ok(())
         })

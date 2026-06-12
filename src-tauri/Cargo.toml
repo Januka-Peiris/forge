@@ -13,23 +13,11 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+mnemonic-core = { path = "../crates/mnemonic-core" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
-rusqlite = { version = "0.32", features = ["bundled"] }
-portable-pty = "0.8"
 log = "0.4"
 env_logger = "0.11"
 tauri-plugin-notification = "2.3.3"
-tree-sitter = "0.24"
-tree-sitter-rust = "0.23"
-tree-sitter-typescript = "0.23"
-tree-sitter-javascript = "0.23"
-tree-sitter-python = "0.23"
-tree-sitter-go = "0.23"
-streaming-iterator = "0.1"
-reqwest = { version = "0.12", features = ["blocking", "json"] }
-uuid = { version = "1", features = ["v4"] }
-tungstenite = "0.24"
-rand = "0.8"

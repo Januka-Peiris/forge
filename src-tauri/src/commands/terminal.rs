@@ -334,7 +334,11 @@ pub struct TerminalWsInfo {
 #[tauri::command]
 pub fn get_terminal_ws_info(state: State<'_, AppState>) -> Result<TerminalWsInfo, String> {
     let port = *state.ws_port.lock().map_err(|_| "WS port lock poisoned")?;
-    let token = state.ws_token.lock().map_err(|_| "WS token lock poisoned")?.clone();
+    let token = state
+        .ws_token
+        .lock()
+        .map_err(|_| "WS token lock poisoned")?
+        .clone();
     Ok(TerminalWsInfo { port, token })
 }
 
