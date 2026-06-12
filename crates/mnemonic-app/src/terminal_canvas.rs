@@ -8,12 +8,10 @@ use terminal::{Color, CursorShape, NamedColor, Rgb, Terminal, TerminalBounds};
 
 use crate::app::MnemonicApp;
 use crate::display_settings::TerminalDisplaySettings;
+use crate::theme::MnemonicTheme;
 
 const MIN_TERMINAL_COLUMNS: f32 = 20.0;
 const MIN_TERMINAL_ROWS: f32 = 5.0;
-const DEFAULT_BACKGROUND_RGB: u32 = 0x05070b;
-const DEFAULT_FOREGROUND_RGB: u32 = 0xd7dde8;
-const SELECTION_BACKGROUND_RGB: u32 = 0x244b7a;
 
 #[derive(Clone)]
 struct PaintRun {
@@ -78,6 +76,7 @@ pub(crate) fn render_terminal_surface(
     terminal: Entity<Terminal>,
     focus_handle: FocusHandle,
     display_settings: TerminalDisplaySettings,
+    theme: &MnemonicTheme,
     cx: &mut Context<MnemonicApp>,
 ) -> impl IntoElement {
     let scroll_terminal = terminal.clone();
@@ -161,6 +160,7 @@ pub(crate) fn render_terminal_surface(
             terminal,
             focus_handle,
             display_settings,
+            theme.clone(),
         ))
 }
 
@@ -168,10 +168,14 @@ fn render_terminal_canvas(
     terminal: Entity<Terminal>,
     focus_handle: FocusHandle,
     display_settings: TerminalDisplaySettings,
+    theme: MnemonicTheme,
 ) -> impl IntoElement {
     let terminal_for_prepaint = terminal.clone();
     let prepaint_display_settings = display_settings.clone();
     let prepaint_focus_handle = focus_handle.clone();
+    let prepaint_theme = theme.clone();
+    let paint_theme = theme.clone();
+    let bg = theme.terminal_bg_rgba();
     canvas(
         move |bounds, window, cx| {
             let terminal_bounds = terminal_bounds_for_canvas(bounds, &prepaint_display_settings);
@@ -181,14 +185,14 @@ fn render_terminal_canvas(
                 terminal.sync(window, cx);
                 terminal.last_content().clone()
             });
-            layout_terminal_content(&content, terminal_bounds, focused)
+            layout_terminal_content(&content, terminal_bounds, focused, &prepaint_theme)
         },
         move |bounds, paint_state, window, cx| {
-            paint_terminal_content(bounds, paint_state, &display_settings, window, cx);
+            paint_terminal_content(bounds, paint_state, &display_settings, &paint_theme, window, cx);
         },
     )
     .size_full()
-    .bg(rgb(DEFAULT_BACKGROUND_RGB))
+    .bg(bg)
 }
 
 fn terminal_bounds_for_canvas(
@@ -218,12 +222,14 @@ fn layout_terminal_content(
     content: &terminal::Content,
     terminal_bounds: TerminalBounds,
     focused: bool,
+    theme: &MnemonicTheme,
 ) -> TerminalPaintState {
     let rows = terminal_bounds.num_lines().max(1);
     let cols = terminal_bounds.num_columns().max(1);
     let mut runs: Vec<PaintRun> = Vec::new();
     let mut rects: Vec<PaintRect> = Vec::new();
-    let selection_rects = layout_selection_rects(content, rows, cols);
+    let selection_rects = layout_selection_rects(content, rows, cols, theme);
+    let default_bg = rgb(theme.terminal_bg);
 
     for indexed in &content.cells {
         let line = indexed.point.line;
@@ -236,8 +242,8 @@ fn layout_terminal_content(
             continue;
         }
 
-        let mut fg = terminal_color(indexed.cell.foreground(), false);
-        let mut bg = terminal_color(indexed.cell.background(), true);
+        let mut fg = terminal_color(indexed.cell.foreground(), false, theme);
+        let mut bg = terminal_color(indexed.cell.background(), true, theme);
         if indexed.cell.is_inverse() {
             std::mem::swap(&mut fg, &mut bg);
         }
@@ -245,7 +251,7 @@ fn layout_terminal_content(
             fg.a *= 0.65;
         }
 
-        if !is_default_terminal_background(bg) {
+        if !rgba_eq(bg, default_bg) {
             push_rect(
                 &mut rects,
                 PaintRect {
@@ -283,7 +289,7 @@ fn layout_terminal_content(
         }
     }
 
-    let cursor = layout_cursor(content, rows, cols, focused);
+    let cursor = layout_cursor(content, rows, cols, focused, theme);
 
     TerminalPaintState {
         terminal_bounds,
@@ -294,7 +300,7 @@ fn layout_terminal_content(
     }
 }
 
-fn layout_selection_rects(content: &terminal::Content, rows: usize, cols: usize) -> Vec<PaintRect> {
+fn layout_selection_rects(content: &terminal::Content, rows: usize, cols: usize, theme: &MnemonicTheme) -> Vec<PaintRect> {
     let Some(selection) = content.selection else {
         return Vec::new();
     };
@@ -307,7 +313,7 @@ fn layout_selection_rects(content: &terminal::Content, rows: usize, cols: usize)
     } else {
         (selection.end, selection.start)
     };
-    let color = Hsla::from(rgb(SELECTION_BACKGROUND_RGB));
+    let color = Hsla::from(rgb(theme.terminal_selection));
     let mut rects = Vec::new();
 
     if selection.is_block {
@@ -358,6 +364,7 @@ fn layout_cursor(
     rows: usize,
     cols: usize,
     focused: bool,
+    theme: &MnemonicTheme,
 ) -> Option<PaintCursor> {
     if matches!(content.cursor.shape, CursorShape::Hidden) {
         return None;
@@ -381,7 +388,7 @@ fn layout_cursor(
     Some(PaintCursor {
         line,
         column,
-        color: Hsla::from(rgb(DEFAULT_FOREGROUND_RGB)),
+        color: Hsla::from(rgb(theme.terminal_cursor)),
         shape,
     })
 }
@@ -431,11 +438,12 @@ fn paint_terminal_content(
     bounds: Bounds<Pixels>,
     paint_state: TerminalPaintState,
     display_settings: &TerminalDisplaySettings,
+    theme: &MnemonicTheme,
     window: &mut Window,
     cx: &mut App,
 ) {
     window.with_content_mask(Some(ContentMask { bounds }), |window| {
-        window.paint_quad(fill(bounds, Hsla::from(rgb(DEFAULT_BACKGROUND_RGB))));
+        window.paint_quad(fill(bounds, Hsla::from(rgb(theme.terminal_bg))));
         let origin = bounds.origin;
 
         for rect in &paint_state.rects {
@@ -575,19 +583,18 @@ fn paint_hollow_cursor(
     }
 }
 
-fn is_default_terminal_background(color: gpui::Rgba) -> bool {
-    let default = rgb(DEFAULT_BACKGROUND_RGB);
-    (color.r - default.r).abs() < f32::EPSILON
-        && (color.g - default.g).abs() < f32::EPSILON
-        && (color.b - default.b).abs() < f32::EPSILON
-        && (color.a - default.a).abs() < f32::EPSILON
+fn rgba_eq(a: gpui::Rgba, b: gpui::Rgba) -> bool {
+    (a.r - b.r).abs() < f32::EPSILON
+        && (a.g - b.g).abs() < f32::EPSILON
+        && (a.b - b.b).abs() < f32::EPSILON
+        && (a.a - b.a).abs() < f32::EPSILON
 }
 
-fn terminal_color(color: Color, _is_background: bool) -> gpui::Rgba {
+fn terminal_color(color: Color, _is_background: bool, theme: &MnemonicTheme) -> gpui::Rgba {
     match color {
         Color::Spec(rgb_color) => terminal_rgb(rgb_color),
-        Color::Indexed(index) => indexed_terminal_color(index),
-        Color::Named(named) => named_terminal_color(named),
+        Color::Indexed(index) => indexed_terminal_color(index, theme),
+        Color::Named(named) => named_terminal_color(named, theme),
     }
 }
 
@@ -600,38 +607,35 @@ fn terminal_rgb(rgb_color: Rgb) -> gpui::Rgba {
     }
 }
 
-fn named_terminal_color(color: NamedColor) -> gpui::Rgba {
+fn named_terminal_color(color: NamedColor, theme: &MnemonicTheme) -> gpui::Rgba {
+    let ansi = &theme.terminal_ansi;
     match color {
-        NamedColor::Black | NamedColor::DimBlack => rgb(0x1b1f2a),
-        NamedColor::Red | NamedColor::DimRed => rgb(0xff6b6b),
-        NamedColor::Green | NamedColor::DimGreen => rgb(0x73d13d),
-        NamedColor::Yellow | NamedColor::DimYellow => rgb(0xffd166),
-        NamedColor::Blue | NamedColor::DimBlue => rgb(0x5aa9ff),
-        NamedColor::Magenta | NamedColor::DimMagenta => rgb(0xd987ff),
-        NamedColor::Cyan | NamedColor::DimCyan => rgb(0x5eead4),
-        NamedColor::White | NamedColor::DimWhite => rgb(DEFAULT_FOREGROUND_RGB),
-        NamedColor::BrightBlack => rgb(0x6b7280),
-        NamedColor::BrightRed => rgb(0xff8a8a),
-        NamedColor::BrightGreen => rgb(0x9be564),
-        NamedColor::BrightYellow => rgb(0xffe08a),
-        NamedColor::BrightBlue => rgb(0x80c0ff),
-        NamedColor::BrightMagenta => rgb(0xe0a3ff),
-        NamedColor::BrightCyan => rgb(0x8ff5e8),
-        NamedColor::BrightWhite | NamedColor::BrightForeground => rgb(0xffffff),
-        NamedColor::Foreground => rgb(DEFAULT_FOREGROUND_RGB),
-        NamedColor::DimForeground => rgb(0x8793a6),
-        NamedColor::Background => rgb(DEFAULT_BACKGROUND_RGB),
-        NamedColor::Cursor => rgb(DEFAULT_FOREGROUND_RGB),
+        NamedColor::Black | NamedColor::DimBlack => rgb(ansi[0]),
+        NamedColor::Red | NamedColor::DimRed => rgb(ansi[1]),
+        NamedColor::Green | NamedColor::DimGreen => rgb(ansi[2]),
+        NamedColor::Yellow | NamedColor::DimYellow => rgb(ansi[3]),
+        NamedColor::Blue | NamedColor::DimBlue => rgb(ansi[4]),
+        NamedColor::Magenta | NamedColor::DimMagenta => rgb(ansi[5]),
+        NamedColor::Cyan | NamedColor::DimCyan => rgb(ansi[6]),
+        NamedColor::White | NamedColor::DimWhite => rgb(theme.terminal_fg),
+        NamedColor::BrightBlack => rgb(ansi[8]),
+        NamedColor::BrightRed => rgb(ansi[9]),
+        NamedColor::BrightGreen => rgb(ansi[10]),
+        NamedColor::BrightYellow => rgb(ansi[11]),
+        NamedColor::BrightBlue => rgb(ansi[12]),
+        NamedColor::BrightMagenta => rgb(ansi[13]),
+        NamedColor::BrightCyan => rgb(ansi[14]),
+        NamedColor::BrightWhite | NamedColor::BrightForeground => rgb(ansi[15]),
+        NamedColor::Foreground => rgb(theme.terminal_fg),
+        NamedColor::DimForeground => rgb(theme.text_muted),
+        NamedColor::Background => rgb(theme.terminal_bg),
+        NamedColor::Cursor => rgb(theme.terminal_cursor),
     }
 }
 
-fn indexed_terminal_color(index: u8) -> gpui::Rgba {
-    const ANSI: [u32; 16] = [
-        0x1b1f2a, 0xff6b6b, 0x73d13d, 0xffd166, 0x5aa9ff, 0xd987ff, 0x5eead4, 0xd7dde8, 0x6b7280,
-        0xff8a8a, 0x9be564, 0xffe08a, 0x80c0ff, 0xe0a3ff, 0x8ff5e8, 0xffffff,
-    ];
+fn indexed_terminal_color(index: u8, theme: &MnemonicTheme) -> gpui::Rgba {
     match index {
-        0..=15 => rgb(ANSI[index as usize]),
+        0..=15 => rgb(theme.terminal_ansi[index as usize]),
         16..=231 => {
             let i = index - 16;
             let r = i / 36;
@@ -652,18 +656,23 @@ mod tests {
     use super::*;
     use terminal::{Content, Cursor, Point, SelectionRange};
 
+    fn test_theme() -> MnemonicTheme {
+        MnemonicTheme::midnight()
+    }
+
     #[test]
     fn cursor_layout_respects_hidden_shape() {
         let content = content_with_cursor(CursorShape::Hidden, 0, 0);
 
-        assert!(layout_cursor(&content, 10, 10, true).is_none());
+        assert!(layout_cursor(&content, 10, 10, true, &test_theme()).is_none());
     }
 
     #[test]
     fn cursor_layout_maps_focus_sensitive_shapes() {
+        let theme = test_theme();
         let block = content_with_cursor(CursorShape::Block, 1, 2);
-        let focused_block = layout_cursor(&block, 10, 10, true).expect("focused block");
-        let blurred_block = layout_cursor(&block, 10, 10, false).expect("blurred block");
+        let focused_block = layout_cursor(&block, 10, 10, true, &theme).expect("focused block");
+        let blurred_block = layout_cursor(&block, 10, 10, false, &theme).expect("blurred block");
 
         assert_eq!(focused_block.shape, PaintCursorShape::Block);
         assert_eq!(focused_block.line, 1);
@@ -672,13 +681,13 @@ mod tests {
 
         let underline = content_with_cursor(CursorShape::Underline, 0, 0);
         assert_eq!(
-            layout_cursor(&underline, 10, 10, true)
+            layout_cursor(&underline, 10, 10, true, &theme)
                 .expect("focused underline")
                 .shape,
             PaintCursorShape::Underline
         );
         assert_eq!(
-            layout_cursor(&underline, 10, 10, false)
+            layout_cursor(&underline, 10, 10, false, &theme)
                 .expect("blurred underline")
                 .shape,
             PaintCursorShape::HollowBlock
@@ -689,14 +698,14 @@ mod tests {
     fn cursor_layout_rejects_out_of_bounds_cursor() {
         let content = content_with_cursor(CursorShape::Block, 10, 0);
 
-        assert!(layout_cursor(&content, 10, 10, true).is_none());
+        assert!(layout_cursor(&content, 10, 10, true, &test_theme()).is_none());
     }
 
     #[test]
     fn selection_layout_handles_multiline_ranges() {
         let content = content_with_selection(1, 3, 3, 2, false);
 
-        let rects = layout_selection_rects(&content, 6, 10);
+        let rects = layout_selection_rects(&content, 6, 10, &test_theme());
 
         assert_eq!(rects.len(), 3);
         assert_rect(&rects[0], 1, 3, 7);
@@ -708,7 +717,7 @@ mod tests {
     fn selection_layout_handles_block_ranges() {
         let content = content_with_selection(1, 7, 3, 4, true);
 
-        let rects = layout_selection_rects(&content, 6, 10);
+        let rects = layout_selection_rects(&content, 6, 10, &test_theme());
 
         assert_eq!(rects.len(), 3);
         for (index, rect) in rects.iter().enumerate() {

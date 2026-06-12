@@ -1,7 +1,7 @@
 use gpui::{App, KeyBinding, Menu, MenuItem, SystemMenuType};
 
 use crate::{
-    CloseTerminal, CopyTerminal, DecreaseTerminalFontSize, IncreaseTerminalFontSize,
+    CloseTerminal, CopyTerminal, CycleTheme, DecreaseTerminalFontSize, IncreaseTerminalFontSize,
     NewClaudeTerminal, NewTerminal, PasteTerminal, Quit, ResetTerminalFontSize,
     ScrollTerminalLineDown, ScrollTerminalLineUp, ScrollTerminalPageDown, ScrollTerminalPageUp,
     ScrollTerminalToBottom, ScrollTerminalToTop, SwitchTerminal1, SwitchTerminal2, SwitchTerminal3,
@@ -24,6 +24,9 @@ pub(crate) fn set_app_menus(cx: &mut App) {
             MenuItem::separator(),
             MenuItem::action("Copy", CopyTerminal),
             MenuItem::action("Paste", PasteTerminal),
+        ]),
+        Menu::new("View").items([
+            MenuItem::action("Cycle Theme", CycleTheme),
         ]),
         Menu::new("Terminal").items([
             MenuItem::action("Increase Font Size", IncreaseTerminalFontSize),
@@ -82,5 +85,6 @@ pub(crate) fn bind_app_keys(cx: &mut App) {
         KeyBinding::new("cmd-7", SwitchTerminal7, None),
         KeyBinding::new("cmd-8", SwitchTerminal8, None),
         KeyBinding::new("cmd-9", SwitchTerminal9, None),
+        KeyBinding::new("cmd-shift-k", CycleTheme, None),
     ]);
 }
