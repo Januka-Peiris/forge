@@ -307,6 +307,71 @@ pub fn start_workspace_terminal_session(
 
 /// Resolve the command line for a visible, foreground agent terminal.
 ///
+/// Record a GPUI terminal session in SQLite without spawning a PTY.
+///
+/// GPUI terminals use Zed's Terminal crate for PTY lifecycle, so we only
+/// need the metadata record for session history and workspace tracking.
+pub fn record_gpui_session(
+    state: &AppState,
+    workspace_id: &str,
+    kind: &str,
+    title: &str,
+    cwd: &str,
+    command: &str,
+    args: &[String],
+) -> Result<TerminalSession, String> {
+    let session_role = if kind == "shell" || kind == "utility" || kind == "run" {
+        "utility"
+    } else {
+        "agent"
+    }
+    .to_string();
+    let display_order = terminal_repository::next_display_order(&state.db, workspace_id)?;
+    let session_id = format!("gpui-{}", output_unique_suffix());
+    let session = TerminalSession {
+        id: session_id,
+        workspace_id: workspace_id.to_string(),
+        session_role,
+        profile: kind.to_string(),
+        cwd: cwd.to_string(),
+        status: "running".to_string(),
+        started_at: timestamp(),
+        ended_at: None,
+        command: command.to_string(),
+        args: args.to_vec(),
+        pid: None,
+        stale: false,
+        closed_at: None,
+        backend: "gpui".to_string(),
+        tmux_session_name: None,
+        title: title.to_string(),
+        terminal_kind: kind.to_string(),
+        display_order,
+        is_visible: true,
+        last_attached_at: None,
+        last_captured_seq: 0,
+        claude_session_id: None,
+    };
+    terminal_repository::insert_session(&state.db, &session)?;
+    Ok(session)
+}
+
+/// Mark a GPUI terminal session as finished and closed.
+pub fn close_gpui_session(state: &AppState, session_id: &str) -> Result<(), String> {
+    let now = timestamp();
+    terminal_repository::mark_finished(&state.db, session_id, "stopped", &now, false)?;
+    terminal_repository::mark_closed(&state.db, session_id, &now)?;
+    Ok(())
+}
+
+/// List visible (not closed) terminal sessions for a workspace.
+pub fn list_visible_workspace_sessions(
+    state: &AppState,
+    workspace_id: &str,
+) -> Result<Vec<TerminalSession>, String> {
+    terminal_repository::list_visible_for_workspace(&state.db, workspace_id)
+}
+
 /// GPUI v3 owns its PTY/rendering path, so it cannot use the v2 terminal
 /// service's portable-pty session registry directly. This helper still keeps
 /// agent profile normalization, model defaults, binary resolution, and Claude

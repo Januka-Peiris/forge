@@ -11,7 +11,7 @@ use gpui::{
 use mnemonic_core::events;
 use mnemonic_core::models::WorkspaceSummary;
 use mnemonic_core::repositories::settings_repository;
-use mnemonic_core::services::workspace_service;
+use mnemonic_core::services::{terminal_service, workspace_service};
 use mnemonic_core::state::AppState;
 use terminal::terminal_settings::{AlternateScroll, CursorShape};
 use terminal::{Event as TerminalEvent, Terminal, TerminalBuilder};
@@ -248,6 +248,7 @@ impl MnemonicApp {
         self.terminal_tabs.push(TerminalTab {
             id: tab_id.clone(),
             workspace_id: workspace_id.clone(),
+            session_id: None,
             title,
             cwd: cwd.clone(),
             terminal: None,
@@ -265,6 +266,19 @@ impl MnemonicApp {
                 return;
             }
         };
+        let kind = match launch {
+            TerminalLaunch::Shell => "shell",
+            TerminalLaunch::Claude => "claude_code",
+        };
+        let session_kind = kind.to_string();
+        let session_title = self
+            .terminal_tabs
+            .iter()
+            .find(|tab| tab.id == tab_id)
+            .map(|tab| tab.title.clone())
+            .unwrap_or_default();
+        let session_cwd = cwd.display().to_string();
+
         let builder_task = TerminalBuilder::new(
             Some(cwd.clone()),
             None,
@@ -298,6 +312,22 @@ impl MnemonicApp {
                     if let Some(tab) = this.terminal_tabs.iter_mut().find(|tab| tab.id == tab_id) {
                         tab.status = "Running".into();
                         tab.terminal = Some(terminal);
+                        if let Some(state) = &this.state {
+                            match terminal_service::record_gpui_session(
+                                state,
+                                &workspace_id,
+                                &session_kind,
+                                &session_title,
+                                &session_cwd,
+                                &session_kind,
+                                &[],
+                            ) {
+                                Ok(session) => tab.session_id = Some(session.id),
+                                Err(err) => {
+                                    log::warn!(target: "mnemonic_app", "failed to record session: {err}");
+                                }
+                            }
+                        }
                     }
                     this.terminal_subscriptions.push(terminal_observer);
                     this.terminal_subscriptions.push(terminal_events);
@@ -429,7 +459,12 @@ impl MnemonicApp {
             return;
         }
 
-        self.terminal_tabs.remove(index);
+        let tab = self.terminal_tabs.remove(index);
+        if let (Some(state), Some(session_id)) = (&self.state, &tab.session_id) {
+            if let Err(err) = terminal_service::close_gpui_session(state, session_id) {
+                log::warn!(target: "mnemonic_app", "failed to close session {session_id}: {err}");
+            }
+        }
         if self.terminal_tabs.is_empty() {
             self.active_tab = 0;
         } else if index < self.active_tab {
