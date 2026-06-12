@@ -6,7 +6,7 @@ use crate::{
     ScrollTerminalLineDown, ScrollTerminalLineUp, ScrollTerminalPageDown, ScrollTerminalPageUp,
     ScrollTerminalToBottom, ScrollTerminalToTop, SwitchTerminal1, SwitchTerminal2, SwitchTerminal3,
     SwitchTerminal4, SwitchTerminal5, SwitchTerminal6, SwitchTerminal7, SwitchTerminal8,
-    SwitchTerminal9,
+    SwitchTerminal9, ToggleSettings,
 };
 
 pub(crate) fn set_app_menus(cx: &mut App) {
@@ -27,6 +27,8 @@ pub(crate) fn set_app_menus(cx: &mut App) {
         ]),
         Menu::new("View").items([
             MenuItem::action("Cycle Theme", CycleTheme),
+            MenuItem::separator(),
+            MenuItem::action("Settings", ToggleSettings),
         ]),
         Menu::new("Terminal").items([
             MenuItem::action("Increase Font Size", IncreaseTerminalFontSize),
@@ -86,5 +88,6 @@ pub(crate) fn bind_app_keys(cx: &mut App) {
         KeyBinding::new("cmd-8", SwitchTerminal8, None),
         KeyBinding::new("cmd-9", SwitchTerminal9, None),
         KeyBinding::new("cmd-shift-k", CycleTheme, None),
+        KeyBinding::new("cmd-,", ToggleSettings, None),
     ]);
 }

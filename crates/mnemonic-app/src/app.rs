@@ -21,6 +21,7 @@ use util::paths::PathStyle;
 
 use crate::core::{initialize_state, MnemonicEvent, GPUI_SELECTED_WORKSPACE_KEY};
 use crate::display_settings::TerminalDisplaySettings;
+use crate::settings_panel::{self, SettingsState};
 use crate::shell::{claude_shell, shell_for_login};
 use crate::terminal_canvas::render_terminal_surface;
 use crate::terminal_tab::{TerminalLaunch, TerminalScroll, TerminalTab};
@@ -28,6 +29,7 @@ use crate::theme::MnemonicTheme;
 use crate::{
     CloseTerminal, CopyTerminal, CycleTheme, DecreaseTerminalFontSize, IncreaseTerminalFontSize,
     NewClaudeTerminal, NewTerminal, PasteTerminal, ResetTerminalFontSize, ScrollTerminalLineDown,
+    ToggleSettings,
     ScrollTerminalLineUp, ScrollTerminalPageDown, ScrollTerminalPageUp, ScrollTerminalToBottom,
     ScrollTerminalToTop, SwitchTerminal1, SwitchTerminal2, SwitchTerminal3, SwitchTerminal4,
     SwitchTerminal5, SwitchTerminal6, SwitchTerminal7, SwitchTerminal8, SwitchTerminal9,
@@ -49,6 +51,8 @@ pub(crate) struct MnemonicApp {
     last_core_event: Option<String>,
     pending_approval: Option<CommandApprovalEvent>,
     pending_decision: Option<AgentDecisionEvent>,
+    pub(crate) settings_open: bool,
+    settings_state: Option<SettingsState>,
     _event_bridge_task: Option<gpui::Task<()>>,
     self_test: Option<SelfTestState>,
 }
@@ -93,6 +97,7 @@ impl MnemonicApp {
                 .into();
                 let terminal_display_settings = TerminalDisplaySettings::load(Some(&state));
                 let theme = MnemonicTheme::load(Some(&state));
+                let settings_state = SettingsState::load(&state);
                 let event_bridge_task = Self::spawn_event_bridge(event_receiver, cx);
                 let mut app = Self {
                     state: Some(state),
@@ -110,6 +115,8 @@ impl MnemonicApp {
                     last_core_event: None,
                     pending_approval: None,
                     pending_decision: None,
+                    settings_open: false,
+                    settings_state: Some(settings_state),
                     _event_bridge_task: Some(event_bridge_task),
                     self_test: Self::self_test_from_env(),
                 };
@@ -132,6 +139,8 @@ impl MnemonicApp {
                 last_core_event: None,
                 pending_approval: None,
                 pending_decision: None,
+                settings_open: false,
+                settings_state: None,
                 _event_bridge_task: None,
                 self_test: Self::self_test_from_env(),
             },
@@ -643,7 +652,7 @@ impl MnemonicApp {
         cx.notify();
     }
 
-    fn cycle_theme(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn cycle_theme(&mut self, cx: &mut Context<Self>) {
         self.theme = self.theme.next();
         if let Err(err) = self.theme.persist(self.state.as_ref()) {
             log::warn!(target: "mnemonic_app", "failed to persist theme: {err}");
@@ -808,7 +817,20 @@ impl Render for MnemonicApp {
             },
         );
 
-        let content = if let Some(workspace) = self.selected_workspace() {
+        let content = if self.settings_open {
+            let default_settings = SettingsState {
+                claude_model: String::new(),
+                codex_model: String::new(),
+                orchestrator_model: String::new(),
+            };
+            let settings = self.settings_state.as_ref().unwrap_or(&default_settings);
+            div().child(settings_panel::render_settings_panel(
+                &theme,
+                &self.terminal_display_settings,
+                settings,
+                cx,
+            ))
+        } else if let Some(workspace) = self.selected_workspace() {
             let workspace_name = workspace.name.clone();
             let workspace_repo = workspace.repo.clone();
             let workspace_branch = workspace.branch.clone();
@@ -908,6 +930,10 @@ impl Render for MnemonicApp {
             }))
             .on_action(cx.listener(|this, _: &CycleTheme, _, cx| {
                 this.cycle_theme(cx);
+            }))
+            .on_action(cx.listener(|this, _: &ToggleSettings, _, cx| {
+                this.settings_open = !this.settings_open;
+                cx.notify();
             }))
             .on_action(cx.listener(|this, _: &ScrollTerminalLineUp, _, cx| {
                 this.scroll_active_terminal(TerminalScroll::LineUp, cx);
