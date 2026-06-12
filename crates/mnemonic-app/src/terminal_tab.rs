@@ -6,6 +6,7 @@ use terminal::Terminal;
 pub(crate) struct TerminalTab {
     pub(crate) id: String,
     pub(crate) workspace_id: String,
+    pub(crate) session_id: Option<String>,
     pub(crate) title: String,
     pub(crate) cwd: PathBuf,
     pub(crate) terminal: Option<Entity<Terminal>>,
