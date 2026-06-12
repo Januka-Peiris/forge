@@ -22,6 +22,12 @@ pub(crate) struct MnemonicTheme {
     pub text_muted: u32,
     pub text_faint: u32,
 
+    #[allow(dead_code)]
+    pub accent: u32,
+    pub success: u32,
+    pub warning: u32,
+    pub destructive: u32,
+
     pub terminal_fg: u32,
     pub terminal_selection: u32,
     pub terminal_cursor: u32,
@@ -45,6 +51,11 @@ impl MnemonicTheme {
             text_secondary: 0xa3adbc,
             text_muted: 0x8793a6,
             text_faint: 0x697386,
+
+            accent: 0x5aa9ff,
+            success: 0x73d13d,
+            warning: 0xffd166,
+            destructive: 0xff6b6b,
 
             terminal_fg: 0xd7dde8,
             terminal_selection: 0x244b7a,
@@ -86,6 +97,11 @@ impl MnemonicTheme {
             text_secondary: 0x9cb4cc,
             text_muted: 0x7a95b0,
             text_faint: 0x5a7a94,
+
+            accent: 0x5badff,
+            success: 0x56d68c,
+            warning: 0xf0c060,
+            destructive: 0xff7070,
 
             terminal_fg: 0xd0dfe8,
             terminal_selection: 0x1e4a7a,
