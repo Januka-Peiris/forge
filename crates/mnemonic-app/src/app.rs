@@ -9,7 +9,9 @@ use gpui::{
     Window,
 };
 use mnemonic_core::events;
-use mnemonic_core::models::WorkspaceSummary;
+use mnemonic_core::models::{
+    AgentDecisionEvent, AgentModeChangedEvent, CommandApprovalEvent, WorkspaceSummary,
+};
 use mnemonic_core::repositories::settings_repository;
 use mnemonic_core::services::{terminal_service, workspace_service};
 use mnemonic_core::state::AppState;
@@ -19,6 +21,7 @@ use util::paths::PathStyle;
 
 use crate::core::{initialize_state, MnemonicEvent, GPUI_SELECTED_WORKSPACE_KEY};
 use crate::display_settings::TerminalDisplaySettings;
+use crate::settings_panel::{self, SettingsState};
 use crate::shell::{claude_shell, shell_for_login};
 use crate::terminal_canvas::render_terminal_surface;
 use crate::terminal_tab::{TerminalLaunch, TerminalScroll, TerminalTab};
@@ -26,6 +29,7 @@ use crate::theme::MnemonicTheme;
 use crate::{
     CloseTerminal, CopyTerminal, CycleTheme, DecreaseTerminalFontSize, IncreaseTerminalFontSize,
     NewClaudeTerminal, NewTerminal, PasteTerminal, ResetTerminalFontSize, ScrollTerminalLineDown,
+    ToggleSettings,
     ScrollTerminalLineUp, ScrollTerminalPageDown, ScrollTerminalPageUp, ScrollTerminalToBottom,
     ScrollTerminalToTop, SwitchTerminal1, SwitchTerminal2, SwitchTerminal3, SwitchTerminal4,
     SwitchTerminal5, SwitchTerminal6, SwitchTerminal7, SwitchTerminal8, SwitchTerminal9,
@@ -45,6 +49,10 @@ pub(crate) struct MnemonicApp {
     terminal_display_settings: TerminalDisplaySettings,
     theme: MnemonicTheme,
     last_core_event: Option<String>,
+    pending_approval: Option<CommandApprovalEvent>,
+    pending_decision: Option<AgentDecisionEvent>,
+    pub(crate) settings_open: bool,
+    settings_state: Option<SettingsState>,
     _event_bridge_task: Option<gpui::Task<()>>,
     self_test: Option<SelfTestState>,
 }
@@ -89,6 +97,7 @@ impl MnemonicApp {
                 .into();
                 let terminal_display_settings = TerminalDisplaySettings::load(Some(&state));
                 let theme = MnemonicTheme::load(Some(&state));
+                let settings_state = SettingsState::load(&state);
                 let event_bridge_task = Self::spawn_event_bridge(event_receiver, cx);
                 let mut app = Self {
                     state: Some(state),
@@ -104,6 +113,10 @@ impl MnemonicApp {
                     terminal_display_settings,
                     theme,
                     last_core_event: None,
+                    pending_approval: None,
+                    pending_decision: None,
+                    settings_open: false,
+                    settings_state: Some(settings_state),
                     _event_bridge_task: Some(event_bridge_task),
                     self_test: Self::self_test_from_env(),
                 };
@@ -124,6 +137,10 @@ impl MnemonicApp {
                 terminal_display_settings: TerminalDisplaySettings::default(),
                 theme: MnemonicTheme::midnight(),
                 last_core_event: None,
+                pending_approval: None,
+                pending_decision: None,
+                settings_open: false,
+                settings_state: None,
                 _event_bridge_task: None,
                 self_test: Self::self_test_from_env(),
             },
@@ -161,16 +178,33 @@ impl MnemonicApp {
     fn handle_core_event(&mut self, event: MnemonicEvent, cx: &mut Context<Self>) {
         match event.name.as_str() {
             events::COMMAND_APPROVAL_REQUIRED => {
-                self.last_core_event = Some("Command approval required".to_string());
+                if let Ok(approval) =
+                    serde_json::from_value::<CommandApprovalEvent>(event.payload.clone())
+                {
+                    self.last_core_event =
+                        Some(format!("Approval: {}", truncate_command(&approval.command)));
+                    self.pending_approval = Some(approval);
+                }
             }
             events::AGENT_MODE_CHANGED => {
-                self.last_core_event = Some("Agent mode changed".to_string());
+                if let Ok(mode_event) =
+                    serde_json::from_value::<AgentModeChangedEvent>(event.payload.clone())
+                {
+                    self.last_core_event = Some(format!("Agent: {}", mode_event.mode));
+                }
             }
             events::AGENT_DECISION_REQUIRED => {
-                self.last_core_event = Some("Agent decision required".to_string());
+                if let Ok(decision) =
+                    serde_json::from_value::<AgentDecisionEvent>(event.payload.clone())
+                {
+                    self.last_core_event =
+                        Some(format!("Decision: {}", truncate_command(&decision.question)));
+                    self.pending_decision = Some(decision);
+                }
             }
             events::AGENT_DECISION_RESOLVED => {
-                self.last_core_event = Some("Agent decision resolved".to_string());
+                self.pending_decision = None;
+                self.last_core_event = Some("Decision resolved".to_string());
             }
             events::COORDINATOR_NOTIFY => {
                 self.last_core_event = Some("Coordinator step".to_string());
@@ -187,6 +221,37 @@ impl MnemonicApp {
             }
         }
         cx.notify();
+    }
+
+    fn resolve_pending_approval(&mut self, approved: bool) {
+        let Some(approval) = self.pending_approval.take() else {
+            return;
+        };
+        if let Some(state) = &self.state {
+            if let Err(err) = terminal_service::approve_workspace_terminal_command(
+                state,
+                &approval.session_id,
+                approved,
+            ) {
+                log::warn!(target: "mnemonic_app", "failed to resolve command approval: {err}");
+            }
+        }
+    }
+
+    fn resolve_pending_decision(&mut self, option_key: &str, option_label: &str) {
+        let Some(decision) = self.pending_decision.take() else {
+            return;
+        };
+        if let Some(state) = &self.state {
+            if let Err(err) = terminal_service::answer_workspace_terminal_decision(
+                state,
+                &decision.session_id,
+                option_key,
+                option_label,
+            ) {
+                log::warn!(target: "mnemonic_app", "failed to resolve agent decision: {err}");
+            }
+        }
     }
 
     fn selected_workspace(&self) -> Option<&WorkspaceSummary> {
@@ -587,7 +652,7 @@ impl MnemonicApp {
         cx.notify();
     }
 
-    fn cycle_theme(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn cycle_theme(&mut self, cx: &mut Context<Self>) {
         self.theme = self.theme.next();
         if let Err(err) = self.theme.persist(self.state.as_ref()) {
             log::warn!(target: "mnemonic_app", "failed to persist theme: {err}");
@@ -752,7 +817,20 @@ impl Render for MnemonicApp {
             },
         );
 
-        let content = if let Some(workspace) = self.selected_workspace() {
+        let content = if self.settings_open {
+            let default_settings = SettingsState {
+                claude_model: String::new(),
+                codex_model: String::new(),
+                orchestrator_model: String::new(),
+            };
+            let settings = self.settings_state.as_ref().unwrap_or(&default_settings);
+            div().child(settings_panel::render_settings_panel(
+                &theme,
+                &self.terminal_display_settings,
+                settings,
+                cx,
+            ))
+        } else if let Some(workspace) = self.selected_workspace() {
             let workspace_name = workspace.name.clone();
             let workspace_repo = workspace.repo.clone();
             let workspace_branch = workspace.branch.clone();
@@ -852,6 +930,10 @@ impl Render for MnemonicApp {
             }))
             .on_action(cx.listener(|this, _: &CycleTheme, _, cx| {
                 this.cycle_theme(cx);
+            }))
+            .on_action(cx.listener(|this, _: &ToggleSettings, _, cx| {
+                this.settings_open = !this.settings_open;
+                cx.notify();
             }))
             .on_action(cx.listener(|this, _: &ScrollTerminalLineUp, _, cx| {
                 this.scroll_active_terminal(TerminalScroll::LineUp, cx);
@@ -1005,6 +1087,103 @@ impl MnemonicApp {
         );
         panel = panel.child(tab_bar);
 
+        if let Some(approval) = &self.pending_approval {
+            let command_text = approval.command.clone();
+            panel = panel.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .px_3()
+                    .py_2()
+                    .bg(rgb(self.theme.warning))
+                    .child(
+                        div()
+                            .flex_1()
+                            .text_color(rgb(self.theme.terminal_bg))
+                            .text_xs()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .child(format!("Approve command: {command_text}")),
+                    )
+                    .child(
+                        div()
+                            .id("approve-command")
+                            .rounded_md()
+                            .px_2()
+                            .py_1()
+                            .bg(rgb(self.theme.success))
+                            .text_color(rgb(self.theme.terminal_bg))
+                            .text_xs()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.resolve_pending_approval(true);
+                                cx.notify();
+                            }))
+                            .child("Allow"),
+                    )
+                    .child(
+                        div()
+                            .id("deny-command")
+                            .rounded_md()
+                            .px_2()
+                            .py_1()
+                            .bg(rgb(self.theme.destructive))
+                            .text_color(rgb(self.theme.text_primary))
+                            .text_xs()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.resolve_pending_approval(false);
+                                cx.notify();
+                            }))
+                            .child("Deny"),
+                    ),
+            );
+        }
+
+        if let Some(decision) = &self.pending_decision {
+            let question = decision.question.clone();
+            let options = decision.options.clone();
+            let mut decision_bar = div()
+                .flex()
+                .items_center()
+                .gap_2()
+                .px_3()
+                .py_2()
+                .bg(rgb(self.theme.surface_selected))
+                .border_b_1()
+                .border_color(border)
+                .child(
+                    div()
+                        .flex_1()
+                        .text_color(text_primary)
+                        .text_xs()
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .child(truncate_command(&question)),
+                );
+            for option in &options {
+                let key = option.key.clone();
+                let label = option.label.clone();
+                let button_label = format!("[{}] {}", option.key, option.label);
+                decision_bar = decision_bar.child(
+                    div()
+                        .id(format!("decision-option-{}", option.key))
+                        .rounded_md()
+                        .px_2()
+                        .py_1()
+                        .bg(surface)
+                        .hover(|s| s.bg(rgb(self.theme.surface_hover)))
+                        .text_color(text_primary)
+                        .text_xs()
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.resolve_pending_decision(&key, &label);
+                            cx.notify();
+                        }))
+                        .child(button_label),
+                );
+            }
+            panel = panel.child(decision_bar);
+        }
+
         let Some(tab) = self.terminal_tabs.get(self.active_tab) else {
             return panel.child(
                 div()
@@ -1038,6 +1217,14 @@ impl MnemonicApp {
                     ),
             )
         }
+    }
+}
+
+fn truncate_command(command: &str) -> String {
+    if command.len() <= 80 {
+        command.to_string()
+    } else {
+        format!("{}...", &command[..77])
     }
 }
 

@@ -2,6 +2,7 @@ mod app;
 mod core;
 mod display_settings;
 mod menus;
+mod settings_panel;
 mod shell;
 mod terminal_canvas;
 mod terminal_tab;
@@ -43,6 +44,7 @@ actions!(
         SwitchTerminal8,
         SwitchTerminal9,
         CycleTheme,
+        ToggleSettings,
     ]
 );
 
