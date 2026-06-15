@@ -20,6 +20,11 @@ Mnemonic is a local-first desktop conductor for AI coding agents. It helps you c
 
 ## Development
 
+Prerequisites:
+
+- Node.js 18+ and npm
+- Rust toolchain (stable) with `cargo`
+
 Install dependencies:
 
 ```bash
@@ -76,3 +81,7 @@ If generated files are accidentally tracked, remove them from the index before p
 ```bash
 git rm -r --cached --ignore-unmatch src-tauri/target src-tauri/gen mnemonic
 ```
+
+## License
+
+See the repository for license details.
